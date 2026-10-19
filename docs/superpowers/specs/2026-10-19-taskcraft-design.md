@@ -1,4 +1,4 @@
-# Kairos — Design Spec
+# TaskCraft — Design Spec
 
 Date: 2026-10-19
 Status: Approved in conversation, pending written review
@@ -16,7 +16,7 @@ icons, or other assets are used.
 
 ### Success criteria
 
-1. `Kairos.app` installs into `/Applications`, launches, and shows a
+1. `TaskCraft.app` installs into `/Applications`, launches, and shows a
    menu-bar icon.
 2. A global hotkey (default ⌥⌘Space) or the menu-bar icon opens the
    quick-entry popover.
@@ -46,13 +46,13 @@ time.
 
 ## 2. Architecture
 
-Cargo workspace at `~/Developer/kairos`:
+Cargo workspace at `/Users/pareasy/Documents/VS_Projects/TaskCraft`:
 
 | Unit | Responsibility | Depends on |
 |---|---|---|
-| `crates/kairos-parse` (lib) | `parse(input, now, opts) -> ParsedItem`. Pure, no I/O. | `chrono`, `chrono-tz` |
-| `crates/kairos-store` (lib) | SQLite schema, migrations, CRUD, range queries with recurrence expansion, `.ics` export. | `rusqlite` (bundled), `rrule`, `chrono` |
-| `src-tauri` (`kairos-app` bin) | Tray icon, global shortcut, windows, Tauri commands, alert scheduler, logging. | the two crates, Tauri 2 + plugins (global-shortcut, notification, autostart, positioner) |
+| `crates/taskcraft-parse` (lib) | `parse(input, now, opts) -> ParsedItem`. Pure, no I/O. | `chrono`, `chrono-tz` |
+| `crates/taskcraft-store` (lib) | SQLite schema, migrations, CRUD, range queries with recurrence expansion, `.ics` export. | `rusqlite` (bundled), `rrule`, `chrono` |
+| `src-tauri` (`taskcraft-app` bin) | Tray icon, global shortcut, windows, Tauri commands, alert scheduler, logging. | the two crates, Tauri 2 + plugins (global-shortcut, notification, autostart, positioner) |
 | `ui/` | Svelte + TypeScript front end: popover, main window, inspector, settings. | Tauri commands only |
 
 The UI never touches the database directly; every read and write goes
@@ -72,7 +72,7 @@ through a Tauri command implemented in Rust.
 
 ## 3. Data model
 
-Database: `~/Library/Application Support/Kairos/kairos.db`.
+Database: `~/Library/Application Support/TaskCraft/taskcraft.db`.
 Schema version tracked with `PRAGMA user_version`.
 
 ```sql
@@ -103,9 +103,9 @@ alerts(id INTEGER PK, owner_kind TEXT NOT NULL CHECK(owner_kind IN ('event','tas
   materialized for the next occurrence only and re-materialized after
   firing.
 - Before running a migration, the db file is copied to
-  `kairos.db.bak-v<old>`.
+  `taskcraft.db.bak-v<old>`.
 
-## 4. Parser (`kairos-parse`)
+## 4. Parser (`taskcraft-parse`)
 
 ### Interface
 
@@ -266,16 +266,16 @@ banner. All errors are also logged.
 
 ## 8. Logging and errors
 
-- `tracing` to `~/Library/Logs/Kairos/kairos.log` (daily rotation, keep 7).
+- `tracing` to `~/Library/Logs/TaskCraft/taskcraft.log` (daily rotation, keep 7).
 - No panics across the command boundary; all commands return `Result`.
 - DB opened with WAL mode and `foreign_keys=ON`.
 
 ## 9. Testing
 
-- `kairos-parse`: table-driven tests (~150 cases) with fixed `now`
+- `taskcraft-parse`: table-driven tests (~150 cases) with fixed `now`
   (2026-10-20 10:00 Europe/Rome, a Tuesday) covering every rule above,
   plus property tests that `parse` never panics and spans are valid.
-- `kairos-store`: tests on in-memory SQLite for CRUD, migrations,
+- `taskcraft-store`: tests on in-memory SQLite for CRUD, migrations,
   recurrence expansion (daily, weekly on days, monthly, until, EXDATE),
   alert materialization, `.ics` export round-trip check with a parser.
 - App: `cargo tauri build` succeeds; smoke script launches the built app,
@@ -290,7 +290,7 @@ banner. All errors are also logged.
    tauri-cli --version ^2`), Node (present, v26).
 2. `cargo test --workspace`, `npm --prefix ui run check`.
 3. `cargo tauri build --bundles app`.
-4. Ad-hoc sign: `codesign --force --deep --sign - Kairos.app`.
-5. Copy to `/Applications/Kairos.app`, remove quarantine attribute,
+4. Ad-hoc sign: `codesign --force --deep --sign - TaskCraft.app`.
+5. Copy to `/Applications/TaskCraft.app`, remove quarantine attribute,
    launch.
 6. Optional: enable "Launch at login" in Settings.

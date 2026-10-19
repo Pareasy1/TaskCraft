@@ -1,27 +1,27 @@
-# Kairos Implementation Plan
+# TaskCraft Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and install `Kairos.app`, a personal macOS calendar/task app with a Fantastical-style menu-bar quick entry, natural-language parsing, local SQLite storage, Day/Week/Month views and notifications.
+**Goal:** Build and install `TaskCraft.app`, a personal macOS calendar/task app with a Fantastical-style menu-bar quick entry, natural-language parsing, local SQLite storage, Day/Week/Month views and notifications.
 
-**Architecture:** Cargo workspace with two pure library crates (`kairos-parse`, `kairos-store`) and a Tauri 2 binary (`src-tauri`) that exposes them to a Svelte 5 + TypeScript UI through Tauri commands. One UI bundle serves three windows (`quick`, `main`, `settings`), selected by window label.
+**Architecture:** Cargo workspace with two pure library crates (`taskcraft-parse`, `taskcraft-store`) and a Tauri 2 binary (`src-tauri`) that exposes them to a Svelte 5 + TypeScript UI through Tauri commands. One UI bundle serves three windows (`quick`, `main`, `settings`), selected by window label.
 
 **Tech Stack:** Rust stable, chrono 0.4, chrono-tz 0.10, rusqlite 0.32 (`bundled`), rrule 0.13, serde, thiserror, tracing + tracing-appender, proptest; Tauri 2 with plugins global-shortcut, notification, autostart, positioner (`tray-icon`), dialog; Svelte 5, Vite, TypeScript, vitest, lucide-svelte.
 
-**Spec:** `docs/superpowers/specs/2026-10-19-kairos-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-19-taskcraft-design.md`
 
 ## Global Constraints
 
 - Clean-room: no Flexibits code, weights, data files, prompts, icons or assets.
-- Storage: local SQLite only, at `~/Library/Application Support/Kairos/kairos.db`; WAL mode, `foreign_keys=ON`; schema version in `PRAGMA user_version`; copy to `kairos.db.bak-v<old>` before migrating.
+- Storage: local SQLite only, at `~/Library/Application Support/TaskCraft/taskcraft.db`; WAL mode, `foreign_keys=ON`; schema version in `PRAGMA user_version`; copy to `taskcraft.db.bak-v<old>` before migrating.
 - Timestamps stored as RFC 3339 UTC strings; `tz` column holds the IANA zone.
 - Parser: English only; `parse` never panics, never fails, is deterministic; spans non-overlapping, sorted, on UTF-8 boundaries.
 - Default hotkey ⌥⌘Space (`Alt+Super+Space`); default event length 60 min; seed calendars "Personal" (default) and "Work".
 - Popover ~360×520, borderless, always-on-top, vibrancy, hides on blur.
 - Scheduler tick 30 s and on wake; alerts more than 12 h late are marked fired without notifying.
-- Logs: `~/Library/Logs/Kairos/kairos.log`, daily rotation, keep 7.
+- Logs: `~/Library/Logs/TaskCraft/taskcraft.log`, daily rotation, keep 7.
 - Command errors returned as `{ code, message }`; no panics across the command boundary.
-- Target macOS 27 Apple Silicon, minimum macOS 14; ad-hoc signature; bundle id `com.pareasy.kairos`.
+- Target macOS 27 Apple Silicon, minimum macOS 14; ad-hoc signature; bundle id `com.pareasy.taskcraft`.
 - Parser test clock: `now = 2026-10-20T10:00 Europe/Rome` (Tuesday), `date_order = DayMonth`, calendars `["Personal","Work"]`.
 
 ## Review Focus
@@ -38,7 +38,7 @@
 
 ```
 Cargo.toml                         workspace (members: crates/*, src-tauri)
-crates/kairos-parse/
+crates/taskcraft-parse/
   src/lib.rs                       pub API: parse, re-exports
   src/types.rs                     ParsedItem, When, Label, Span, Recurrence, AlertSpec, ParseOptions, DateOrder, ItemKind
   src/token.rs                     tokenizer
@@ -50,7 +50,7 @@ crates/kairos-parse/
   src/resolve.rs                   labels -> concrete When values
   tests/table.rs                   table-driven cases
   tests/props.rs                   proptest invariants
-crates/kairos-store/
+crates/taskcraft-store/
   src/lib.rs                       Store, pub types
   src/schema.rs                    migrations
   src/model.rs                     Calendar, EventInput, TaskInput, Occurrence, Task, Hit, Scope, TaskFilter, DueAlert
@@ -88,8 +88,8 @@ scripts/smoke.sh                   post-install smoke test
 ### Task 1: Toolchain and parser types
 
 **Files:**
-- Create: `Cargo.toml`, `.gitignore`, `crates/kairos-parse/Cargo.toml`, `crates/kairos-parse/src/lib.rs`, `crates/kairos-parse/src/types.rs`
-- Test: `crates/kairos-parse/tests/table.rs`
+- Create: `Cargo.toml`, `.gitignore`, `crates/taskcraft-parse/Cargo.toml`, `crates/taskcraft-parse/src/lib.rs`, `crates/taskcraft-parse/src/types.rs`
+- Test: `crates/taskcraft-parse/tests/table.rs`
 
 **Interfaces:**
 - Produces:
@@ -111,7 +111,7 @@ scripts/smoke.sh                   post-install smoke test
 - [ ] **Step 1: Install toolchain** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable` then `source ~/.cargo/env && cargo --version`. Expected: cargo 1.9x.
 - [ ] **Step 2: Create workspace** — root `Cargo.toml` with `[workspace] resolver = "2"`, `members = ["crates/*", "src-tauri"]` (add `src-tauri` in Task 9; start with `crates/*`), shared `[workspace.dependencies]` for chrono (`serde`), chrono-tz (`serde`), serde (`derive`). `.gitignore`: `target/`, `ui/node_modules/`, `ui/dist/`.
 - [ ] **Step 3: Write failing test** in `tests/table.rs`: helper `fn now() -> DateTime<Tz>` returning the Global Constraints clock; `fn p(s:&str)->ParsedItem` using default options. Test `plain_title_is_all_day_today`: `p("Brunch")` → kind Event, title "Brunch", start `When{2026-10-20, None}`, all_day true, spans `[Span{0,6,Title}]`.
-- [ ] **Step 4: Run** `cargo test -p kairos-parse` — Expected: compile error (`parse` missing).
+- [ ] **Step 4: Run** `cargo test -p taskcraft-parse` — Expected: compile error (`parse` missing).
 - [ ] **Step 5: Implement types in `types.rs`** and a `parse` that returns the whole trimmed input as title with that default. **Run** — Expected: PASS.
 - [ ] **Step 6: Commit** `feat(parse): workspace and parser types`.
 
@@ -228,17 +228,17 @@ scripts/smoke.sh                   post-install smoke test
   - `empty_and_whitespace`: `""` and `"   "` → title "", spans empty, no panic.
 - [ ] **Step 2: proptest** `parse_never_panics_and_spans_valid`: arbitrary `String` (including `\\PC{0,80}`) → parse returns; spans sorted, non-overlapping, on char boundaries, within input length.
 - [ ] **Step 3: Run** — Expected: FAIL.
-- [ ] **Step 4: Implement**. **Run** `cargo test -p kairos-parse` — Expected: all PASS; table has ≥150 cases total (add variants of the above rows for casing, punctuation and word order until it does).
+- [ ] **Step 4: Implement**. **Run** `cargo test -p taskcraft-parse` — Expected: all PASS; table has ≥150 cases total (add variants of the above rows for casing, punctuation and word order until it does).
 - [ ] **Step 5: Commit** `feat(parse): location, attendees, title; invariants`.
 
 ### Task 6: Store schema, time conversion, CRUD
 
 **Files:**
-- Create: `crates/kairos-store/{Cargo.toml, src/lib.rs, src/schema.rs, src/model.rs, src/time.rs, src/calendars.rs, src/events.rs, src/tasks.rs}`
-- Test: `crates/kairos-store/tests/crud.rs`
+- Create: `crates/taskcraft-store/{Cargo.toml, src/lib.rs, src/schema.rs, src/model.rs, src/time.rs, src/calendars.rs, src/events.rs, src/tasks.rs}`
+- Test: `crates/taskcraft-store/tests/crud.rs`
 
 **Interfaces:**
-- Consumes: `kairos_parse::{ParsedItem, When, AlertSpec}`.
+- Consumes: `taskcraft_parse::{ParsedItem, When, AlertSpec}`.
 - Produces:
   ```rust
   pub struct Store { /* rusqlite::Connection */ }
@@ -266,8 +266,8 @@ scripts/smoke.sh                   post-install smoke test
   ```
   All-day events store `start` = local midnight of first day and `end` = local midnight after the last day, both in UTC.
 
-- [ ] **Step 1: Failing tests:** `open_seeds_calendars` (names ["Personal","Work"], `user_version` = 1); `migration_backs_up` (open file db at version 0 created by hand → file `kairos.db.bak-v0` exists after `open`); `event_roundtrip` (insert then `get_event` equal, attendees preserved); `task_complete_toggle`; `delete_calendar_moves_items` (event in Work, delete Work moving to Personal → event's calendar_id is Personal); `to_utc_handles_dst` (2026-10-25 02:30 Rome → `2026-10-25T00:30:00Z`; 2027-03-28 02:30 Rome → `2027-03-28T01:30:00Z`); `from_parsed_all_day_range` (parse "Trip Oct 24 to Oct 26" → start `2026-10-23T22:00:00Z`, end `2026-10-26T23:00:00Z`).
-- [ ] **Step 2: Run** `cargo test -p kairos-store` — Expected: FAIL.
+- [ ] **Step 1: Failing tests:** `open_seeds_calendars` (names ["Personal","Work"], `user_version` = 1); `migration_backs_up` (open file db at version 0 created by hand → file `taskcraft.db.bak-v0` exists after `open`); `event_roundtrip` (insert then `get_event` equal, attendees preserved); `task_complete_toggle`; `delete_calendar_moves_items` (event in Work, delete Work moving to Personal → event's calendar_id is Personal); `to_utc_handles_dst` (2026-10-25 02:30 Rome → `2026-10-25T00:30:00Z`; 2027-03-28 02:30 Rome → `2027-03-28T01:30:00Z`); `from_parsed_all_day_range` (parse "Trip Oct 24 to Oct 26" → start `2026-10-23T22:00:00Z`, end `2026-10-26T23:00:00Z`).
+- [ ] **Step 2: Run** `cargo test -p taskcraft-store` — Expected: FAIL.
 - [ ] **Step 3: Implement** schema exactly as spec §3; alerts table written by `insert_*`/`update_*` (replace all alerts for the owner).
 - [ ] **Step 4: Run** — Expected: PASS.
 - [ ] **Step 5: Commit** `feat(store): schema, conversion and CRUD`.
@@ -330,7 +330,7 @@ scripts/smoke.sh                   post-install smoke test
 ### Task 9: Tauri app shell, settings, logging, commands
 
 **Files:**
-- Create: `src-tauri/{Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, src/main.rs, src/state.rs, src/settings.rs, src/commands.rs, src/logging.rs}`, `src-tauri/icons/*` (generated with `cargo tauri icon` from an original 1024px SVG `assets/kairos.svg` drawn in this task: rounded square, gradient, white calendar glyph), `ui/` scaffold (`npm create vite@latest ui -- --template svelte-ts`), `ui/src/lib/{api.ts,types.ts}`
+- Create: `src-tauri/{Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, src/main.rs, src/state.rs, src/settings.rs, src/commands.rs, src/logging.rs}`, `src-tauri/icons/*` (generated with `cargo tauri icon` from an original 1024px SVG `assets/taskcraft.svg` drawn in this task: rounded square, gradient, white calendar glyph), `ui/` scaffold (`npm create vite@latest ui -- --template svelte-ts`), `ui/src/lib/{api.ts,types.ts}`
 - Modify: root `Cargo.toml` members.
 - Test: `src-tauri/src/commands.rs` (`#[cfg(test)]`)
 
@@ -339,7 +339,7 @@ scripts/smoke.sh                   post-install smoke test
 - Produces:
   ```rust
   pub struct Settings { hotkey:String /*"Alt+Super+Space"*/, launch_at_login:bool, default_calendar_id:i64, default_event_minutes:u32 /*60*/, week_start: chrono::Weekday /*Mon*/, date_order: DateOrder /*from macOS region: DayMonth unless AppleICUDateFormatStrings / locale is en_US*/ }
-  // persisted as JSON at ~/Library/Application Support/Kairos/settings.json
+  // persisted as JSON at ~/Library/Application Support/TaskCraft/settings.json
   pub struct CmdError { code:String, message:String }  // Serialize; From<StoreError>
   ```
   Commands (all `Result<_, CmdError>`, names as in spec §6): `parse_preview(text) -> ParsedItem`, `create_from_text(text) -> ItemRef{kind,id}`, `create_event`, `update_event`, `move_event`, `delete_event`, `create_task`, `update_task`, `set_task_completed`, `delete_task`, `list_range`, `list_tasks`, `search`, `list_calendars`, `upsert_calendar`, `delete_calendar`, `get_settings`, `set_settings`, `export_ics(path)`. Every mutating command emits `items-changed` to all windows.
@@ -347,8 +347,8 @@ scripts/smoke.sh                   post-install smoke test
 
 - [ ] **Step 1: Install Tauri CLI** `cargo install tauri-cli --version "^2" --locked`; Expected: `cargo tauri --version` prints 2.x.
 - [ ] **Step 2: Failing tests** in `commands.rs` against an in-memory store via a plain function layer (`fn create_from_text_impl(state:&AppState, text:&str, now:DateTime<Tz>) -> Result<ItemRef, CmdError>`): `creates_event_in_default_calendar`, `creates_task_from_prefix`, `slash_calendar_overrides_default`.
-- [ ] **Step 3: Run** `cargo test -p kairos-app` — Expected: FAIL.
-- [ ] **Step 4: Implement** shell: `tauri.conf.json` with `identifier: com.pareasy.kairos`, `macOSPrivateApi: true`, `bundle.macOS.minimumSystemVersion: "14.0"`, windows declared in Rust (not config); dev URL `http://localhost:5173`, frontendDist `../ui/dist`; tauri features `tray-icon`, `macos-private-api`; logging per Global Constraints.
+- [ ] **Step 3: Run** `cargo test -p taskcraft-app` — Expected: FAIL.
+- [ ] **Step 4: Implement** shell: `tauri.conf.json` with `identifier: com.pareasy.taskcraft`, `macOSPrivateApi: true`, `bundle.macOS.minimumSystemVersion: "14.0"`, windows declared in Rust (not config); dev URL `http://localhost:5173`, frontendDist `../ui/dist`; tauri features `tray-icon`, `macos-private-api`; logging per Global Constraints.
 - [ ] **Step 5: Run** tests — Expected: PASS; `cargo tauri build --debug --bundles app` succeeds.
 - [ ] **Step 6: Commit** `feat(app): tauri shell, settings, commands`.
 
@@ -422,10 +422,10 @@ scripts/smoke.sh                   post-install smoke test
 
 **Interfaces:**
 - Consumes: everything.
-- Produces: `/Applications/Kairos.app`.
+- Produces: `/Applications/TaskCraft.app`.
 
-- [ ] **Step 1: `scripts/install.sh`**: `cargo test --workspace && npm --prefix ui ci && npm --prefix ui run check && npm --prefix ui run test && cargo tauri build --bundles app`; `codesign --force --deep --sign - target/release/bundle/macos/Kairos.app`; quit a running Kairos (`osascript -e 'quit app "Kairos"'`); replace `/Applications/Kairos.app` (`ditto`); `xattr -dr com.apple.quarantine /Applications/Kairos.app`; `open -a Kairos`.
+- [ ] **Step 1: `scripts/install.sh`**: `cargo test --workspace && npm --prefix ui ci && npm --prefix ui run check && npm --prefix ui run test && cargo tauri build --bundles app`; `codesign --force --deep --sign - target/release/bundle/macos/TaskCraft.app`; quit a running TaskCraft (`osascript -e 'quit app "TaskCraft"'`); replace `/Applications/TaskCraft.app` (`ditto`); `xattr -dr com.apple.quarantine /Applications/TaskCraft.app`; `open -a TaskCraft`.
 - [ ] **Step 2: `scripts/smoke.sh`**: wait for the process; check the log file exists and the db has `user_version = 1` (`sqlite3`); run the release binary's `--smoke "Lunch with Sam tomorrow at 1"` flag (implemented in `main.rs` behind a CLI arg, release-safe: parses, inserts into a temp db copy, prints the created row as JSON, exits 0) and assert the JSON title is "Lunch".
 - [ ] **Step 3: Run** `scripts/install.sh && scripts/smoke.sh` — Expected: both exit 0; menu-bar icon visible; ⌥⌘Space opens the popover.
-- [ ] **Step 4: README** with install, update (re-run script), data/log locations, uninstall (`rm -rf /Applications/Kairos.app ~/Library/Application\ Support/Kairos ~/Library/Logs/Kairos`).
+- [ ] **Step 4: README** with install, update (re-run script), data/log locations, uninstall (`rm -rf /Applications/TaskCraft.app ~/Library/Application\ Support/TaskCraft ~/Library/Logs/TaskCraft`).
 - [ ] **Step 5: Commit** `chore: install and smoke scripts`.
