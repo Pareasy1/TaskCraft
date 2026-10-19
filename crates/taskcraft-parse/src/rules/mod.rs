@@ -1,6 +1,9 @@
 //! Tagging driver: ordered rules, longest match wins at each position.
 
+pub(crate) mod datetime;
 pub(crate) mod prefix;
+
+use datetime::{DateExpr, TimeExpr};
 
 use crate::token::Token;
 use crate::types::*;
@@ -16,6 +19,11 @@ pub(crate) struct Ctx<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Payload {
     None,
+    Date(DateExpr),
+    DateRange(DateExpr, DateExpr),
+    Time(TimeExpr),
+    TimeRange(TimeExpr, TimeExpr),
+    Tonight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,3 +69,13 @@ pub(crate) fn run_rules(toks: &[Token], rules: &[Rule], ctx: &Ctx, tags: &mut [T
         }
     }
 }
+
+/// Date/time rules in priority order (ties go to the earlier rule).
+pub(crate) const DATETIME_RULES: &[Rule] = &[
+    datetime::date_range_rule,
+    datetime::time_range_rule,
+    datetime::tonight_rule,
+    datetime::date_rule,
+    datetime::time_rule,
+    datetime::part_of_day_rule,
+];

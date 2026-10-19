@@ -1,5 +1,6 @@
 //! Natural-language parser for TaskCraft quick entry.
 
+mod resolve;
 mod rules;
 mod token;
 mod types;
@@ -28,20 +29,18 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
     let toks = token::tokenize(&input[offset..], offset);
     let mut tags: Vec<Tagged> = toks.iter().map(|_| Tagged { label: None, payload: Payload::None }).collect();
     let ctx = Ctx { now, opts };
-    rules::run_rules(&toks, &[], &ctx, &mut tags);
+    rules::run_rules(&toks, rules::DATETIME_RULES, &ctx, &mut tags);
 
     let title = assemble_title(&toks, &mut tags);
     spans.extend(collect_spans(&toks, &tags));
+    let r = resolve::resolve(&tags, &title, kind, &ctx);
 
     ParsedItem {
         kind,
         title,
-        start: match kind {
-            ItemKind::Event => Some(When { date: now.date_naive(), time: None }),
-            ItemKind::Task => None,
-        },
-        end: None,
-        all_day: kind == ItemKind::Event,
+        start: r.start,
+        end: r.end,
+        all_day: r.all_day,
         location: None,
         attendees: vec![],
         calendar: None,
