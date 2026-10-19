@@ -19,7 +19,12 @@ pub(crate) fn event_from_row(r: &Row) -> rusqlite::Result<(i64, EventInput)> {
             all_day: r.get(6)?,
             location: r.get(7)?,
             attendees: attendees
-                .map(|a| a.lines().map(str::to_string).filter(|s| !s.is_empty()).collect())
+                .map(|a| {
+                    a.lines()
+                        .map(str::to_string)
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
                 .unwrap_or_default(),
             notes: r.get(9)?,
             url: r.get(10)?,
@@ -32,7 +37,7 @@ pub(crate) fn event_from_row(r: &Row) -> rusqlite::Result<(i64, EventInput)> {
 impl Store {
     pub fn insert_event(&self, e: &EventInput) -> Result<i64> {
         validate_event(e)?;
-        let tx = self.conn.unchecked_transaction()?;
+        self.in_tx(|tx| {
         let now = fmt_ts(Utc::now());
         tx.execute(
             "INSERT INTO events(calendar_id, title, start_utc, end_utc, tz, all_day, location, attendees, notes, url, rrule, created_at, updated_at)
@@ -43,14 +48,14 @@ impl Store {
             ],
         )?;
         let id = tx.last_insert_rowid();
-        self.write_alerts(&tx, ItemKindDb::Event, id, &e.alerts)?;
-        tx.commit()?;
+        self.write_alerts(tx, ItemKindDb::Event, id, &e.alerts)?;
         Ok(id)
+        })
     }
 
     pub fn update_event(&self, id: i64, e: &EventInput) -> Result<()> {
         validate_event(e)?;
-        let tx = self.conn.unchecked_transaction()?;
+        self.in_tx(|tx| {
         let n = tx.execute(
             "UPDATE events SET calendar_id=?1, title=?2, start_utc=?3, end_utc=?4, tz=?5, all_day=?6, location=?7,
              attendees=?8, notes=?9, url=?10, rrule=?11, updated_at=?12 WHERE id=?13",
@@ -62,15 +67,18 @@ impl Store {
         if n == 0 {
             return Err(StoreError::NotFound);
         }
-        self.write_alerts(&tx, ItemKindDb::Event, id, &e.alerts)?;
-        tx.commit()?;
+        self.write_alerts(tx, ItemKindDb::Event, id, &e.alerts)?;
         Ok(())
+        })
     }
 
     pub fn get_event(&self, id: i64) -> Result<Event> {
         let sql = format!("SELECT {EVENT_COLS} FROM events WHERE id = ?1");
-        let (id, mut input) =
-            self.conn.query_row(&sql, [id], event_from_row).optional()?.ok_or(StoreError::NotFound)?;
+        let (id, mut input) = self
+            .conn
+            .query_row(&sql, [id], event_from_row)
+            .optional()?
+            .ok_or(StoreError::NotFound)?;
         input.alerts = self.read_alerts(ItemKindDb::Event, id)?;
         Ok(Event { id, input })
     }
@@ -84,6 +92,7 @@ fn validate_event(e: &EventInput) -> Result<()> {
     if e.end < e.start {
         return Err(StoreError::Invalid("event ends before it starts".into()));
     }
-    e.tz.parse::<chrono_tz::Tz>().map_err(|_| StoreError::Invalid(format!("unknown time zone {}", e.tz)))?;
+    e.tz.parse::<chrono_tz::Tz>()
+        .map_err(|_| StoreError::Invalid(format!("unknown time zone {}", e.tz)))?;
     Ok(())
 }

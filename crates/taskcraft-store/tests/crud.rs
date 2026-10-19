@@ -8,11 +8,23 @@ fn utc(s: &str) -> DateTime<Utc> {
 }
 
 fn personal(store: &Store) -> i64 {
-    store.calendars().unwrap().iter().find(|c| c.name == "Personal").unwrap().id
+    store
+        .calendars()
+        .unwrap()
+        .iter()
+        .find(|c| c.name == "Personal")
+        .unwrap()
+        .id
 }
 
 fn work(store: &Store) -> i64 {
-    store.calendars().unwrap().iter().find(|c| c.name == "Work").unwrap().id
+    store
+        .calendars()
+        .unwrap()
+        .iter()
+        .find(|c| c.name == "Work")
+        .unwrap()
+        .id
 }
 
 fn sample_event(cal: i64) -> EventInput {
@@ -44,7 +56,10 @@ fn open_seeds_calendars() {
 fn migration_backs_up() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("taskcraft.db");
-    rusqlite::Connection::open(&path).unwrap().execute_batch("CREATE TABLE junk(x); INSERT INTO junk VALUES (1);").unwrap();
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("CREATE TABLE junk(x); INSERT INTO junk VALUES (1);")
+        .unwrap();
     let s = Store::open(&path).unwrap();
     assert_eq!(s.schema_version().unwrap(), 1);
     assert!(dir.path().join("taskcraft.db.bak-v0").exists());
@@ -124,17 +139,44 @@ fn delete_calendar_moves_items() {
 #[test]
 fn upsert_calendar_creates_and_renames() {
     let s = Store::open_in_memory().unwrap();
-    let id = s.upsert_calendar(&CalendarInput { id: None, name: "Gym".into(), color: "#22c55e".into(), visible: true }).unwrap();
-    s.upsert_calendar(&CalendarInput { id: Some(id), name: "Fitness".into(), color: "#22c55e".into(), visible: false }).unwrap();
-    let c = s.calendars().unwrap().into_iter().find(|c| c.id == id).unwrap();
+    let id = s
+        .upsert_calendar(&CalendarInput {
+            id: None,
+            name: "Gym".into(),
+            color: "#22c55e".into(),
+            visible: true,
+        })
+        .unwrap();
+    s.upsert_calendar(&CalendarInput {
+        id: Some(id),
+        name: "Fitness".into(),
+        color: "#22c55e".into(),
+        visible: false,
+    })
+    .unwrap();
+    let c = s
+        .calendars()
+        .unwrap()
+        .into_iter()
+        .find(|c| c.id == id)
+        .unwrap();
     assert_eq!((c.name.as_str(), c.visible), ("Fitness", false));
 }
 
 #[test]
 fn to_utc_handles_dst() {
-    let w = |y, m, d, h, mi| When { date: NaiveDate::from_ymd_opt(y, m, d).unwrap(), time: NaiveTime::from_hms_opt(h, mi, 0) };
-    assert_eq!(to_utc(&w(2026, 10, 25, 2, 30), Rome), utc("2026-10-25T00:30:00Z"));
-    assert_eq!(to_utc(&w(2027, 3, 28, 2, 30), Rome), utc("2027-03-28T01:30:00Z"));
+    let w = |y, m, d, h, mi| When {
+        date: NaiveDate::from_ymd_opt(y, m, d).unwrap(),
+        time: NaiveTime::from_hms_opt(h, mi, 0),
+    };
+    assert_eq!(
+        to_utc(&w(2026, 10, 25, 2, 30), Rome),
+        utc("2026-10-25T00:30:00Z")
+    );
+    assert_eq!(
+        to_utc(&w(2027, 3, 28, 2, 30), Rome),
+        utc("2027-03-28T01:30:00Z")
+    );
 }
 
 #[test]
@@ -143,7 +185,9 @@ fn from_parsed_all_day_range() {
     let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
     let p = parse("Trip Oct 24 to Oct 26", now, &ParseOptions::default());
     let cals = s.calendars().unwrap();
-    let NewItem::Event(e) = from_parsed(&p, Rome, personal(&s), &cals, 60) else { panic!("expected event") };
+    let NewItem::Event(e) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+        panic!("expected event")
+    };
     assert_eq!(e.start, utc("2026-10-23T22:00:00Z"));
     assert_eq!(e.end, utc("2026-10-26T23:00:00Z"));
     assert!(e.all_day);
@@ -155,7 +199,9 @@ fn from_parsed_task_and_calendar() {
     let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
     let p = parse("todo call mom at 6pm /work", now, &ParseOptions::default());
     let cals = s.calendars().unwrap();
-    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else { panic!("expected task") };
+    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+        panic!("expected task")
+    };
     assert_eq!(t.calendar_id, work(&s));
     assert_eq!(t.due, Some(utc("2026-10-20T16:00:00Z")));
     assert!(t.due_has_time);

@@ -22,12 +22,22 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
     let mut offset = lead_ws;
     if let Some(len) = rules::prefix::task_prefix_len(body) {
         kind = ItemKind::Task;
-        spans.push(Span { start: lead_ws, end: lead_ws + len, label: Label::TaskPrefix });
+        spans.push(Span {
+            start: lead_ws,
+            end: lead_ws + len,
+            label: Label::TaskPrefix,
+        });
         offset += len;
     }
 
     let toks = token::tokenize(&input[offset..], offset);
-    let mut tags: Vec<Tagged> = toks.iter().map(|_| Tagged { label: None, payload: Payload::None }).collect();
+    let mut tags: Vec<Tagged> = toks
+        .iter()
+        .map(|_| Tagged {
+            label: None,
+            payload: Payload::None,
+        })
+        .collect();
     let ctx = Ctx { now, opts };
     rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
     let attendees = rules::fields::attendees(&toks, &mut tags);
@@ -54,7 +64,9 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
 }
 
 /// Words dropped from the end of a title ("Lunch at", "Call with").
-const DANGLING: &[&str] = &["at", "@", "on", "with", "in", "from", "to", "for", "and", "&", "-"];
+const DANGLING: &[&str] = &[
+    "at", "@", "on", "with", "in", "from", "to", "for", "and", "&", "-",
+];
 
 fn trailing_junk(t: &Token) -> bool {
     matches!(t.text.as_str(), "," | "." | ";" | ":") || DANGLING.contains(&t.lower.as_str())
@@ -63,13 +75,19 @@ fn trailing_junk(t: &Token) -> bool {
 /// Untagged tokens become the title; they are labeled `Title` in place.
 /// Trailing punctuation and dangling connector words are left unlabeled.
 fn assemble_title(toks: &[Token], tags: &mut [Tagged]) -> String {
-    let untagged: Vec<usize> = (0..toks.len()).filter(|&i| tags[i].label.is_none()).collect();
-    let keep = untagged.iter().rposition(|&i| !trailing_junk(&toks[i])).map_or(0, |p| p + 1);
+    let untagged: Vec<usize> = (0..toks.len())
+        .filter(|&i| tags[i].label.is_none())
+        .collect();
+    let keep = untagged
+        .iter()
+        .rposition(|&i| !trailing_junk(&toks[i]))
+        .map_or(0, |p| p + 1);
     let mut title = String::new();
     for &i in &untagged[..keep] {
         let (t, tag) = (&toks[i], &mut tags[i]);
         tag.label = Some(Label::Title);
-        let attach = t.kind == TokKind::Punct && matches!(t.text.as_str(), "," | "." | "!" | "?" | ";" | ":" | ")");
+        let attach = t.kind == TokKind::Punct
+            && matches!(t.text.as_str(), "," | "." | "!" | "?" | ";" | ":" | ")");
         if !title.is_empty() && !attach {
             title.push(' ');
         }
@@ -85,7 +103,11 @@ fn collect_spans(toks: &[Token], tags: &[Tagged]) -> Vec<Span> {
         let Some(label) = tag.label else { continue };
         match spans.last_mut() {
             Some(last) if last.label == label && label != Label::Separator => last.end = t.end,
-            _ => spans.push(Span { start: t.start, end: t.end, label }),
+            _ => spans.push(Span {
+                start: t.start,
+                end: t.end,
+                label,
+            }),
         }
     }
     spans

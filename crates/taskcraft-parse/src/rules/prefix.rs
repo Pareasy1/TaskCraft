@@ -1,8 +1,17 @@
 //! Task prefixes ("todo", "remind me to", "✓", …) at the start of the input.
 
 const PREFIXES: &[&str] = &[
-    "remind me about", "remind me to", "remember to", "remind me", "reminder", "to-do", "to do",
-    "todo", "task", "remind", "✓",
+    "remind me about",
+    "remind me to",
+    "remember to",
+    "remind me",
+    "reminder",
+    "to-do",
+    "to do",
+    "todo",
+    "task",
+    "remind",
+    "✓",
 ];
 
 /// Returns the byte length of a leading task prefix, including a following
@@ -31,7 +40,10 @@ pub(crate) fn task_prefix_len(input: &str) -> Option<usize> {
 
 fn ascii_prefix_len(input: &str) -> Option<usize> {
     for p in PREFIXES {
-        if input.len() >= p.len() && input.is_char_boundary(p.len()) && input[..p.len()].eq_ignore_ascii_case(p) {
+        if input.len() >= p.len()
+            && input.is_char_boundary(p.len())
+            && input[..p.len()].eq_ignore_ascii_case(p)
+        {
             let rest = &input[p.len()..];
             if rest.is_empty() || rest.starts_with(char::is_whitespace) || rest.starts_with(':') {
                 return Some(p.len() + usize::from(rest.starts_with(':')));

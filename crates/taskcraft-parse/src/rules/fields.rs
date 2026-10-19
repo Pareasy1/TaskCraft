@@ -62,12 +62,24 @@ pub(crate) fn location(toks: &[Token], tags: &mut [Tagged]) -> Option<String> {
         // Trailing punctuation is not part of the place.
         let n = (0..=n)
             .rev()
-            .find(|&k| k == 0 || !matches!(toks[i + k].lower.as_str(), "," | "." | "!" | "?" | ";" | ":"))
+            .find(|&k| {
+                k == 0
+                    || !matches!(
+                        toks[i + k].lower.as_str(),
+                        "," | "." | "!" | "?" | ";" | ":"
+                    )
+            })
             .unwrap_or(0);
         if n == 0 {
             continue;
         }
-        if toks[i].lower == "in" && toks[i + 1].text.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        if toks[i].lower == "in"
+            && toks[i + 1]
+                .text
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit())
+        {
             continue;
         }
         tags[i].label = Some(Label::Separator);

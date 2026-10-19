@@ -27,7 +27,13 @@ fn make(text: &str, start: usize) -> Token {
         Some(c) if text.chars().count() == 1 && c.is_ascii_punctuation() => TokKind::Punct,
         _ => TokKind::Word,
     };
-    Token { text: text.to_string(), lower: text.to_lowercase(), start, end: start + text.len(), kind }
+    Token {
+        text: text.to_string(),
+        lower: text.to_lowercase(),
+        start,
+        end: start + text.len(),
+        kind,
+    }
 }
 
 fn is_url(chunk: &str) -> bool {
@@ -84,7 +90,10 @@ fn push_chunk(chunk: &str, start: usize, out: &mut Vec<Token>) {
     out.extend(lead);
     if !body.is_empty() {
         if is_url(body) {
-            out.push(Token { kind: TokKind::Word, ..make(body, body_start) });
+            out.push(Token {
+                kind: TokKind::Word,
+                ..make(body, body_start)
+            });
         } else {
             out.push(make(body, body_start));
         }
@@ -113,7 +122,16 @@ mod tests {
     fn tokenize_keeps_urls_and_apostrophes() {
         let s = "at Caffè Sant'Eustachio https://meet.example.com/abc.";
         let texts: Vec<String> = tokenize(s, 0).into_iter().map(|t| t.text).collect();
-        assert_eq!(texts, ["at", "Caffè", "Sant'Eustachio", "https://meet.example.com/abc", "."]);
+        assert_eq!(
+            texts,
+            [
+                "at",
+                "Caffè",
+                "Sant'Eustachio",
+                "https://meet.example.com/abc",
+                "."
+            ]
+        );
     }
 
     #[test]

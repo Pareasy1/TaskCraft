@@ -11,7 +11,11 @@ fn lower(toks: &[Token], i: usize) -> Option<&str> {
 }
 
 fn labeled(len: usize, label: Label, payload: Payload) -> Option<Match> {
-    Some(Match { len, labels: vec![label; len], payload })
+    Some(Match {
+        len,
+        labels: vec![label; len],
+        payload,
+    })
 }
 
 /// Minutes in one unit word ("min", "hours", "day"…).
@@ -29,7 +33,10 @@ fn unit_minutes(s: &str) -> Option<f64> {
 /// Returns (minutes, tokens consumed).
 fn amount_at(toks: &[Token], i: usize) -> Option<(u32, usize)> {
     let w0 = lower(toks, i)?;
-    if w0 == "half" && matches!(lower(toks, i + 1), Some("an" | "a")) && lower(toks, i + 2).and_then(unit_minutes) == Some(60.0) {
+    if w0 == "half"
+        && matches!(lower(toks, i + 1), Some("an" | "a"))
+        && lower(toks, i + 2).and_then(unit_minutes) == Some(60.0)
+    {
         return Some((30, 3));
     }
     // Compact "30min" / "2h"
@@ -54,7 +61,11 @@ pub(crate) fn duration_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Matc
     let (mins, n) = amount_at(toks, i + 1)?;
     let mut labels = vec![Label::Duration; n + 1];
     labels[0] = Label::Separator;
-    Some(Match { len: n + 1, labels, payload: Payload::Duration(mins) })
+    Some(Match {
+        len: n + 1,
+        labels,
+        payload: Payload::Duration(mins),
+    })
 }
 
 /// "alert 10 min before", "remind me 1 hour before", "alert at 2pm".
@@ -84,7 +95,7 @@ fn weekday_list(toks: &[Token], i: usize, plural_ok: bool) -> Option<(Vec<Weekda
     loop {
         let sep = lower(toks, i + n);
         if matches!(sep, Some("and" | "," | "&")) {
-            if let Some(d) = lower(toks, i + n + 1).and_then(|s| one(s)) {
+            if let Some(d) = lower(toks, i + n + 1).and_then(one) {
                 days.push(d);
                 n += 2;
                 continue;
@@ -107,16 +118,29 @@ fn on_weekdays(toks: &[Token], i: usize) -> (Vec<Weekday>, usize) {
 
 /// Optional "on the 1st" after a monthly rule.
 fn on_month_day(toks: &[Token], i: usize) -> (Option<u32>, usize) {
-    let (skip_on, j) = if lower(toks, i) == Some("on") { (1, i + 1) } else { (0, i) };
+    let (skip_on, j) = if lower(toks, i) == Some("on") {
+        (1, i + 1)
+    } else {
+        (0, i)
+    };
     if lower(toks, j) == Some("the") {
-        if let Some(d) = lower(toks, j + 1).filter(|s| s.chars().any(|c| c.is_ascii_alphabetic())).and_then(day_num) {
+        if let Some(d) = lower(toks, j + 1)
+            .filter(|s| s.chars().any(|c| c.is_ascii_alphabetic()))
+            .and_then(day_num)
+        {
             return (Some(d), skip_on + 2);
         }
     }
     (None, 0)
 }
 
-const WEEKDAYS: [Weekday; 5] = [Weekday::Mon, Weekday::Tue, Weekday::Wed, Weekday::Thu, Weekday::Fri];
+const WEEKDAYS: [Weekday; 5] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+];
 
 /// Builds a rule from a frequency word, then consumes "on …" qualifiers.
 fn finish(toks: &[Token], i: usize, used: usize, freq: &str, interval: u32) -> Option<Match> {
@@ -128,7 +152,13 @@ fn finish(toks: &[Token], i: usize, used: usize, freq: &str, interval: u32) -> O
         }
         "month" => {
             let (md, n) = on_month_day(toks, i + used);
-            (Recurrence::Monthly { interval, month_day: md }, n)
+            (
+                Recurrence::Monthly {
+                    interval,
+                    month_day: md,
+                },
+                n,
+            )
         }
         "year" => (Recurrence::Yearly { interval }, 0),
         _ => return None,
@@ -147,8 +177,15 @@ pub(crate) fn recurrence_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Ma
     }
     // "mondays", "on mondays"
     let on = usize::from(w0 == "on");
-    if let Some((days, n)) = lower(toks, i + on).and_then(weekday_plural).and_then(|_| weekday_list(toks, i + on, true)) {
-        return labeled(on + n, Label::Recurrence, Payload::Recurrence(Recurrence::Weekly { interval: 1, days }));
+    if let Some((days, n)) = lower(toks, i + on)
+        .and_then(weekday_plural)
+        .and_then(|_| weekday_list(toks, i + on, true))
+    {
+        return labeled(
+            on + n,
+            Label::Recurrence,
+            Payload::Recurrence(Recurrence::Weekly { interval: 1, days }),
+        );
     }
     if w0 != "every" {
         return None;
@@ -160,11 +197,22 @@ pub(crate) fn recurrence_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Ma
         "month" => return finish(toks, i, 2, "month", 1),
         "year" => return finish(toks, i, 2, "year", 1),
         "weekday" => {
-            return labeled(2, Label::Recurrence, Payload::Recurrence(Recurrence::Weekly { interval: 1, days: WEEKDAYS.to_vec() }))
+            return labeled(
+                2,
+                Label::Recurrence,
+                Payload::Recurrence(Recurrence::Weekly {
+                    interval: 1,
+                    days: WEEKDAYS.to_vec(),
+                }),
+            )
         }
         "weekend" => {
             let days = vec![Weekday::Sat, Weekday::Sun];
-            return labeled(2, Label::Recurrence, Payload::Recurrence(Recurrence::Weekly { interval: 1, days }));
+            return labeled(
+                2,
+                Label::Recurrence,
+                Payload::Recurrence(Recurrence::Weekly { interval: 1, days }),
+            );
         }
         "other" => {
             let unit = lower(toks, i + 2)?;
@@ -173,7 +221,11 @@ pub(crate) fn recurrence_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Ma
         _ => {}
     }
     if let Some((days, n)) = weekday_list(toks, i + 1, true) {
-        return labeled(1 + n, Label::Recurrence, Payload::Recurrence(Recurrence::Weekly { interval: 1, days }));
+        return labeled(
+            1 + n,
+            Label::Recurrence,
+            Payload::Recurrence(Recurrence::Weekly { interval: 1, days }),
+        );
     }
     let n: u32 = small_number(w1)?;
     let unit = lower(toks, i + 2)?.trim_end_matches('s');
@@ -186,14 +238,20 @@ pub(crate) fn until_rule(toks: &[Token], i: usize, ctx: &Ctx) -> Option<Match> {
         return None;
     }
     let m = super::datetime::date_rule(toks, i + 1, ctx)?;
-    let Payload::Date(d) = m.payload else { return None };
+    let Payload::Date(d) = m.payload else {
+        return None;
+    };
     labeled(m.len + 1, Label::Recurrence, Payload::Until(d))
 }
 
 pub(crate) fn calendar_rule(toks: &[Token], i: usize, ctx: &Ctx) -> Option<Match> {
     let t = toks.get(i)?;
     let name = t.text.strip_prefix('/')?;
-    let cal = ctx.opts.calendars.iter().find(|c| c.eq_ignore_ascii_case(name))?;
+    let cal = ctx
+        .opts
+        .calendars
+        .iter()
+        .find(|c| c.eq_ignore_ascii_case(name))?;
     labeled(1, Label::Calendar, Payload::Calendar(cal.clone()))
 }
 
@@ -205,4 +263,3 @@ pub(crate) fn url_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Match> {
     }
     None
 }
-

@@ -68,10 +68,20 @@ pub struct Span {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "freq")]
 pub enum Recurrence {
-    Daily { interval: u32 },
-    Weekly { interval: u32, days: Vec<Weekday> },
-    Monthly { interval: u32, month_day: Option<u32> },
-    Yearly { interval: u32 },
+    Daily {
+        interval: u32,
+    },
+    Weekly {
+        interval: u32,
+        days: Vec<Weekday>,
+    },
+    Monthly {
+        interval: u32,
+        month_day: Option<u32>,
+    },
+    Yearly {
+        interval: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,7 +104,10 @@ impl RecurrenceSpec {
                 }
                 s
             }
-            Recurrence::Monthly { interval, month_day } => {
+            Recurrence::Monthly {
+                interval,
+                month_day,
+            } => {
                 let mut s = format!("FREQ=MONTHLY;INTERVAL={interval}");
                 if let Some(md) = month_day {
                     s.push_str(&format!(";BYMONTHDAY={md}"));

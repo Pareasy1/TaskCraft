@@ -60,8 +60,9 @@ pub(crate) fn run_rules(toks: &[Token], rules: &[Rule], ctx: &Ctx, tags: &mut [T
         let mut best: Option<Match> = None;
         for rule in rules {
             if let Some(m) = rule(toks, i, ctx) {
-                let fits = m.len > 0 && (i..i + m.len).all(|j| j < toks.len() && tags[j].label.is_none());
-                if fits && best.as_ref().map_or(true, |b| m.len > b.len) {
+                let fits =
+                    m.len > 0 && (i..i + m.len).all(|j| j < toks.len() && tags[j].label.is_none());
+                if fits && best.as_ref().is_none_or(|b| m.len > b.len) {
                     best = Some(m);
                 }
             }

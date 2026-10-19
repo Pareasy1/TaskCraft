@@ -4,11 +4,14 @@ mod alerts;
 mod calendars;
 mod events;
 mod model;
+mod query;
+mod recur;
 mod schema;
 mod tasks;
 mod time;
 
 pub use model::*;
+pub use query::{Hit, Occurrence, Scope, TaskFilter};
 pub use time::{from_parsed, local_to_utc, to_utc};
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -24,7 +27,9 @@ pub(crate) fn fmt_ts(t: DateTime<Utc>) -> String {
 }
 
 pub(crate) fn parse_ts(s: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(s).map(|t| t.with_timezone(&Utc)).unwrap_or_default()
+    DateTime::parse_from_rfc3339(s)
+        .map(|t| t.with_timezone(&Utc))
+        .unwrap_or_default()
 }
 
 impl Store {
@@ -57,6 +62,18 @@ impl Store {
     fn init(conn: &mut Connection) -> Result<()> {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         schema::migrate(conn)
+    }
+
+    /// Runs `f` in a transaction, or inside the caller's transaction if one
+    /// is already open (SQLite does not nest transactions).
+    pub(crate) fn in_tx<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        if !self.conn.is_autocommit() {
+            return f(&self.conn);
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        let v = f(&tx)?;
+        tx.commit()?;
+        Ok(v)
     }
 
     pub fn schema_version(&self) -> Result<i64> {

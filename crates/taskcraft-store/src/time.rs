@@ -8,7 +8,10 @@ use taskcraft_parse::{AlertSpec, ItemKind, ParsedItem, When};
 /// Date-only values mean local midnight. Ambiguous local times (DST end)
 /// take the earliest instant; nonexistent ones (DST start) move forward 1h.
 pub fn to_utc(w: &When, tz: Tz) -> DateTime<Utc> {
-    local_to_utc(NaiveDateTime::new(w.date, w.time.unwrap_or(NaiveTime::MIN)), tz)
+    local_to_utc(
+        NaiveDateTime::new(w.date, w.time.unwrap_or(NaiveTime::MIN)),
+        tz,
+    )
 }
 
 pub fn local_to_utc(ndt: NaiveDateTime, tz: Tz) -> DateTime<Utc> {
@@ -61,14 +64,35 @@ pub fn from_parsed(
             alerts,
         }),
         ItemKind::Event => {
-            let start_w = p.start.unwrap_or(When { date: Utc::now().with_timezone(&tz).date_naive(), time: None });
+            let start_w = p.start.unwrap_or(When {
+                date: Utc::now().with_timezone(&tz).date_naive(),
+                time: None,
+            });
             let (start, end) = if p.all_day || start_w.time.is_none() {
                 let last = p.end.map_or(start_w.date, |e| e.date);
                 let after = last.checked_add_days(Days::new(1)).unwrap_or(last);
-                (to_utc(&When { date: start_w.date, time: None }, tz), to_utc(&When { date: after, time: None }, tz))
+                (
+                    to_utc(
+                        &When {
+                            date: start_w.date,
+                            time: None,
+                        },
+                        tz,
+                    ),
+                    to_utc(
+                        &When {
+                            date: after,
+                            time: None,
+                        },
+                        tz,
+                    ),
+                )
             } else {
                 let s = to_utc(&start_w, tz);
-                let e = p.end.map_or(s + Duration::minutes(i64::from(default_event_minutes)), |e| to_utc(&e, tz));
+                let e = p.end.map_or(
+                    s + Duration::minutes(i64::from(default_event_minutes)),
+                    |e| to_utc(&e, tz),
+                );
                 (s, e)
             };
             NewItem::Event(EventInput {

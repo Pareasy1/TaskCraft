@@ -30,15 +30,30 @@ pub(crate) enum DateExpr {
     Today,
     Tomorrow,
     Yesterday,
-    Weekday { day: Weekday, next: bool },
+    Weekday {
+        day: Weekday,
+        next: bool,
+    },
     NextWeek,
     NextMonth,
     InDays(u32),
     InWeeks(u32),
-    MonthDay { month: u32, day: u32, year: Option<i32> },
-    Numeric { a: u32, b: u32, year: Option<i32> },
+    MonthDay {
+        month: u32,
+        day: u32,
+        year: Option<i32>,
+    },
+    Numeric {
+        a: u32,
+        b: u32,
+        year: Option<i32>,
+    },
     Ordinal(u32),
-    Iso { year: i32, month: u32, day: u32 },
+    Iso {
+        year: i32,
+        month: u32,
+        day: u32,
+    },
 }
 
 // ---------- small token helpers ----------
@@ -131,8 +146,20 @@ pub(crate) fn small_number(s: &str) -> Option<u32> {
 /// "midnight", or a bare hour "3" (only when `allow_bare`).
 pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
     match s {
-        "noon" | "midday" => return Some(TimeExpr { hour: 12, minute: 0, meridiem: Some(Meridiem::Pm) }),
-        "midnight" => return Some(TimeExpr { hour: 0, minute: 0, meridiem: None }),
+        "noon" | "midday" => {
+            return Some(TimeExpr {
+                hour: 12,
+                minute: 0,
+                meridiem: Some(Meridiem::Pm),
+            })
+        }
+        "midnight" => {
+            return Some(TimeExpr {
+                hour: 0,
+                minute: 0,
+                meridiem: None,
+            })
+        }
         _ => {}
     }
     let (body, mer) = if let Some(b) = s.strip_suffix("am").or_else(|| s.strip_suffix("a.m.")) {
@@ -149,7 +176,7 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
     if body.is_empty() || !body.chars().next()?.is_ascii_digit() {
         return None;
     }
-    let (h, m, has_colon) = match body.split_once(|c| c == ':' || c == '.') {
+    let (h, m, has_colon) = match body.split_once([':', '.']) {
         Some((h, m)) => {
             if m.len() != 2 {
                 return None;
@@ -168,10 +195,18 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
     }
     match mer {
         Some(_) if !(1..=12).contains(&h) => None,
-        Some(_) => Some(TimeExpr { hour: h, minute: m, meridiem: mer }),
+        Some(_) => Some(TimeExpr {
+            hour: h,
+            minute: m,
+            meridiem: mer,
+        }),
         None if h > 23 => None,
         None if !has_colon && !allow_bare => None,
-        None => Some(TimeExpr { hour: h, minute: m, meridiem: None }),
+        None => Some(TimeExpr {
+            hour: h,
+            minute: m,
+            meridiem: None,
+        }),
     }
 }
 
@@ -238,7 +273,13 @@ fn date_core(toks: &[Token], i: usize, ctx: &Ctx) -> Option<(DateExpr, Vec<Label
         }
         "this" => {
             if let Some(d) = w1.and_then(weekday) {
-                return date(DateExpr::Weekday { day: d, next: false }, 2);
+                return date(
+                    DateExpr::Weekday {
+                        day: d,
+                        next: false,
+                    },
+                    2,
+                );
             }
             return None;
         }
@@ -260,20 +301,44 @@ fn date_core(toks: &[Token], i: usize, ctx: &Ctx) -> Option<(DateExpr, Vec<Label
         _ => {}
     }
     if let Some(d) = weekday(w0) {
-        return date(DateExpr::Weekday { day: d, next: false }, 1);
+        return date(
+            DateExpr::Weekday {
+                day: d,
+                next: false,
+            },
+            1,
+        );
     }
     // "Oct 24", "Oct 24th", "Oct 24, 2026", "Oct 24 2026"
     if let Some(m) = month(w0) {
         let day = w1.and_then(day_num)?;
         let (yr, extra) = year_after(toks, i + 2);
-        return date(DateExpr::MonthDay { month: m, day, year: yr }, 2 + extra);
+        return date(
+            DateExpr::MonthDay {
+                month: m,
+                day,
+                year: yr,
+            },
+            2 + extra,
+        );
     }
     // "24 Oct", "24th of October", "3 March 2027"
     if let Some(day) = day_num(w0) {
-        let (m_idx, of) = if w1 == Some("of") { (i + 2, 1) } else { (i + 1, 0) };
+        let (m_idx, of) = if w1 == Some("of") {
+            (i + 2, 1)
+        } else {
+            (i + 1, 0)
+        };
         if let Some(m) = lower(toks, m_idx).and_then(month) {
             let (yr, extra) = year_after(toks, m_idx + 1);
-            return date(DateExpr::MonthDay { month: m, day, year: yr }, 2 + of + extra);
+            return date(
+                DateExpr::MonthDay {
+                    month: m,
+                    day,
+                    year: yr,
+                },
+                2 + of + extra,
+            );
         }
     }
     // ISO "2026-12-01"
@@ -309,13 +374,27 @@ fn iso(s: &str) -> Option<DateExpr> {
     if parts.next().is_some() || y.len() != 4 {
         return None;
     }
-    Some(DateExpr::Iso { year: y.parse().ok()?, month: m.parse().ok()?, day: d.parse().ok()? })
+    Some(DateExpr::Iso {
+        year: y.parse().ok()?,
+        month: m.parse().ok()?,
+        day: d.parse().ok()?,
+    })
 }
 
 fn numeric(s: &str) -> Option<DateExpr> {
-    let sep = if s.contains('/') { '/' } else if s.matches('.').count() >= 1 && !s.contains(':') { '.' } else { return None };
+    let sep = if s.contains('/') {
+        '/'
+    } else if s.matches('.').count() >= 1 && !s.contains(':') {
+        '.'
+    } else {
+        return None;
+    };
     let parts: Vec<&str> = s.split(sep).collect();
-    if !(2..=3).contains(&parts.len()) || parts.iter().any(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_digit())) {
+    if !(2..=3).contains(&parts.len())
+        || parts
+            .iter()
+            .any(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_digit()))
+    {
         return None;
     }
     let a: u32 = parts[0].parse().ok()?;
@@ -344,7 +423,11 @@ pub(crate) fn numeric_md(a: u32, b: u32, order: DateOrder) -> (u32, u32) {
 
 pub(crate) fn date_rule(toks: &[Token], i: usize, ctx: &Ctx) -> Option<Match> {
     let (e, labels) = date_at(toks, i, ctx)?;
-    Some(Match { len: labels.len(), labels, payload: Payload::Date(e) })
+    Some(Match {
+        len: labels.len(),
+        labels,
+        payload: Payload::Date(e),
+    })
 }
 
 pub(crate) fn date_range_rule(toks: &[Token], i: usize, ctx: &Ctx) -> Option<Match> {
@@ -356,7 +439,11 @@ pub(crate) fn date_range_rule(toks: &[Token], i: usize, ctx: &Ctx) -> Option<Mat
     let (b, lb) = date_core(toks, j + 1, ctx)?;
     labels.push(Label::Separator);
     labels.extend(lb);
-    Some(Match { len: labels.len(), labels, payload: Payload::DateRange(a, b) })
+    Some(Match {
+        len: labels.len(),
+        labels,
+        payload: Payload::DateRange(a, b),
+    })
 }
 
 pub(crate) fn time_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Match> {
@@ -367,8 +454,12 @@ pub(crate) fn time_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Match> {
     if lead {
         labels.push(Label::Separator);
     }
-    labels.extend(std::iter::repeat(Label::Time).take(n));
-    Some(Match { len: labels.len(), labels, payload: Payload::Time(te) })
+    labels.extend(std::iter::repeat_n(Label::Time, n));
+    Some(Match {
+        len: labels.len(),
+        labels,
+        payload: Payload::Time(te),
+    })
 }
 
 pub(crate) fn time_range_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Match> {
@@ -382,7 +473,11 @@ pub(crate) fn time_range_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Ma
             labels.push(Label::Separator);
         }
         labels.push(Label::Time);
-        return Some(Match { len: labels.len(), labels, payload: Payload::TimeRange(a, b) });
+        return Some(Match {
+            len: labels.len(),
+            labels,
+            payload: Payload::TimeRange(a, b),
+        });
     }
     // "[from|at] X to|until|- Y"; without "from", X or Y must be explicit
     let (a, na) = time_at(toks, j, lead)?;
@@ -401,15 +496,23 @@ pub(crate) fn time_range_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Ma
     if lead {
         labels.push(Label::Separator);
     }
-    labels.extend(std::iter::repeat(Label::Time).take(na));
+    labels.extend(std::iter::repeat_n(Label::Time, na));
     labels.push(Label::Separator);
-    labels.extend(std::iter::repeat(Label::Time).take(nb));
-    Some(Match { len: labels.len(), labels, payload: Payload::TimeRange(a, b) })
+    labels.extend(std::iter::repeat_n(Label::Time, nb));
+    Some(Match {
+        len: labels.len(),
+        labels,
+        payload: Payload::TimeRange(a, b),
+    })
 }
 
 /// "tonight" → today, evening.
 pub(crate) fn tonight_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<Match> {
-    (lower(toks, i)? == "tonight").then(|| Match { len: 1, labels: vec![Label::Date], payload: Payload::Tonight })
+    (lower(toks, i)? == "tonight").then(|| Match {
+        len: 1,
+        labels: vec![Label::Date],
+        payload: Payload::Tonight,
+    })
 }
 
 /// "morning", "afternoon", "evening" (optionally "in the …" / "this …").
@@ -432,7 +535,10 @@ pub(crate) fn part_of_day_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<M
     Some(Match {
         len: skip + 1,
         labels,
-        payload: Payload::Time(TimeExpr { hour, minute: 0, meridiem }),
+        payload: Payload::Time(TimeExpr {
+            hour,
+            minute: 0,
+            meridiem,
+        }),
     })
 }
-

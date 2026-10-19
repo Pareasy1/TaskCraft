@@ -26,7 +26,7 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
 
 impl Store {
     pub fn insert_task(&self, t: &TaskInput) -> Result<i64> {
-        let tx = self.conn.unchecked_transaction()?;
+        self.in_tx(|tx| {
         let now = fmt_ts(Utc::now());
         tx.execute(
             "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, created_at, updated_at)
@@ -34,13 +34,13 @@ impl Store {
             params![t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes, now],
         )?;
         let id = tx.last_insert_rowid();
-        self.write_alerts(&tx, ItemKindDb::Task, id, &t.alerts)?;
-        tx.commit()?;
+        self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(id)
+        })
     }
 
     pub fn update_task(&self, id: i64, t: &TaskInput) -> Result<()> {
-        let tx = self.conn.unchecked_transaction()?;
+        self.in_tx(|tx| {
         let n = tx.execute(
             "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7, updated_at=?8
              WHERE id=?9",
@@ -49,14 +49,18 @@ impl Store {
         if n == 0 {
             return Err(StoreError::NotFound);
         }
-        self.write_alerts(&tx, ItemKindDb::Task, id, &t.alerts)?;
-        tx.commit()?;
+        self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(())
+        })
     }
 
     pub fn get_task(&self, id: i64) -> Result<Task> {
         let sql = format!("SELECT {TASK_COLS} FROM tasks t JOIN calendars c ON c.id = t.calendar_id WHERE t.id = ?1");
-        let mut t = self.conn.query_row(&sql, [id], task_from_row).optional()?.ok_or(StoreError::NotFound)?;
+        let mut t = self
+            .conn
+            .query_row(&sql, [id], task_from_row)
+            .optional()?
+            .ok_or(StoreError::NotFound)?;
         t.alerts = self.read_alerts(ItemKindDb::Task, id)?;
         Ok(t)
     }
@@ -73,12 +77,15 @@ impl Store {
     }
 
     pub fn delete_task(&self, id: i64) -> Result<()> {
-        let tx = self.conn.unchecked_transaction()?;
-        if tx.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
-            return Err(StoreError::NotFound);
-        }
-        tx.execute("DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1", [id])?;
-        tx.commit()?;
-        Ok(())
+        self.in_tx(|tx| {
+            if tx.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
+                return Err(StoreError::NotFound);
+            }
+            tx.execute(
+                "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
+                [id],
+            )?;
+            Ok(())
+        })
     }
 }

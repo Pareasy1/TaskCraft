@@ -53,7 +53,10 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
         }
     }
     let lower_title = title.to_lowercase();
-    let evening = f.tonight || EVENING_WORDS.iter().any(|w| lower_title.split_whitespace().any(|t| t == *w));
+    let evening = f.tonight
+        || EVENING_WORDS
+            .iter()
+            .any(|w| lower_title.split_whitespace().any(|t| t == *w));
     let today = ctx.now.date_naive();
     let now_time = ctx.now.time();
 
@@ -71,12 +74,18 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
     }
 
     // Dates.
-    let date_expr = f.date_range.map(|r| r.0).or(f.date).or(f.tonight.then_some(DateExpr::Today));
+    let date_expr = f
+        .date_range
+        .map(|r| r.0)
+        .or(f.date)
+        .or(f.tonight.then_some(DateExpr::Today));
     let mut start_d = match date_expr {
         Some(e) => resolve_date(e, today, ctx),
         None => None,
     };
-    let range_end_d = f.date_range.and_then(|(_, b)| resolve_date(b, start_d.unwrap_or(today), ctx));
+    let range_end_d = f
+        .date_range
+        .and_then(|(_, b)| resolve_date(b, start_d.unwrap_or(today), ctx));
 
     if start_d.is_none() {
         if let Some(r) = &f.recurrence {
@@ -85,11 +94,17 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
     }
     if start_d.is_none() {
         if let Some(t) = start_t {
-            start_d = Some(if t < now_time { today + Days::new(1) } else { today });
+            start_d = Some(if t < now_time {
+                today + Days::new(1)
+            } else {
+                today
+            });
         } else if kind == ItemKind::Event {
             start_d = Some(today);
         }
-    } else if let (Some(DateExpr::Weekday { next: false, .. }), Some(t), Some(d)) = (date_expr, start_t, start_d) {
+    } else if let (Some(DateExpr::Weekday { next: false, .. }), Some(t), Some(d)) =
+        (date_expr, start_t, start_d)
+    {
         if d == today && t < now_time {
             start_d = Some(d + Days::new(7));
         }
@@ -105,25 +120,48 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
         .iter()
         .filter_map(|a| match a {
             Payload::AlertBefore(m) => Some(AlertSpec::Before(*m)),
-            Payload::AlertAt(t) => Some(AlertSpec::At(When { date: alert_day, time: Some(resolve_time(*t, false)) })),
+            Payload::AlertAt(t) => Some(AlertSpec::At(When {
+                date: alert_day,
+                time: Some(resolve_time(*t, false)),
+            })),
             _ => None,
         })
         .collect();
-    let base = Resolved { recurrence, alerts, calendar: f.calendar.clone(), url: f.url.clone(), ..Default::default() };
+    let base = Resolved {
+        recurrence,
+        alerts,
+        calendar: f.calendar.clone(),
+        url: f.url.clone(),
+        ..Default::default()
+    };
 
     let Some(sd) = start_d else {
         return base;
     };
-    let start = When { date: sd, time: start_t };
+    let start = When {
+        date: sd,
+        time: start_t,
+    };
 
     if kind == ItemKind::Task {
-        return Resolved { start: Some(start), ..base };
+        return Resolved {
+            start: Some(start),
+            ..base
+        };
     }
 
     match start_t {
         None => {
-            let end = range_end_d.filter(|e| *e >= sd).map(|e| When { date: e, time: None });
-            Resolved { start: Some(start), end, all_day: true, ..base }
+            let end = range_end_d.filter(|e| *e >= sd).map(|e| When {
+                date: e,
+                time: None,
+            });
+            Resolved {
+                start: Some(start),
+                end,
+                all_day: true,
+                ..base
+            }
         }
         Some(st) => {
             let start_dt = NaiveDateTime::new(sd, st);
@@ -143,7 +181,10 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
             };
             Resolved {
                 start: Some(start),
-                end: Some(When { date: end_dt.date(), time: Some(end_dt.time()) }),
+                end: Some(When {
+                    date: end_dt.date(),
+                    time: Some(end_dt.time()),
+                }),
                 all_day: false,
                 ..base
             }
@@ -189,7 +230,11 @@ fn resolve_range(a: TimeExpr, b: TimeExpr, evening: bool) -> (NaiveTime, NaiveTi
         let s = if same <= e {
             same
         } else {
-            let other = if b.meridiem == Some(Meridiem::Pm) { Meridiem::Am } else { Meridiem::Pm };
+            let other = if b.meridiem == Some(Meridiem::Pm) {
+                Meridiem::Am
+            } else {
+                Meridiem::Pm
+            };
             with_meridiem(a, other)
         };
         return (s, e);
@@ -199,7 +244,13 @@ fn resolve_range(a: TimeExpr, b: TimeExpr, evening: bool) -> (NaiveTime, NaiveTi
         // Pick the reading of the end that comes soonest after the start.
         let am = with_meridiem(b, Meridiem::Am);
         let pm = with_meridiem(b, Meridiem::Pm);
-        let e = if am > s { am } else if pm > s { pm } else { am };
+        let e = if am > s {
+            am
+        } else if pm > s {
+            pm
+        } else {
+            am
+        };
         return (s, e);
     }
     (s, resolve_time(b, evening))
@@ -242,8 +293,16 @@ pub(crate) fn resolve_date(e: DateExpr, today: NaiveDate, ctx: &Ctx) -> Option<N
         }
         DateExpr::InDays(n) => today.checked_add_days(Days::new(u64::from(n))),
         DateExpr::InWeeks(n) => today.checked_add_days(Days::new(7 * u64::from(n))),
-        DateExpr::MonthDay { month, day, year: Some(y) } => ymd(y, month, day),
-        DateExpr::MonthDay { month, day, year: None } => upcoming_md(month, day, today),
+        DateExpr::MonthDay {
+            month,
+            day,
+            year: Some(y),
+        } => ymd(y, month, day),
+        DateExpr::MonthDay {
+            month,
+            day,
+            year: None,
+        } => upcoming_md(month, day, today),
         DateExpr::Numeric { a, b, year } => {
             let (m, d) = numeric_md(a, b, ctx.opts.date_order);
             match year {
@@ -254,7 +313,8 @@ pub(crate) fn resolve_date(e: DateExpr, today: NaiveDate, ctx: &Ctx) -> Option<N
         DateExpr::Ordinal(day) => match ymd(today.year(), today.month(), day) {
             Some(d) if d >= today => Some(d),
             _ => {
-                let next = ymd(today.year(), today.month(), 1)?.checked_add_months(Months::new(1))?;
+                let next =
+                    ymd(today.year(), today.month(), 1)?.checked_add_months(Months::new(1))?;
                 ymd(next.year(), next.month(), day)
             }
         },
@@ -265,12 +325,19 @@ pub(crate) fn resolve_date(e: DateExpr, today: NaiveDate, ctx: &Ctx) -> Option<N
 /// First date on/after today matching a recurrence; `skip_today` when the
 /// event's time has already passed today.
 fn first_occurrence(r: &Recurrence, today: NaiveDate, skip_today: bool) -> Option<NaiveDate> {
-    let from = if skip_today { today + Days::new(1) } else { today };
+    let from = if skip_today {
+        today + Days::new(1)
+    } else {
+        today
+    };
     match r {
-        Recurrence::Weekly { days, .. } if !days.is_empty() => {
-            (0..7).map(|k| from + Days::new(k)).find(|d| days.contains(&d.weekday()))
-        }
-        Recurrence::Monthly { month_day: Some(md), .. } => (0..13).find_map(|k| {
+        Recurrence::Weekly { days, .. } if !days.is_empty() => (0..7)
+            .map(|k| from + Days::new(k))
+            .find(|d| days.contains(&d.weekday())),
+        Recurrence::Monthly {
+            month_day: Some(md),
+            ..
+        } => (0..13).find_map(|k| {
             let first = ymd(from.year(), from.month(), 1)?.checked_add_months(Months::new(k))?;
             ymd(first.year(), first.month(), *md).filter(|d| *d >= from)
         }),

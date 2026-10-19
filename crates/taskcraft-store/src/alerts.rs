@@ -8,13 +8,26 @@ use rusqlite::{params, Connection};
 impl Store {
     /// Replaces all alerts of an owner and computes their fire times from the
     /// owner's base start/due.
-    pub(crate) fn write_alerts(&self, conn: &Connection, kind: ItemKindDb, id: i64, alerts: &[AlertSpecUtc]) -> Result<()> {
-        conn.execute("DELETE FROM alerts WHERE owner_kind = ?1 AND owner_id = ?2", params![kind.as_str(), id])?;
+    pub(crate) fn write_alerts(
+        &self,
+        conn: &Connection,
+        kind: ItemKindDb,
+        id: i64,
+        alerts: &[AlertSpecUtc],
+    ) -> Result<()> {
+        conn.execute(
+            "DELETE FROM alerts WHERE owner_kind = ?1 AND owner_id = ?2",
+            params![kind.as_str(), id],
+        )?;
         let anchor = owner_anchor(conn, kind, id)?;
         for a in alerts {
             let (offset, absolute, fire_at) = match a {
                 AlertSpecUtc::Before(m) => match anchor {
-                    Some(t) => (Some(i64::from(*m)), None, t - Duration::minutes(i64::from(*m))),
+                    Some(t) => (
+                        Some(i64::from(*m)),
+                        None,
+                        t - Duration::minutes(i64::from(*m)),
+                    ),
                     None => continue,
                 },
                 AlertSpecUtc::At(t) => (None, Some(fmt_ts(*t)), *t),
@@ -46,7 +59,11 @@ impl Store {
 }
 
 /// Start of an event or due time of a task.
-pub(crate) fn owner_anchor(conn: &Connection, kind: ItemKindDb, id: i64) -> Result<Option<DateTime<Utc>>> {
+pub(crate) fn owner_anchor(
+    conn: &Connection,
+    kind: ItemKindDb,
+    id: i64,
+) -> Result<Option<DateTime<Utc>>> {
     let sql = match kind {
         ItemKindDb::Event => "SELECT start_utc FROM events WHERE id = ?1",
         ItemKindDb::Task => "SELECT due_utc FROM tasks WHERE id = ?1",
