@@ -4,6 +4,7 @@ mod commands;
 mod logging;
 mod scheduler;
 mod settings;
+mod smoke;
 mod state;
 mod tray;
 mod windows;
@@ -53,6 +54,21 @@ fn open_settings(app: tauri::AppHandle) -> Result<(), commands::CmdError> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--smoke") {
+        let text = args.get(i + 1).map(String::as_str).unwrap_or("");
+        match smoke::run(text, commands::local_now()) {
+            Ok(json) => {
+                println!("{json}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("smoke failed: {} ({})", e.message, e.code);
+                std::process::exit(1);
+            }
+        }
+    }
+
     let _log_guard = logging::init();
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "starting TaskCraft");
 
