@@ -27,3 +27,32 @@ fn plain_title_is_all_day_today() {
     assert!(r.all_day);
     assert_eq!(r.spans, vec![Span { start: 0, end: 6, label: Label::Title }]);
 }
+
+#[test]
+fn task_prefixes() {
+    for (input, prefix_end) in [
+        ("todo buy milk", 4),
+        ("To-do: buy milk", 6),
+        ("remind me to buy milk", 12),
+        ("✓ buy milk", "✓".len()),
+    ] {
+        let r = p(input);
+        assert_eq!(r.kind, ItemKind::Task, "{input}");
+        assert_eq!(r.title, "buy milk", "{input}");
+        assert_eq!(r.spans[0], Span { start: 0, end: prefix_end, label: Label::TaskPrefix }, "{input}");
+    }
+}
+
+#[test]
+fn prefix_only_at_start() {
+    let r = p("Buy milk todo");
+    assert_eq!(r.kind, ItemKind::Event);
+    assert_eq!(r.title, "Buy milk todo");
+}
+
+#[test]
+fn todoist_is_not_a_prefix() {
+    let r = p("todoist sync");
+    assert_eq!(r.kind, ItemKind::Event);
+    assert_eq!(r.title, "todoist sync");
+}
