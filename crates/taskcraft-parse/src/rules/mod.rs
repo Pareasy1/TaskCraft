@@ -1,6 +1,7 @@
 //! Tagging driver: ordered rules, longest match wins at each position.
 
 pub(crate) mod datetime;
+pub(crate) mod extras;
 pub(crate) mod prefix;
 
 use datetime::{DateExpr, TimeExpr};
@@ -24,6 +25,13 @@ pub(crate) enum Payload {
     Time(TimeExpr),
     TimeRange(TimeExpr, TimeExpr),
     Tonight,
+    Duration(u32),
+    Recurrence(Recurrence),
+    Until(DateExpr),
+    AlertBefore(u32),
+    AlertAt(TimeExpr),
+    Calendar(String),
+    Url(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,8 +78,14 @@ pub(crate) fn run_rules(toks: &[Token], rules: &[Rule], ctx: &Ctx, tags: &mut [T
     }
 }
 
-/// Date/time rules in priority order (ties go to the earlier rule).
-pub(crate) const DATETIME_RULES: &[Rule] = &[
+/// All tagging rules in priority order (ties go to the earlier rule).
+pub(crate) const RULES: &[Rule] = &[
+    extras::url_rule,
+    extras::calendar_rule,
+    extras::recurrence_rule,
+    extras::until_rule,
+    extras::alert_rule,
+    extras::duration_rule,
     datetime::date_range_rule,
     datetime::time_range_rule,
     datetime::tonight_rule,

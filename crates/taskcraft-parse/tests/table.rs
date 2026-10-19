@@ -152,3 +152,81 @@ fn time_spans() {
         ]
     );
 }
+
+fn rrule(input: &str) -> Option<String> {
+    p(input).recurrence.map(|r| r.to_rrule())
+}
+
+#[test]
+fn durations() {
+    check("Gym in 3 days for 2 hours at 7am", "Gym", (2026, 10, 23, Some((7, 0))), Some((2026, 10, 23, Some((9, 0)))), false);
+    check("Call tomorrow 4pm for 30 min", "Call", (2026, 10, 21, Some((16, 0))), Some((2026, 10, 21, Some((16, 30)))), false);
+    check("Nap at 2 for an hour", "Nap", (2026, 10, 20, Some((14, 0))), Some((2026, 10, 20, Some((15, 0)))), false);
+    check("Break at 3pm for half an hour", "Break", (2026, 10, 20, Some((15, 0))), Some((2026, 10, 20, Some((15, 30)))), false);
+    check("Hike saturday 8am for 1.5 hours", "Hike", (2026, 10, 24, Some((8, 0))), Some((2026, 10, 24, Some((9, 30)))), false);
+}
+
+#[test]
+fn recurrence_rules() {
+    let r = p("Standup every weekday at 9:30 /work");
+    assert_eq!(r.title, "Standup");
+    assert_eq!(r.calendar.as_deref(), Some("Work"));
+    assert_eq!(r.recurrence.as_ref().map(|x| x.to_rrule()).as_deref(), Some("FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR"));
+    assert_eq!(r.start, Some(w(2026, 10, 21, Some((9, 30)))));
+    assert_eq!(r.end, Some(w(2026, 10, 21, Some((10, 30)))));
+
+    let r = p("Pay rent monthly on the 1st");
+    assert_eq!(r.title, "Pay rent");
+    assert_eq!(rrule("Pay rent monthly on the 1st").as_deref(), Some("FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=1"));
+    assert_eq!(r.start, Some(w(2026, 11, 1, None)));
+    assert!(r.all_day);
+
+    let r = p("Team sync every 2 weeks on monday at 10 until dec 31");
+    assert_eq!(r.title, "Team sync");
+    assert_eq!(r.recurrence.as_ref().map(|x| x.to_rrule()).as_deref(), Some("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;UNTIL=20261231"));
+    assert_eq!(r.start, Some(w(2026, 10, 26, Some((10, 0)))));
+
+    let r = p("Water plants every day");
+    assert_eq!(r.title, "Water plants");
+    assert_eq!(rrule("Water plants every day").as_deref(), Some("FREQ=DAILY;INTERVAL=1"));
+    assert_eq!(r.start, Some(w(2026, 10, 20, None)));
+
+    assert_eq!(rrule("Piano every tuesday and thursday 5pm").as_deref(), Some("FREQ=WEEKLY;INTERVAL=1;BYDAY=TU,TH"));
+    assert_eq!(p("Piano every tuesday and thursday 5pm").start, Some(w(2026, 10, 20, Some((17, 0)))));
+    assert_eq!(rrule("Report weekly").as_deref(), Some("FREQ=WEEKLY;INTERVAL=1"));
+    assert_eq!(rrule("Backup every 3 days").as_deref(), Some("FREQ=DAILY;INTERVAL=3"));
+    assert_eq!(rrule("Birthday yearly on oct 30").as_deref(), Some("FREQ=YEARLY;INTERVAL=1"));
+    assert_eq!(p("Birthday yearly on oct 30").start, Some(w(2026, 10, 30, None)));
+    assert_eq!(rrule("Brunch every weekend").as_deref(), Some("FREQ=WEEKLY;INTERVAL=1;BYDAY=SA,SU"));
+    assert_eq!(rrule("Swim mondays at 7am").as_deref(), Some("FREQ=WEEKLY;INTERVAL=1;BYDAY=MO"));
+    assert_eq!(rrule("Bills every month on the 31st").as_deref(), Some("FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=31"));
+    assert_eq!(p("Bills every month on the 31st").start, Some(w(2026, 10, 31, None)));
+}
+
+#[test]
+fn alerts() {
+    let r = p("Party friday 9pm alert 1 hour before");
+    assert_eq!(r.title, "Party");
+    assert_eq!(r.alerts, vec![AlertSpec::Before(60)]);
+    let r = p("Dentist tomorrow 3pm remind me 30 min before");
+    assert_eq!(r.kind, ItemKind::Event);
+    assert_eq!(r.title, "Dentist");
+    assert_eq!(r.alerts, vec![AlertSpec::Before(30)]);
+    let r = p("Flight friday 6am alert 2 hours before alert 1 day before");
+    assert_eq!(r.alerts, vec![AlertSpec::Before(120), AlertSpec::Before(1440)]);
+    let r = p("Meeting friday 3pm alert at 2pm");
+    assert_eq!(r.alerts, vec![AlertSpec::At(w(2026, 10, 23, Some((14, 0))))]);
+}
+
+#[test]
+fn url_and_calendar() {
+    let r = p("Standup tomorrow 9am https://meet.example.com/abc");
+    assert_eq!(r.url.as_deref(), Some("https://meet.example.com/abc"));
+    assert_eq!(r.title, "Standup");
+    let r = p("/nonexistent lunch");
+    assert_eq!(r.calendar, None);
+    assert_eq!(r.title, "/nonexistent lunch");
+    let r = p("lunch /PERSONAL");
+    assert_eq!(r.calendar.as_deref(), Some("Personal"));
+    assert_eq!(r.title, "lunch");
+}

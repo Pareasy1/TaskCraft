@@ -29,7 +29,7 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
     let toks = token::tokenize(&input[offset..], offset);
     let mut tags: Vec<Tagged> = toks.iter().map(|_| Tagged { label: None, payload: Payload::None }).collect();
     let ctx = Ctx { now, opts };
-    rules::run_rules(&toks, rules::DATETIME_RULES, &ctx, &mut tags);
+    rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
 
     let title = assemble_title(&toks, &mut tags);
     spans.extend(collect_spans(&toks, &tags));
@@ -43,10 +43,10 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
         all_day: r.all_day,
         location: None,
         attendees: vec![],
-        calendar: None,
-        recurrence: None,
-        alerts: vec![],
-        url: None,
+        calendar: r.calendar,
+        recurrence: r.recurrence,
+        alerts: r.alerts,
+        url: r.url,
         spans,
     }
 }

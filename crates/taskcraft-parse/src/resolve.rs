@@ -12,6 +12,10 @@ pub(crate) struct Resolved {
     pub start: Option<When>,
     pub end: Option<When>,
     pub all_day: bool,
+    pub recurrence: Option<RecurrenceSpec>,
+    pub alerts: Vec<AlertSpec>,
+    pub calendar: Option<String>,
+    pub url: Option<String>,
 }
 
 /// Facts collected from tagged tokens; only the first of each kind is used.
@@ -22,6 +26,12 @@ struct Facts {
     time: Option<TimeExpr>,
     time_range: Option<(TimeExpr, TimeExpr)>,
     tonight: bool,
+    duration: Option<u32>,
+    recurrence: Option<Recurrence>,
+    until: Option<DateExpr>,
+    alerts: Vec<Payload>,
+    calendar: Option<String>,
+    url: Option<String>,
 }
 
 pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -> Resolved {
@@ -33,6 +43,12 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
             Payload::Time(te) if f.time.is_none() => f.time = Some(*te),
             Payload::TimeRange(a, b) if f.time_range.is_none() => f.time_range = Some((*a, *b)),
             Payload::Tonight => f.tonight = true,
+            Payload::Duration(m) if f.duration.is_none() => f.duration = Some(*m),
+            Payload::Recurrence(r) if f.recurrence.is_none() => f.recurrence = Some(r.clone()),
+            Payload::Until(d) if f.until.is_none() => f.until = Some(*d),
+            Payload::AlertBefore(_) | Payload::AlertAt(_) => f.alerts.push(t.payload.clone()),
+            Payload::Calendar(c) if f.calendar.is_none() => f.calendar = Some(c.clone()),
+            Payload::Url(u) if f.url.is_none() => f.url = Some(u.clone()),
             _ => {}
         }
     }
@@ -63,6 +79,11 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
     let range_end_d = f.date_range.and_then(|(_, b)| resolve_date(b, start_d.unwrap_or(today), ctx));
 
     if start_d.is_none() {
+        if let Some(r) = &f.recurrence {
+            start_d = first_occurrence(r, today, start_t.filter(|t| *t < now_time).is_some());
+        }
+    }
+    if start_d.is_none() {
         if let Some(t) = start_t {
             start_d = Some(if t < now_time { today + Days::new(1) } else { today });
         } else if kind == ItemKind::Event {
@@ -74,19 +95,35 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
         }
     }
 
+    let recurrence = f.recurrence.clone().map(|rule| RecurrenceSpec {
+        rule,
+        until: f.until.and_then(|u| resolve_date(u, today, ctx)),
+    });
+    let alert_day = start_d.unwrap_or(today);
+    let alerts = f
+        .alerts
+        .iter()
+        .filter_map(|a| match a {
+            Payload::AlertBefore(m) => Some(AlertSpec::Before(*m)),
+            Payload::AlertAt(t) => Some(AlertSpec::At(When { date: alert_day, time: Some(resolve_time(*t, false)) })),
+            _ => None,
+        })
+        .collect();
+    let base = Resolved { recurrence, alerts, calendar: f.calendar.clone(), url: f.url.clone(), ..Default::default() };
+
     let Some(sd) = start_d else {
-        return Resolved::default();
+        return base;
     };
     let start = When { date: sd, time: start_t };
 
     if kind == ItemKind::Task {
-        return Resolved { start: Some(start), end: None, all_day: false };
+        return Resolved { start: Some(start), ..base };
     }
 
     match start_t {
         None => {
             let end = range_end_d.filter(|e| *e >= sd).map(|e| When { date: e, time: None });
-            Resolved { start: Some(start), end, all_day: true }
+            Resolved { start: Some(start), end, all_day: true, ..base }
         }
         Some(st) => {
             let start_dt = NaiveDateTime::new(sd, st);
@@ -99,12 +136,16 @@ pub(crate) fn resolve(tags: &[Tagged], title: &str, kind: ItemKind, ctx: &Ctx) -
                     }
                     e
                 }
-                None => start_dt + chrono::Duration::minutes(i64::from(ctx.opts.default_event_minutes)),
+                None => {
+                    let mins = f.duration.unwrap_or(ctx.opts.default_event_minutes);
+                    start_dt + chrono::Duration::minutes(i64::from(mins))
+                }
             };
             Resolved {
                 start: Some(start),
                 end: Some(When { date: end_dt.date(), time: Some(end_dt.time()) }),
                 all_day: false,
+                ..base
             }
         }
     }
@@ -218,5 +259,21 @@ pub(crate) fn resolve_date(e: DateExpr, today: NaiveDate, ctx: &Ctx) -> Option<N
             }
         },
         DateExpr::Iso { year, month, day } => ymd(year, month, day),
+    }
+}
+
+/// First date on/after today matching a recurrence; `skip_today` when the
+/// event's time has already passed today.
+fn first_occurrence(r: &Recurrence, today: NaiveDate, skip_today: bool) -> Option<NaiveDate> {
+    let from = if skip_today { today + Days::new(1) } else { today };
+    match r {
+        Recurrence::Weekly { days, .. } if !days.is_empty() => {
+            (0..7).map(|k| from + Days::new(k)).find(|d| days.contains(&d.weekday()))
+        }
+        Recurrence::Monthly { month_day: Some(md), .. } => (0..13).find_map(|k| {
+            let first = ymd(from.year(), from.month(), 1)?.checked_add_months(Months::new(k))?;
+            ymd(first.year(), first.month(), *md).filter(|d| *d >= from)
+        }),
+        _ => Some(from),
     }
 }
