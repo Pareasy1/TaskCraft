@@ -230,3 +230,111 @@ fn url_and_calendar() {
     assert_eq!(r.calendar.as_deref(), Some("Personal"));
     assert_eq!(r.title, "lunch");
 }
+
+#[test]
+fn people_and_places() {
+    let r = p("Lunch with Sam tomorrow at 1");
+    assert_eq!(r.title, "Lunch");
+    assert_eq!(r.attendees, vec!["Sam"]);
+    assert_eq!(r.start, Some(w(2026, 10, 21, Some((13, 0)))));
+
+    let r = p("Dinner with Anna, Marco and Luca friday 8pm at Trattoria da Enzo");
+    assert_eq!(r.title, "Dinner");
+    assert_eq!(r.attendees, vec!["Anna", "Marco", "Luca"]);
+    assert_eq!(r.location.as_deref(), Some("Trattoria da Enzo"));
+    assert_eq!(r.start, Some(w(2026, 10, 23, Some((20, 0)))));
+
+    let r = p("Meet at the station");
+    assert_eq!(r.title, "Meet");
+    assert_eq!(r.location.as_deref(), Some("the station"));
+    assert_eq!(r.start, Some(w(2026, 10, 20, None)));
+    assert!(r.all_day);
+
+    let r = p("Dentist Friday 3pm at Via Roma 12");
+    assert_eq!(r.title, "Dentist");
+    assert_eq!(r.location.as_deref(), Some("Via Roma 12"));
+
+    let r = p("Call in 2 days");
+    assert_eq!(r.location, None);
+    assert_eq!(r.title, "Call");
+    assert_eq!(r.start, Some(w(2026, 10, 22, None)));
+
+    let r = p("Coffee @ Blue Bottle 9am tomorrow");
+    assert_eq!(r.title, "Coffee");
+    assert_eq!(r.location.as_deref(), Some("Blue Bottle"));
+    assert_eq!(r.start, Some(w(2026, 10, 21, Some((9, 0)))));
+
+    let r = p("Workshop in Milan next friday");
+    assert_eq!(r.location.as_deref(), Some("Milan"));
+    assert_eq!(r.title, "Workshop");
+
+    let r = p("Call with Bob & Alice");
+    assert_eq!(r.attendees, vec!["Bob", "Alice"]);
+    assert_eq!(r.title, "Call");
+}
+
+#[test]
+fn tasks_end_to_end() {
+    let r = p("todo buy milk friday");
+    assert_eq!(r.kind, ItemKind::Task);
+    assert_eq!(r.title, "buy milk");
+    assert_eq!(r.start, Some(w(2026, 10, 23, None)));
+    assert_eq!(r.end, None);
+
+    let r = p("remind me to call mom at 6pm");
+    assert_eq!(r.kind, ItemKind::Task);
+    assert_eq!(r.title, "call mom");
+    assert_eq!(r.start, Some(w(2026, 10, 20, Some((18, 0)))));
+    assert_eq!(r.end, None);
+
+    let r = p("task: file taxes");
+    assert_eq!(r.kind, ItemKind::Task);
+    assert_eq!(r.title, "file taxes");
+    assert_eq!(r.start, None);
+}
+
+#[test]
+fn unicode_location_and_spans() {
+    let input = "Caffè con Zoë 🍰 domani at Caffè Sant'Eustachio";
+    let r = p(input);
+    assert_eq!(r.location.as_deref(), Some("Caffè Sant'Eustachio"));
+    assert_eq!(r.title, "Caffè con Zoë 🍰 domani");
+    for s in &r.spans {
+        assert!(input.is_char_boundary(s.start) && input.is_char_boundary(s.end));
+    }
+}
+
+#[test]
+fn empty_and_whitespace() {
+    for input in ["", "   "] {
+        let r = p(input);
+        assert_eq!(r.title, "");
+        assert!(r.spans.is_empty());
+    }
+}
+
+/// Every base case must parse the same when lowercased, uppercased or with
+/// trailing punctuation.
+#[test]
+fn casing_and_punctuation_variants() {
+    let base = [
+        "Meeting tomorrow at 3pm", "Dinner at 7", "Lunch at noon", "Review friday 14:30",
+        "Party next friday 9pm", "Yoga 6-7pm", "Night shift 10pm to 6am", "Movie tonight",
+        "Trip Oct 24 to Oct 26", "Call in 2 weeks", "Pay bills the 25th", "Sync next week",
+        "Gym in 3 days for 2 hours at 7am", "Standup every weekday at 9:30",
+        "Lunch with Sam tomorrow at 1", "Meet at the station", "Dentist Friday 3pm at Via Roma 12",
+        "Exam 3 March", "Walk in 3 days", "Session 3pm to 5pm", "Brunch sunday at 11am",
+        "Concert at 9", "Report due december 3", "Holiday Dec 24 - Dec 26", "Plan next month",
+        "Water plants every day", "Swim mondays at 7am", "Party friday 9pm alert 1 hour before",
+        "Call friday 10a", "Lunch tomorrow at 12:30pm",
+    ];
+    for b in base {
+        let want = p(b);
+        for v in [b.to_lowercase(), format!("{b}."), format!("  {b}  ")] {
+            let got = p(&v);
+            assert_eq!((got.start, got.end, got.all_day), (want.start, want.end, want.all_day), "variant {v:?}");
+            assert_eq!(got.title.to_lowercase(), want.title.to_lowercase(), "variant {v:?}");
+            assert_eq!(got.recurrence, want.recurrence, "variant {v:?}");
+        }
+    }
+}

@@ -30,6 +30,8 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
     let mut tags: Vec<Tagged> = toks.iter().map(|_| Tagged { label: None, payload: Payload::None }).collect();
     let ctx = Ctx { now, opts };
     rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
+    let attendees = rules::fields::attendees(&toks, &mut tags);
+    let location = rules::fields::location(&toks, &mut tags);
 
     let title = assemble_title(&toks, &mut tags);
     spans.extend(collect_spans(&toks, &tags));
@@ -41,8 +43,8 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
         start: r.start,
         end: r.end,
         all_day: r.all_day,
-        location: None,
-        attendees: vec![],
+        location,
+        attendees,
         calendar: r.calendar,
         recurrence: r.recurrence,
         alerts: r.alerts,
@@ -51,13 +53,21 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
     }
 }
 
+/// Words dropped from the end of a title ("Lunch at", "Call with").
+const DANGLING: &[&str] = &["at", "@", "on", "with", "in", "from", "to", "for", "and", "&", "-"];
+
+fn trailing_junk(t: &Token) -> bool {
+    matches!(t.text.as_str(), "," | "." | ";" | ":") || DANGLING.contains(&t.lower.as_str())
+}
+
 /// Untagged tokens become the title; they are labeled `Title` in place.
+/// Trailing punctuation and dangling connector words are left unlabeled.
 fn assemble_title(toks: &[Token], tags: &mut [Tagged]) -> String {
+    let untagged: Vec<usize> = (0..toks.len()).filter(|&i| tags[i].label.is_none()).collect();
+    let keep = untagged.iter().rposition(|&i| !trailing_junk(&toks[i])).map_or(0, |p| p + 1);
     let mut title = String::new();
-    for (t, tag) in toks.iter().zip(tags.iter_mut()) {
-        if tag.label.is_some() {
-            continue;
-        }
+    for &i in &untagged[..keep] {
+        let (t, tag) = (&toks[i], &mut tags[i]);
         tag.label = Some(Label::Title);
         let attach = t.kind == TokKind::Punct && matches!(t.text.as_str(), "," | "." | "!" | "?" | ";" | ":" | ")");
         if !title.is_empty() && !attach {

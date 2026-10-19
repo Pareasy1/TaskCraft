@@ -2,6 +2,7 @@
 
 pub(crate) mod datetime;
 pub(crate) mod extras;
+pub(crate) mod fields;
 pub(crate) mod prefix;
 
 use datetime::{DateExpr, TimeExpr};
