@@ -2,6 +2,7 @@
 
 mod commands;
 mod logging;
+mod scheduler;
 mod settings;
 mod state;
 mod tray;
@@ -75,6 +76,7 @@ fn main() {
         ))
         .manage(state)
         .manage(PendingFocus::default())
+        .manage(scheduler::LastFired::default())
         .invoke_handler(tauri::generate_handler![
             commands::parse_preview,
             commands::create_from_text,
@@ -111,6 +113,14 @@ fn main() {
             if let Err(e) = tray::register_hotkey(handle, &hotkey, None) {
                 tracing::warn!(%hotkey, error = %e, "could not register hotkey");
             }
+            {
+                use tauri_plugin_notification::{NotificationExt, PermissionState};
+                let n = handle.notification();
+                if !matches!(n.permission_state(), Ok(PermissionState::Granted)) {
+                    let _ = n.request_permission();
+                }
+            }
+            scheduler::spawn(handle);
             // Launched at login → stay in the menu bar only.
             if !std::env::args().any(|a| a == "--minimized") {
                 windows::show_main(handle)?;
@@ -132,8 +142,14 @@ fn main() {
             std::process::exit(1);
         })
         .run(|app, event| {
+            // Dock click, or a click on one of our notifications.
             if let RunEvent::Reopen { .. } = event {
-                let _ = windows::show_main(app);
+                match scheduler::recent(app) {
+                    Some(item) => reveal_item(app, item),
+                    None => {
+                        let _ = windows::show_main(app);
+                    }
+                }
             }
         });
 }
