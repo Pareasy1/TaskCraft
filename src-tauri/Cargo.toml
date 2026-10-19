@@ -1,0 +1,36 @@
+[package]
+name = "taskcraft-app"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "taskcraft"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+taskcraft-parse = { path = "../crates/taskcraft-parse" }
+taskcraft-store = { path = "../crates/taskcraft-store" }
+chrono.workspace = true
+chrono-tz.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["tray-icon", "macos-private-api", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+iana-time-zone = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+dirs = "6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSOperation"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace"] }
+block2 = "0.6"
