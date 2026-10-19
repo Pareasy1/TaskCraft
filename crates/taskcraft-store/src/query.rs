@@ -76,12 +76,26 @@ impl Store {
         for row in rows {
             let (id, e, color) = row?;
             let dur = e.end - e.start;
+            let tz = tz_of(&e.tz);
+            // All-day items span whole local days, whatever DST does to their length.
+            let local_days = (e.end.with_timezone(&tz).date_naive()
+                - e.start.with_timezone(&tz).date_naive())
+            .num_days()
+            .max(1);
+            let end_of = |s: DateTime<Utc>| {
+                if e.all_day {
+                    let d = s.with_timezone(&tz).date_naive() + chrono::Duration::days(local_days);
+                    crate::local_to_utc(d.and_hms_opt(0, 0, 0).unwrap_or_default(), tz)
+                } else {
+                    s + dur
+                }
+            };
             let make = |s: DateTime<Utc>, recurring: bool| Occurrence {
                 event_id: id,
                 calendar_id: e.calendar_id,
                 title: e.title.clone(),
                 start: s,
-                end: s + dur,
+                end: end_of(s),
                 all_day: e.all_day,
                 location: e.location.clone(),
                 recurring,
@@ -90,7 +104,7 @@ impl Store {
             match &e.rrule {
                 None => out.push(make(e.start, false)),
                 Some(rule) => {
-                    for s in recur::expand(rule, e.start, tz_of(&e.tz), dur, start, end)? {
+                    for s in recur::expand(rule, e.start, tz, dur, start, end)? {
                         out.push(make(s, true));
                     }
                 }
@@ -166,10 +180,18 @@ impl Store {
                     self.insert_event(&copy)
                 })
             }
-            (Some(_), Scope::All) => {
-                let delta = new_start - occurrence.unwrap_or(e.start);
-                e.start += delta;
+            (Some(rule), Scope::All) => {
+                // Shift the series (and its exceptions) by the occurrence's
+                // wall-clock delta so exceptions keep matching.
+                let tz = tz_of(&e.tz);
+                let local = |t: DateTime<Utc>| t.with_timezone(&tz).naive_local();
+                let delta = local(new_start) - local(occurrence.unwrap_or(e.start));
+                let shift = |t: DateTime<Utc>| crate::local_to_utc(local(t) + delta, tz);
+                let mut r = recur::split(rule);
+                r.exdates = r.exdates.into_iter().map(shift).collect();
+                e.start = shift(e.start);
                 e.end = e.start + (new_end - new_start);
+                e.rrule = Some(recur::join(&r));
                 self.update_event(id, &e)?;
                 Ok(id)
             }
@@ -189,7 +211,9 @@ impl Store {
         scope: Scope,
     ) -> Result<()> {
         let e = self.get_event(id)?.input;
-        if let (Some(rule), Scope::This, Some(occ)) = (&e.rrule, scope, occurrence) {
+        if let (Some(rule), Scope::This) = (&e.rrule, scope) {
+            let occ =
+                occurrence.ok_or_else(|| StoreError::Invalid("occurrence required".into()))?;
             return self.add_exdate(id, rule, occ);
         }
         self.in_tx(|tx| {
@@ -205,10 +229,13 @@ impl Store {
     fn add_exdate(&self, id: i64, rule_col: &str, occ: DateTime<Utc>) -> Result<()> {
         let mut r: RuleText = recur::split(rule_col);
         r.exdates.push(occ);
+        let alerts = self.read_alerts(ItemKindDb::Event, id)?;
         self.conn.execute(
             "UPDATE events SET rrule = ?1, updated_at = ?2 WHERE id = ?3",
             params![recur::join(&r), fmt_ts(Utc::now()), id],
         )?;
+        // Re-arm alerts so none points at the excluded occurrence.
+        self.in_tx(|tx| self.write_alerts(tx, ItemKindDb::Event, id, &alerts))?;
         Ok(())
     }
 

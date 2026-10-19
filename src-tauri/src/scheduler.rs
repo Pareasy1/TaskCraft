@@ -6,8 +6,8 @@ use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Mutex;
-use tauri::{AppHandle, Listener, Manager};
 use taskcraft_store::{DueAlert, ItemKindDb, Store, StoreError};
+use tauri::{AppHandle, Listener, Manager};
 
 const TICK: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -24,7 +24,11 @@ fn body(store: &Store, a: &DueAlert, tz: Tz) -> String {
     let mut s = match a.owner {
         ItemKindDb::Event => match store.get_event(a.owner_id) {
             Ok(e) if e.input.all_day => "All day".to_string(),
-            Ok(e) => format!("{} – {}", t(a.when), t(a.when + (e.input.end - e.input.start))),
+            Ok(e) => format!(
+                "{} – {}",
+                t(a.when),
+                t(a.when + (e.input.end - e.input.start))
+            ),
             Err(_) => t(a.when),
         },
         ItemKindDb::Task => format!("Due {}", t(a.when)),
@@ -37,7 +41,12 @@ fn body(store: &Store, a: &DueAlert, tz: Tz) -> String {
 }
 
 /// Notifies every due alert once and marks it fired.
-pub fn tick(store: &Store, n: &dyn Notifier, now: DateTime<Utc>, tz: Tz) -> Result<Vec<DueAlert>, StoreError> {
+pub fn tick(
+    store: &Store,
+    n: &dyn Notifier,
+    now: DateTime<Utc>,
+    tz: Tz,
+) -> Result<Vec<DueAlert>, StoreError> {
     let due = store.due_alerts(now)?;
     for a in &due {
         n.notify(&a.title, &body(store, a, tz));
@@ -51,7 +60,14 @@ struct AppNotifier<'a>(&'a AppHandle);
 impl Notifier for AppNotifier<'_> {
     fn notify(&self, title: &str, body: &str) {
         use tauri_plugin_notification::NotificationExt;
-        if let Err(e) = self.0.notification().builder().title(title).body(body).show() {
+        if let Err(e) = self
+            .0
+            .notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show()
+        {
             tracing::warn!(error = %e, "notification failed");
         }
     }
@@ -84,12 +100,17 @@ pub fn spawn(app: &AppHandle) {
 
 fn run_once(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let Ok(store) = state.store.lock() else { return };
+    let Ok(store) = state.store.lock() else {
+        return;
+    };
     match tick(&store, &AppNotifier(app), Utc::now(), local_tz()) {
         Ok(fired) => {
             if let Some(last) = fired.last() {
                 tracing::info!(count = fired.len(), "alerts fired");
-                let r = ItemRef { kind: last.owner, id: last.owner_id };
+                let r = ItemRef {
+                    kind: last.owner,
+                    id: last.owner_id,
+                };
                 if let Ok(mut slot) = app.state::<LastFired>().0.lock() {
                     *slot = Some((r, Utc::now()));
                 }
@@ -129,7 +150,12 @@ fn observe_wake(tx: Sender<()>) {
     });
     unsafe {
         let center = NSWorkspace::sharedWorkspace().notificationCenter();
-        let token = center.addObserverForName_object_queue_usingBlock(Some(NSWorkspaceDidWakeNotification), None, None, &block);
+        let token = center.addObserverForName_object_queue_usingBlock(
+            Some(NSWorkspaceDidWakeNotification),
+            None,
+            None,
+            &block,
+        );
         // Observe for the app's whole lifetime.
         std::mem::forget(token);
     }

@@ -39,21 +39,31 @@ pub fn date_order_for_locale(locale: &str) -> DateOrder {
 }
 
 fn detect_date_order() -> DateOrder {
-    let out = std::process::Command::new("defaults").args(["read", "-g", "AppleLocale"]).output();
+    let out = std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleLocale"])
+        .output();
     match out {
-        Ok(o) if o.status.success() => date_order_for_locale(String::from_utf8_lossy(&o.stdout).trim()),
+        Ok(o) if o.status.success() => {
+            date_order_for_locale(String::from_utf8_lossy(&o.stdout).trim())
+        }
         _ => DateOrder::DayMonth,
     }
 }
 
 impl Settings {
     pub fn load(path: &Path) -> Settings {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?)?;
+        std::fs::write(
+            &tmp,
+            serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?,
+        )?;
         std::fs::rename(tmp, path)
     }
 }
@@ -66,6 +76,9 @@ mod tests {
     fn locale_date_order() {
         assert_eq!(date_order_for_locale("it_IT"), DateOrder::DayMonth);
         assert_eq!(date_order_for_locale("en_US"), DateOrder::MonthDay);
-        assert_eq!(date_order_for_locale("en_GB@calendar=gregorian"), DateOrder::DayMonth);
+        assert_eq!(
+            date_order_for_locale("en_GB@calendar=gregorian"),
+            DateOrder::DayMonth
+        );
     }
 }

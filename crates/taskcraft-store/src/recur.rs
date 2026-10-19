@@ -42,7 +42,7 @@ fn parse_basic_utc(s: &str) -> Option<DateTime<Utc>> {
 
 /// `UNTIL=YYYYMMDD` (a local date from the parser) → end of that local day in UTC,
 /// which RFC 5545 requires when DTSTART has a TZID.
-fn normalize_until(rule: &str, tz: Tz) -> String {
+pub(crate) fn normalize_until(rule: &str, tz: Tz) -> String {
     rule.split(';')
         .map(|part| match part.strip_prefix("UNTIL=") {
             Some(v) if v.len() == 8 => match chrono::NaiveDate::parse_from_str(v, "%Y%m%d") {

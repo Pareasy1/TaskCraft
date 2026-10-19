@@ -1,54 +1,53 @@
 <script lang="ts">
   import type { Occurrence, Task } from '../lib/types';
   import { fmtDayHeading, fmtTime, ymd } from '../lib/format';
-  import { addDays, startOfDay } from '../lib/layout';
+  import { dayGroups } from '../lib/layout';
 
   let {
     occurrences,
-    tasks,
+    pinned,
+    dated,
     from,
     days,
     oncomplete,
     onopen,
   }: {
     occurrences: Occurrence[];
-    tasks: Task[];
+    /** Overdue and today's tasks, shown on top. */
+    pinned: Task[];
+    /** Upcoming tasks, shown under their due day. */
+    dated: Task[];
     from: Date;
     days: number;
     oncomplete: (t: Task) => void;
     onopen: (kind: 'event' | 'task', id: number) => void;
   } = $props();
 
-  let groups = $derived.by(() => {
-    const out: { day: Date; items: Occurrence[] }[] = [];
-    for (let i = 0; i < days; i++) {
-      const day = addDays(startOfDay(from), i);
-      const next = addDays(day, 1);
-      const items = occurrences.filter((o) => new Date(o.start) < next && new Date(o.end) > day);
-      if (items.length) out.push({ day, items });
-    }
-    return out;
-  });
-
+  let groups = $derived(dayGroups(occurrences, dated, from, days));
   const overdue = (t: Task) => !!t.due && (t.dueHasTime ? new Date(t.due) < new Date() : ymd(new Date(t.due)) < ymd(new Date()));
 </script>
 
+{#snippet taskRow(t: Task, meta: string, late: boolean)}
+  <div class="item task" role="button" tabindex="-1" ondblclick={() => onopen('task', t.id)}>
+    <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" onchange={() => oncomplete(t)} />
+    <span class="name">{t.title}</span>
+    <span class="meta" class:late>{meta}</span>
+  </div>
+{/snippet}
+
 <div class="list">
-  {#if tasks.length}
+  {#if pinned.length}
     <div class="heading">Tasks</div>
-    {#each tasks as t (t.id)}
-      <div class="item task" role="button" tabindex="-1" ondblclick={() => onopen('task', t.id)}>
-        <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" onchange={() => oncomplete(t)} />
-        <span class="name">{t.title}</span>
-        {#if t.due}
-          <span class="meta" class:late={overdue(t)}>{overdue(t) ? 'Overdue' : t.dueHasTime ? fmtTime(new Date(t.due)) : 'Today'}</span>
-        {/if}
-      </div>
+    {#each pinned as t (t.id)}
+      {@render taskRow(t, overdue(t) ? 'Overdue' : t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', overdue(t))}
     {/each}
   {/if}
   {#each groups as g (g.day.getTime())}
     <div class="heading">{fmtDayHeading(g.day)}</div>
-    {#each g.items as o (o.eventId + o.start)}
+    {#each g.tasks as t (t.id)}
+      {@render taskRow(t, t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', false)}
+    {/each}
+    {#each g.events as o (o.eventId + o.start)}
       <div class="item" role="button" tabindex="-1" ondblclick={() => onopen('event', o.eventId)}>
         <span class="dot" style="background:{o.color}"></span>
         <span class="name">{o.title}</span>
@@ -56,7 +55,7 @@
       </div>
     {/each}
   {:else}
-    {#if !tasks.length}<div class="empty">Nothing scheduled</div>{/if}
+    {#if !pinned.length}<div class="empty">Nothing scheduled</div>{/if}
   {/each}
 </div>
 

@@ -18,6 +18,10 @@ fn utc_stamp(t: DateTime<Utc>) -> String {
     t.format("%Y%m%dT%H%M%SZ").to_string()
 }
 
+fn local_stamp(t: DateTime<Utc>, tz: Tz) -> String {
+    t.with_timezone(&tz).format("%Y%m%dT%H%M%S").to_string()
+}
+
 fn local_date(t: DateTime<Utc>, tz: Tz) -> String {
     t.with_timezone(&tz).format("%Y%m%d").to_string()
 }
@@ -59,12 +63,22 @@ impl Store {
             lines.push("BEGIN:VEVENT".into());
             lines.push(format!("UID:event-{id}@taskcraft"));
             lines.push(format!("DTSTAMP:{stamp}"));
+            // Local wall-clock times with TZID, so recurrences keep their
+            // time of day across DST in the importing app.
             if e.all_day {
                 lines.push(format!("DTSTART;VALUE=DATE:{}", local_date(e.start, tz)));
                 lines.push(format!("DTEND;VALUE=DATE:{}", local_date(e.end, tz)));
             } else {
-                lines.push(format!("DTSTART:{}", utc_stamp(e.start)));
-                lines.push(format!("DTEND:{}", utc_stamp(e.end)));
+                lines.push(format!(
+                    "DTSTART;TZID={}:{}",
+                    tz.name(),
+                    local_stamp(e.start, tz)
+                ));
+                lines.push(format!(
+                    "DTEND;TZID={}:{}",
+                    tz.name(),
+                    local_stamp(e.end, tz)
+                ));
             }
             lines.push(format!("SUMMARY:{}", esc(&e.title)));
             if let Some(l) = &e.location {
@@ -78,10 +92,17 @@ impl Store {
             }
             if let Some(r) = &e.rrule {
                 let r = recur::split(r);
-                lines.push(format!("RRULE:{}", r.rule));
+                lines.push(format!("RRULE:{}", recur::normalize_until(&r.rule, tz)));
                 if !r.exdates.is_empty() {
-                    let ex: Vec<String> = r.exdates.iter().map(|d| utc_stamp(*d)).collect();
-                    lines.push(format!("EXDATE:{}", ex.join(",")));
+                    if e.all_day {
+                        let ex: Vec<String> =
+                            r.exdates.iter().map(|d| local_date(*d, tz)).collect();
+                        lines.push(format!("EXDATE;VALUE=DATE:{}", ex.join(",")));
+                    } else {
+                        let ex: Vec<String> =
+                            r.exdates.iter().map(|d| local_stamp(*d, tz)).collect();
+                        lines.push(format!("EXDATE;TZID={}:{}", tz.name(), ex.join(",")));
+                    }
                 }
             }
             for a in &e.alerts {
@@ -122,7 +143,11 @@ impl Store {
                 lines.push(format!("DESCRIPTION:{}", esc(n)));
             }
             if let Some(r) = &t.rrule {
-                lines.push(format!("RRULE:{}", recur::split(r).rule));
+                let tz: Tz = t.tz.parse().unwrap_or(Tz::UTC);
+                lines.push(format!(
+                    "RRULE:{}",
+                    recur::normalize_until(&recur::split(r).rule, tz)
+                ));
             }
             match t.completed_at {
                 Some(c) => {

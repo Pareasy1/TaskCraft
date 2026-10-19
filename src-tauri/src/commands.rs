@@ -6,9 +6,9 @@ use crate::state::AppState;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
 use taskcraft_parse::{parse, ParseOptions, ParsedItem};
 use taskcraft_store::*;
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CmdError {
@@ -18,7 +18,10 @@ pub struct CmdError {
 
 impl CmdError {
     pub fn new(code: &str, message: impl Into<String>) -> Self {
-        CmdError { code: code.into(), message: message.into() }
+        CmdError {
+            code: code.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -50,7 +53,10 @@ pub struct ItemRef {
 
 /// The Mac's current time zone (falls back to UTC).
 pub fn local_tz() -> Tz {
-    iana_time_zone::get_timezone().ok().and_then(|n| n.parse().ok()).unwrap_or(Tz::UTC)
+    iana_time_zone::get_timezone()
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(Tz::UTC)
 }
 
 pub fn local_now() -> DateTime<Tz> {
@@ -59,8 +65,19 @@ pub fn local_now() -> DateTime<Tz> {
 
 fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
     let settings = st.settings.read().map_err(poisoned)?.clone();
-    let calendars = st.store.lock().map_err(poisoned)?.calendars()?.into_iter().map(|c| c.name).collect();
-    Ok(ParseOptions { default_event_minutes: settings.default_event_minutes, calendars, date_order: settings.date_order })
+    let calendars = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .calendars()?
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    Ok(ParseOptions {
+        default_event_minutes: settings.default_event_minutes,
+        calendars,
+        date_order: settings.date_order,
+    })
 }
 
 pub fn parse_preview_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> CmdResult<ParsedItem> {
@@ -82,10 +99,22 @@ pub fn create_from_text_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> Cm
         .or_else(|| calendars.first())
         .map(|c| c.id)
         .ok_or_else(|| CmdError::new("no_calendar", "Create a calendar first"))?;
-    let item = from_parsed(&p, now.timezone(), default_cal, &calendars, settings.default_event_minutes);
+    let item = from_parsed(
+        &p,
+        now.timezone(),
+        default_cal,
+        &calendars,
+        settings.default_event_minutes,
+    );
     let r = match item {
-        NewItem::Event(e) => ItemRef { kind: ItemKindDb::Event, id: store.insert_event(&e)? },
-        NewItem::Task(t) => ItemRef { kind: ItemKindDb::Task, id: store.insert_task(&t)? },
+        NewItem::Event(e) => ItemRef {
+            kind: ItemKindDb::Event,
+            id: store.insert_event(&e)?,
+        },
+        NewItem::Task(t) => ItemRef {
+            kind: ItemKindDb::Task,
+            id: store.insert_task(&t)?,
+        },
     };
     tracing::info!(kind = ?r.kind, id = r.id, "created from text");
     Ok(r)
@@ -122,8 +151,16 @@ pub fn create_event(app: AppHandle, st: State<AppState>, input: EventInput) -> C
 }
 
 #[tauri::command]
-pub fn update_event(app: AppHandle, st: State<AppState>, id: i64, input: EventInput) -> CmdResult<()> {
-    st.store.lock().map_err(poisoned)?.update_event(id, &input)?;
+pub fn update_event(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    input: EventInput,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .update_event(id, &input)?;
     changed(&app);
     Ok(())
 }
@@ -138,14 +175,27 @@ pub fn move_event(
     new_end: DateTime<Utc>,
     scope: Scope,
 ) -> CmdResult<i64> {
-    let r = st.store.lock().map_err(poisoned)?.move_event(id, occurrence, new_start, new_end, scope)?;
+    let r = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .move_event(id, occurrence, new_start, new_end, scope)?;
     changed(&app);
     Ok(r)
 }
 
 #[tauri::command]
-pub fn delete_event(app: AppHandle, st: State<AppState>, id: i64, occurrence: Option<DateTime<Utc>>, scope: Scope) -> CmdResult<()> {
-    st.store.lock().map_err(poisoned)?.delete_event(id, occurrence, scope)?;
+pub fn delete_event(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    occurrence: Option<DateTime<Utc>>,
+    scope: Scope,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .delete_event(id, occurrence, scope)?;
     changed(&app);
     Ok(())
 }
@@ -163,15 +213,28 @@ pub fn create_task(app: AppHandle, st: State<AppState>, input: TaskInput) -> Cmd
 }
 
 #[tauri::command]
-pub fn update_task(app: AppHandle, st: State<AppState>, id: i64, input: TaskInput) -> CmdResult<()> {
+pub fn update_task(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    input: TaskInput,
+) -> CmdResult<()> {
     st.store.lock().map_err(poisoned)?.update_task(id, &input)?;
     changed(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn set_task_completed(app: AppHandle, st: State<AppState>, id: i64, done: bool) -> CmdResult<()> {
-    st.store.lock().map_err(poisoned)?.set_task_completed(id, done, Utc::now())?;
+pub fn set_task_completed(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    done: bool,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .set_task_completed(id, done, Utc::now())?;
     changed(&app);
     Ok(())
 }
@@ -184,13 +247,21 @@ pub fn delete_task(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()
 }
 
 #[tauri::command]
-pub fn list_range(st: State<AppState>, start: DateTime<Utc>, end: DateTime<Utc>) -> CmdResult<Vec<Occurrence>> {
+pub fn list_range(
+    st: State<AppState>,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> CmdResult<Vec<Occurrence>> {
     Ok(st.store.lock().map_err(poisoned)?.list_range(start, end)?)
 }
 
 #[tauri::command]
 pub fn list_tasks(st: State<AppState>, filter: TaskFilter) -> CmdResult<Vec<Task>> {
-    Ok(st.store.lock().map_err(poisoned)?.list_tasks(filter, Utc::now(), local_tz())?)
+    Ok(st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .list_tasks(filter, Utc::now(), local_tz())?)
 }
 
 #[tauri::command]
@@ -204,15 +275,27 @@ pub fn list_calendars(st: State<AppState>) -> CmdResult<Vec<Calendar>> {
 }
 
 #[tauri::command]
-pub fn upsert_calendar(app: AppHandle, st: State<AppState>, input: CalendarInput) -> CmdResult<i64> {
+pub fn upsert_calendar(
+    app: AppHandle,
+    st: State<AppState>,
+    input: CalendarInput,
+) -> CmdResult<i64> {
     let id = st.store.lock().map_err(poisoned)?.upsert_calendar(&input)?;
     changed(&app);
     Ok(id)
 }
 
 #[tauri::command]
-pub fn delete_calendar(app: AppHandle, st: State<AppState>, id: i64, move_to: i64) -> CmdResult<()> {
-    st.store.lock().map_err(poisoned)?.delete_calendar(id, move_to)?;
+pub fn delete_calendar(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    move_to: i64,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .delete_calendar(id, move_to)?;
     changed(&app);
     Ok(())
 }
@@ -224,11 +307,21 @@ pub fn set_settings_impl(
     new: Settings,
     register: impl FnOnce(&str, &str) -> std::result::Result<(), String>,
 ) -> CmdResult<Settings> {
-    if new.hotkey.parse::<tauri_plugin_global_shortcut::Shortcut>().is_err() {
-        return Err(CmdError::new("hotkey_invalid", format!("“{}” is not a valid shortcut", new.hotkey)));
+    if new
+        .hotkey
+        .parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .is_err()
+    {
+        return Err(CmdError::new(
+            "hotkey_invalid",
+            format!("“{}” is not a valid shortcut", new.hotkey),
+        ));
     }
     if !(5..=24 * 60).contains(&new.default_event_minutes) {
-        return Err(CmdError::new("invalid", "Default event length must be between 5 minutes and 24 hours"));
+        return Err(CmdError::new(
+            "invalid",
+            "Default event length must be between 5 minutes and 24 hours",
+        ));
     }
     let cals = st.store.lock().map_err(poisoned)?.calendars()?;
     if !cals.iter().any(|c| c.id == new.default_calendar_id) {
@@ -236,23 +329,37 @@ pub fn set_settings_impl(
     }
     let old = st.settings.read().map_err(poisoned)?.clone();
     if old.hotkey != new.hotkey {
-        register(&new.hotkey, &old.hotkey).map_err(|e| CmdError::new("hotkey_unavailable", format!("Shortcut unavailable: {e}")))?;
+        register(&new.hotkey, &old.hotkey).map_err(|e| {
+            CmdError::new("hotkey_unavailable", format!("Shortcut unavailable: {e}"))
+        })?;
     }
     if let Some(path) = &st.settings_path {
-        new.save(path).map_err(|e| CmdError::new("io", e.to_string()))?;
+        new.save(path)
+            .map_err(|e| CmdError::new("io", e.to_string()))?;
     }
     *st.settings.write().map_err(poisoned)? = new.clone();
     Ok(new)
 }
 
 #[tauri::command]
-pub fn set_settings(app: AppHandle, st: State<AppState>, settings: Settings) -> CmdResult<Settings> {
-    let launch_changed = st.settings.read().map_err(poisoned)?.launch_at_login != settings.launch_at_login;
-    let saved = set_settings_impl(&st, settings, |new, old| crate::tray::register_hotkey(&app, new, Some(old)))?;
+pub fn set_settings(
+    app: AppHandle,
+    st: State<AppState>,
+    settings: Settings,
+) -> CmdResult<Settings> {
+    let launch_changed =
+        st.settings.read().map_err(poisoned)?.launch_at_login != settings.launch_at_login;
+    let saved = set_settings_impl(&st, settings, |new, old| {
+        crate::tray::register_hotkey(&app, new, Some(old))
+    })?;
     if launch_changed {
         use tauri_plugin_autostart::ManagerExt;
         let al = app.autolaunch();
-        let r = if saved.launch_at_login { al.enable() } else { al.disable() };
+        let r = if saved.launch_at_login {
+            al.enable()
+        } else {
+            al.disable()
+        };
         if let Err(e) = r {
             tracing::warn!(error = %e, "autostart toggle failed");
             return Err(CmdError::new("autostart", e.to_string()));
@@ -299,7 +406,10 @@ mod tests {
         assert_eq!(r.kind, ItemKindDb::Event);
         let e = st.store.lock().unwrap().get_event(r.id).unwrap().input;
         assert_eq!(e.title, "Lunch");
-        assert_eq!(e.calendar_id, st.settings.read().unwrap().default_calendar_id);
+        assert_eq!(
+            e.calendar_id,
+            st.settings.read().unwrap().default_calendar_id
+        );
         assert_eq!(e.attendees, vec!["Sam"]);
     }
 
@@ -308,7 +418,10 @@ mod tests {
         let st = AppState::in_memory();
         let r = create_from_text_impl(&st, "todo buy milk friday", now()).unwrap();
         assert_eq!(r.kind, ItemKindDb::Task);
-        assert_eq!(st.store.lock().unwrap().get_task(r.id).unwrap().title, "buy milk");
+        assert_eq!(
+            st.store.lock().unwrap().get_task(r.id).unwrap().title,
+            "buy milk"
+        );
     }
 
     #[test]
@@ -316,7 +429,13 @@ mod tests {
         let st = AppState::in_memory();
         let r = create_from_text_impl(&st, "Standup tomorrow 9am /work", now()).unwrap();
         let store = st.store.lock().unwrap();
-        let work = store.calendars().unwrap().into_iter().find(|c| c.name == "Work").unwrap().id;
+        let work = store
+            .calendars()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.name == "Work")
+            .unwrap()
+            .id;
         assert_eq!(store.get_event(r.id).unwrap().input.calendar_id, work);
     }
 
@@ -356,7 +475,10 @@ mod tests {
         })
         .unwrap();
         assert_eq!(saved, new);
-        assert_eq!(registered, Some(("Control+Alt+K".into(), "Alt+Super+Space".into())));
+        assert_eq!(
+            registered,
+            Some(("Control+Alt+K".into(), "Alt+Super+Space".into()))
+        );
         assert_eq!(st.settings.read().unwrap().default_event_minutes, 45);
     }
 
@@ -365,7 +487,10 @@ mod tests {
         let st = AppState::in_memory();
         let mut new = st.settings.read().unwrap().clone();
         new.default_calendar_id = 999;
-        assert_eq!(set_settings_impl(&st, new, |_, _| Ok(())).unwrap_err().code, "invalid");
+        assert_eq!(
+            set_settings_impl(&st, new, |_, _| Ok(())).unwrap_err().code,
+            "invalid"
+        );
     }
 
     #[test]

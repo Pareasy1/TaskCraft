@@ -91,3 +91,29 @@ describe('recurrenceToRrule', () => {
     );
   });
 });
+
+import { sameInstant } from './edit';
+import { dayGroups } from './layout';
+
+describe('review fixes', () => {
+  // Finding 6: Rust sends "…:00Z", JS produces "…:00.000Z".
+  it('sameInstant ignores ISO formatting differences', () => {
+    expect(sameInstant('2026-10-20T08:00:00Z', '2026-10-20T08:00:00.000Z')).toBe(true);
+    expect(sameInstant('2026-10-20T08:00:00Z', '2026-10-20T08:15:00.000Z')).toBe(false);
+  });
+
+  // Finding 14: dated tasks appear under their day in the upcoming list.
+  it('dayGroups places events and dated tasks under their local day', () => {
+    const from = new Date(2026, 9, 20);
+    const occ = [{ start: new Date(2026, 9, 21, 9).toISOString(), end: new Date(2026, 9, 21, 10).toISOString(), id: 'e' }];
+    const tasks = [
+      { due: new Date(2026, 9, 23).toISOString(), id: 't1' },
+      { due: null, id: 't2' },
+      { due: new Date(2026, 10, 30).toISOString(), id: 'far' },
+    ];
+    const g = dayGroups(occ, tasks, from, 14);
+    expect(g.map((x) => x.day.getDate())).toEqual([21, 23]);
+    expect(g[0].events.map((e) => e.id)).toEqual(['e']);
+    expect(g[1].tasks.map((t) => t.id)).toEqual(['t1']);
+  });
+});

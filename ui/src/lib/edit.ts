@@ -132,3 +132,6 @@ export function recurrenceToRrule(r: NonNullable<import('./types').ParsedItem['r
   if (r.until) s += `;UNTIL=${r.until.replaceAll('-', '')}`;
   return s;
 }
+
+/** True when two ISO strings denote the same instant (formats differ between Rust and JS). */
+export const sameInstant = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime();

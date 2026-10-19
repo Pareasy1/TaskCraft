@@ -25,7 +25,13 @@ fn quick_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .skip_taskbar(true)
         .visible(false)
         .shadow(true)
-        .effects(EffectsBuilder::new().effect(Effect::Popover).state(EffectState::Active).radius(12.0).build())
+        .effects(
+            EffectsBuilder::new()
+                .effect(Effect::Popover)
+                .state(EffectState::Active)
+                .radius(12.0)
+                .build(),
+        )
         .build()?;
     let handle = w.clone();
     w.on_window_event(move |e| {
@@ -54,7 +60,15 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open TaskCraft", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
     let quit = MenuItem::with_id(app, "quit", "Quit TaskCraft", true, Some("CmdOrCtrl+Q"))?;
-    let menu = Menu::with_items(app, &[&open, &settings, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
     let icon = Image::from_bytes(include_bytes!("../icons/tray@2x.png"))?;
 
     TrayIconBuilder::with_id("main-tray")
@@ -75,7 +89,12 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_tray_icon_event(|tray, event| {
             tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 toggle_quick(tray.app_handle());
             }
         })
@@ -96,11 +115,12 @@ pub fn register_hotkey(app: &AppHandle, new: &str, old: Option<&str>) -> Result<
         }
         let _ = gs.unregister(p);
     }
-    let handler = |app: &AppHandle, _s: &Shortcut, e: tauri_plugin_global_shortcut::ShortcutEvent| {
-        if e.state() == ShortcutState::Pressed {
-            toggle_quick(app);
-        }
-    };
+    let handler =
+        |app: &AppHandle, _s: &Shortcut, e: tauri_plugin_global_shortcut::ShortcutEvent| {
+            if e.state() == ShortcutState::Pressed {
+                toggle_quick(app);
+            }
+        };
     match gs.on_shortcut(shortcut, handler) {
         Ok(()) => Ok(()),
         Err(e) => {

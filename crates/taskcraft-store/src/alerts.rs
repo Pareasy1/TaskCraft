@@ -155,10 +155,8 @@ impl Store {
                         .filter(|p| p.offset == Some(m) && p.fired_at.is_some())
                         .filter_map(|p| p.occurrence)
                         .max();
-                    let occ = match progress {
-                        Some(done) => recur::next_after(rule, start, o.tz, done)?,
-                        None => Some(start),
-                    };
+                    let after = progress.unwrap_or(start - Duration::seconds(1));
+                    let occ = recur::next_after(rule, start, o.tz, after)?;
                     if let Some(occ) = occ {
                         insert_alert(
                             conn,

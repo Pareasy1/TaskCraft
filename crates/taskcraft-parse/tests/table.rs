@@ -725,3 +725,44 @@ fn casing_and_punctuation_variants() {
         }
     }
 }
+
+/// Review finding 5: zero-padded 24-hour times are not am/pm-ambiguous.
+#[test]
+fn zero_padded_24h_times() {
+    check(
+        "Train 05:40 tomorrow",
+        "Train",
+        (2026, 10, 21, Some((5, 40))),
+        Some((2026, 10, 21, Some((6, 40)))),
+        false,
+    );
+    check(
+        "Train tomorrow at 06:15",
+        "Train",
+        (2026, 10, 21, Some((6, 15))),
+        Some((2026, 10, 21, Some((7, 15)))),
+        false,
+    );
+    check(
+        "Meeting 2026-10-25 02:30",
+        "Meeting",
+        (2026, 10, 25, Some((2, 30))),
+        Some((2026, 10, 25, Some((3, 30)))),
+        false,
+    );
+    check(
+        "Shift 06:00-07:30 friday",
+        "Shift",
+        (2026, 10, 23, Some((6, 0))),
+        Some((2026, 10, 23, Some((7, 30)))),
+        false,
+    );
+    // Single-digit hours keep the am/pm heuristic.
+    check(
+        "Call at 5:30",
+        "Call",
+        (2026, 10, 20, Some((17, 30))),
+        Some((2026, 10, 20, Some((18, 30)))),
+        false,
+    );
+}

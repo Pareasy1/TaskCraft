@@ -45,7 +45,9 @@ fn quit_app(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn open_main(app: tauri::AppHandle) -> Result<(), commands::CmdError> {
-    windows::show_main(&app).map(|_| ()).map_err(|e| commands::CmdError::new("window", e.to_string()))
+    windows::show_main(&app)
+        .map(|_| ())
+        .map_err(|e| commands::CmdError::new("window", e.to_string()))
 }
 
 #[tauri::command]
@@ -125,7 +127,12 @@ fn main() {
         .setup(|app| {
             let handle = app.handle();
             tray::setup_tray(handle)?;
-            let hotkey = handle.state::<state::AppState>().settings.read().map(|s| s.hotkey.clone()).unwrap_or_default();
+            let hotkey = handle
+                .state::<state::AppState>()
+                .settings
+                .read()
+                .map(|s| s.hotkey.clone())
+                .unwrap_or_default();
             if let Err(e) = tray::register_hotkey(handle, &hotkey, None) {
                 tracing::warn!(%hotkey, error = %e, "could not register hotkey");
             }

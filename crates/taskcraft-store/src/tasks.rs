@@ -65,7 +65,24 @@ impl Store {
         Ok(t)
     }
 
+    /// Completing a recurring task moves it to its next occurrence instead;
+    /// it is only marked done once the series has ended.
     pub fn set_task_completed(&self, id: i64, done: bool, now: DateTime<Utc>) -> Result<()> {
+        let t = self.get_task(id)?;
+        if done {
+            if let (Some(rule), Some(due)) = (&t.rrule, t.due) {
+                let tz: chrono_tz::Tz = t.tz.parse().unwrap_or(chrono_tz::Tz::UTC);
+                if let Some(next) = crate::recur::next_after(rule, due, tz, due)? {
+                    return self.in_tx(|tx| {
+                        tx.execute(
+                            "UPDATE tasks SET due_utc = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
+                            params![fmt_ts(next), fmt_ts(Utc::now()), id],
+                        )?;
+                        self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)
+                    });
+                }
+            }
+        }
         let n = self.conn.execute(
             "UPDATE tasks SET completed_at = ?1, updated_at = ?2 WHERE id = ?3",
             params![done.then(|| fmt_ts(now)), fmt_ts(Utc::now()), id],

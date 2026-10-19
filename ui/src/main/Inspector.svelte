@@ -2,7 +2,7 @@
   import { X, Trash2 } from 'lucide-svelte';
   import type { Calendar, EventInput, TaskInput } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
-  import { eventToForm, formToEvent, formToTask, recurrenceToRrule, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import { eventToForm, formToEvent, formToTask, recurrenceToRrule, sameInstant, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { ymd } from '../lib/format';
 
   export type Target =
@@ -20,7 +20,7 @@
     calendars: Calendar[];
     onclose: () => void;
     onsaved: () => void;
-    askScope: (verb: string) => Promise<'this' | 'all' | null>;
+    askScope: (verb: string, allowThis: boolean) => Promise<'this' | 'all' | null>;
   } = $props();
 
   let ev = $state<EventForm | null>(null);
@@ -78,16 +78,22 @@
         if (!input.title) return (error = 'Title is required');
         if (target.id == null) await api.createEvent(input);
         else if (target.recurring && target.occurrence) {
-          const timesChanged = input.start !== target.input.start || input.end !== target.input.end;
-          const scope = timesChanged ? await askScope('Change') : 'all';
+          const scope = await askScope('Change', true);
           if (!scope) return;
-          if (scope === 'this') await api.moveEvent(target.id, target.occurrence, input.start, input.end, 'this');
-          else {
+          if (scope === 'this') {
+            // Detach this occurrence, then apply every edited field to the copy.
+            const newId = await api.moveEvent(target.id, target.occurrence, input.start, input.end, 'this');
+            await api.updateEvent(newId, { ...input, rrule: null });
+          } else {
             // Keep the series anchor; shift it by the edited occurrence delta.
             const delta = new Date(input.start).getTime() - new Date(target.occurrence).getTime();
             const dur = new Date(input.end).getTime() - new Date(input.start).getTime();
             const s = new Date(new Date(target.input.start).getTime() + delta);
-            await api.updateEvent(target.id, { ...input, start: s.toISOString(), end: new Date(s.getTime() + dur).toISOString() });
+            const timesChanged = !sameInstant(input.start, target.input.start) || !sameInstant(input.end, target.input.end);
+            const series = await api.getEvent(target.id);
+            await api.updateEvent(target.id, timesChanged
+              ? { ...input, start: s.toISOString(), end: new Date(s.getTime() + dur).toISOString() }
+              : { ...input, start: series.start, end: series.end });
           }
         } else await api.updateEvent(target.id, input);
       } else if (task && target.kind === 'task') {
@@ -106,7 +112,7 @@
     if (!confirmDelete) return (confirmDelete = true);
     try {
       if (target.kind === 'event' && target.id != null) {
-        const scope = target.recurring ? await askScope('Delete') : 'all';
+        const scope = target.recurring ? await askScope('Delete', target.occurrence != null) : 'all';
         if (!scope) return;
         await api.deleteEvent(target.id, target.occurrence, scope);
       } else if (target.kind === 'task' && target.id != null) await api.deleteTask(target.id);

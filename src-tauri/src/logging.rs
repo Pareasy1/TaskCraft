@@ -15,7 +15,9 @@ pub fn init() -> Option<WorkerGuard> {
         .ok()?;
     let (writer, guard) = tracing_appender::non_blocking(appender);
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_writer(writer)
         .with_ansi(false)
         .init();

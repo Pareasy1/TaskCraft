@@ -26,7 +26,7 @@
   let target = $state<Target | null>(null);
   let error = $state('');
   let tz = $state('UTC');
-  let scopePrompt = $state<{ verb: string; resolve: (s: 'this' | 'all' | null) => void } | null>(null);
+  let scopePrompt = $state<{ verb: string; allowThis: boolean; resolve: (s: 'this' | 'all' | null) => void } | null>(null);
 
   let weekStart = $derived<0 | 1>(settings?.weekStart === 'Sun' ? 0 : 1);
   let days = $derived(view === 'day' ? [anchor] : weekDays(anchor, weekStart));
@@ -102,8 +102,8 @@
     anchor = startOfDay(new Date());
   }
 
-  function askScope(verb: string): Promise<'this' | 'all' | null> {
-    return new Promise((resolve) => (scopePrompt = { verb, resolve: (s) => { scopePrompt = null; resolve(s); } }));
+  function askScope(verb: string, allowThis = true): Promise<'this' | 'all' | null> {
+    return new Promise((resolve) => (scopePrompt = { verb, allowThis, resolve: (s) => { scopePrompt = null; resolve(s); } }));
   }
 
   async function openEvent(id: number, occurrence: string | null) {
@@ -155,7 +155,7 @@
 
   async function move(o: Occurrence, start: Date, end: Date) {
     try {
-      const scope = o.recurring ? await askScope('Move') : 'all';
+      const scope = o.recurring ? await askScope('Move', true) : 'all';
       if (!scope) return;
       await api.moveEvent(o.eventId, o.recurring ? o.start : null, start.toISOString(), end.toISOString(), scope);
     } catch (e) {
@@ -258,11 +258,17 @@
   <div class="scrim">
     <div class="dialog" role="dialog" aria-label="Repeating event">
       <strong>{scopePrompt.verb} a repeating event</strong>
-      <p class="muted">Apply the change to this occurrence only, or to every event in the series?</p>
+      <p class="muted">
+        {scopePrompt.allowThis
+          ? 'Apply the change to this occurrence only, or to every event in the series?'
+          : 'This applies to every event in the series. Open a single occurrence from the calendar to change just that one.'}
+      </p>
       <div class="dactions">
         <button class="btn" onclick={() => scopePrompt?.resolve(null)}>Cancel</button>
         <button class="btn" onclick={() => scopePrompt?.resolve('all')}>All events</button>
-        <button class="btn primary" onclick={() => scopePrompt?.resolve('this')}>This event</button>
+        {#if scopePrompt.allowThis}
+          <button class="btn primary" onclick={() => scopePrompt?.resolve('this')}>This event</button>
+        {/if}
       </div>
     </div>
   </div>

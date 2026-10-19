@@ -61,7 +61,7 @@ fn ics_contains_expected_lines() {
         "BEGIN:VEVENT",
         "RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO",
         "SUMMARY:Standup\\, daily\\; with notes",
-        "DTSTART:20261019T070000Z",
+        "DTSTART;TZID=Europe/Rome:20261019T090000",
         "DTSTART;VALUE=DATE:20261024",
         "DTEND;VALUE=DATE:20261027",
         "BEGIN:VALARM",

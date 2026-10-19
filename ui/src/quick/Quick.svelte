@@ -22,6 +22,7 @@
   let selected = $state<Date | null>(null);
   let occurrences = $state<Occurrence[]>([]);
   let tasks = $state<Task[]>([]);
+  let upcomingTasks = $state<Task[]>([]);
   let calendars = $state<Calendar[]>([]);
   let settings = $state<Settings | null>(null);
 
@@ -40,9 +41,10 @@
     try {
       const start = grid[0] < startOfDay(new Date()) ? grid[0] : startOfDay(new Date());
       const end = addDays(grid[41] > addDays(new Date(), 14) ? grid[41] : addDays(new Date(), 14), 1);
-      const [occ, overdue, today, cals, s] = await Promise.all([
-        api.listRange(start, end), api.listTasks('overdue'), api.listTasks('today'), api.listCalendars(), api.getSettings(),
+      const [occ, overdue, today, upcoming, cals, s] = await Promise.all([
+        api.listRange(start, end), api.listTasks('overdue'), api.listTasks('today'), api.listTasks('upcoming'), api.listCalendars(), api.getSettings(),
       ]);
+      upcomingTasks = upcoming;
       occurrences = occ;
       tasks = [...overdue, ...today];
       calendars = cals;
@@ -150,7 +152,7 @@
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">
-    <Upcoming {occurrences} tasks={selected ? [] : tasks} from={listFrom} days={listDays} oncomplete={complete} onopen={openItem} />
+    <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} oncomplete={complete} onopen={openItem} />
   </div>
   <footer>
     <button class="icon-btn" title="Open TaskCraft" onclick={() => api.openMain()}><AppWindow size={16} /></button>

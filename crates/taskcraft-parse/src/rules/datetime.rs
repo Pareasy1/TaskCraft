@@ -16,12 +16,14 @@ pub(crate) struct TimeExpr {
     pub hour: u32,
     pub minute: u32,
     pub meridiem: Option<Meridiem>,
+    /// Written as zero-padded 24-hour time ("05:40", "06:00").
+    pub h24: bool,
 }
 
 impl TimeExpr {
     /// No am/pm and an hour that could be either (1–12).
     pub fn ambiguous(&self) -> bool {
-        self.meridiem.is_none() && (1..=12).contains(&self.hour)
+        self.meridiem.is_none() && !self.h24 && (1..=12).contains(&self.hour)
     }
 }
 
@@ -151,6 +153,7 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
                 hour: 12,
                 minute: 0,
                 meridiem: Some(Meridiem::Pm),
+                h24: false,
             })
         }
         "midnight" => {
@@ -158,6 +161,7 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
                 hour: 0,
                 minute: 0,
                 meridiem: None,
+                h24: true,
             })
         }
         _ => {}
@@ -176,11 +180,14 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
     if body.is_empty() || !body.chars().next()?.is_ascii_digit() {
         return None;
     }
+    // Zero-padded "HH:MM" without am/pm is unambiguous 24-hour time.
+    let mut h24 = false;
     let (h, m, has_colon) = match body.split_once([':', '.']) {
         Some((h, m)) => {
             if m.len() != 2 {
                 return None;
             }
+            h24 = h.len() == 2 && mer.is_none();
             (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?, true)
         }
         None => {
@@ -199,6 +206,7 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
             hour: h,
             minute: m,
             meridiem: mer,
+            h24: false,
         }),
         None if h > 23 => None,
         None if !has_colon && !allow_bare => None,
@@ -206,6 +214,7 @@ pub(crate) fn parse_time_token(s: &str, allow_bare: bool) -> Option<TimeExpr> {
             hour: h,
             minute: m,
             meridiem: None,
+            h24,
         }),
     }
 }
@@ -539,6 +548,7 @@ pub(crate) fn part_of_day_rule(toks: &[Token], i: usize, _ctx: &Ctx) -> Option<M
             hour,
             minute: 0,
             meridiem,
+            h24: false,
         }),
     })
 }

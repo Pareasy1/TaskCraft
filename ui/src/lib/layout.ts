@@ -75,3 +75,21 @@ export function weekDays(anchor: Date, weekStart: 0 | 1): Date[] {
 export function snap15(minutes: number): number {
   return Math.max(0, Math.round(minutes / 15) * 15) || 0;
 }
+
+/** Events overlapping each day and tasks due on it, for `days` days from `from`; empty days are omitted. */
+export function dayGroups<E extends { start: string; end: string }, T extends { due: string | null }>(
+  events: E[],
+  tasks: T[],
+  from: Date,
+  days: number,
+): { day: Date; events: E[]; tasks: T[] }[] {
+  const out: { day: Date; events: E[]; tasks: T[] }[] = [];
+  for (let i = 0; i < days; i++) {
+    const day = addDays(startOfDay(from), i);
+    const next = addDays(day, 1);
+    const ev = events.filter((o) => new Date(o.start) < next && new Date(o.end) > day);
+    const tk = tasks.filter((t) => t.due && new Date(t.due) >= day && new Date(t.due) < next);
+    if (ev.length || tk.length) out.push({ day, events: ev, tasks: tk });
+  }
+  return out;
+}
