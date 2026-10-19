@@ -4,9 +4,42 @@ mod commands;
 mod logging;
 mod settings;
 mod state;
+mod tray;
 mod windows;
 
-use tauri::Manager;
+use std::sync::Mutex;
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
+
+/// Item the main window should reveal when it next loads or receives focus.
+#[derive(Default)]
+pub struct PendingFocus(pub Mutex<Option<commands::ItemRef>>);
+
+/// Shows the main window and asks it to reveal `item`.
+pub fn reveal_item(app: &tauri::AppHandle, item: commands::ItemRef) {
+    if let Some(p) = app.try_state::<PendingFocus>() {
+        if let Ok(mut slot) = p.0.lock() {
+            *slot = Some(item);
+        }
+    }
+    if windows::show_main(app).is_ok() {
+        let _ = app.emit_to("main", "focus-item", item);
+    }
+}
+
+#[tauri::command]
+fn open_item(app: tauri::AppHandle, item: commands::ItemRef) {
+    reveal_item(&app, item);
+}
+
+#[tauri::command]
+fn take_pending_focus(p: tauri::State<PendingFocus>) -> Option<commands::ItemRef> {
+    p.0.lock().ok().and_then(|mut s| s.take())
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
 
 #[tauri::command]
 fn open_main(app: tauri::AppHandle) -> Result<(), commands::CmdError> {
@@ -35,7 +68,9 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(state)
+        .manage(PendingFocus::default())
         .invoke_handler(tauri::generate_handler![
             commands::parse_preview,
             commands::create_from_text,
@@ -60,14 +95,40 @@ fn main() {
             commands::local_time_zone,
             open_main,
             open_settings,
+            open_item,
+            take_pending_focus,
+            quit_app,
         ])
         .setup(|app| {
-            windows::show_main(app.handle())?;
+            let handle = app.handle();
+            tray::setup_tray(handle)?;
+            let hotkey = handle.state::<state::AppState>().settings.read().map(|s| s.hotkey.clone()).unwrap_or_default();
+            if let Err(e) = tray::register_hotkey(handle, &hotkey, None) {
+                tracing::warn!(%hotkey, error = %e, "could not register hotkey");
+            }
+            // Launched at login → stay in the menu bar only.
+            if !std::env::args().any(|a| a == "--minimized") {
+                windows::show_main(handle)?;
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .on_window_event(|window, event| {
+            // Closing the main window keeps TaskCraft running in the menu bar.
+            if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            tracing::error!(error = %e, "tauri runtime error");
+            tracing::error!(error = %e, "tauri build error");
             std::process::exit(1);
+        })
+        .run(|app, event| {
+            if let RunEvent::Reopen { .. } = event {
+                let _ = windows::show_main(app);
+            }
         });
 }

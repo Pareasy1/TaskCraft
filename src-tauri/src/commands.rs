@@ -42,6 +42,7 @@ fn poisoned<T>(_: T) -> CmdError {
 type CmdResult<T> = std::result::Result<T, CmdError>;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ItemRef {
     pub kind: ItemKindDb,
     pub id: i64,
