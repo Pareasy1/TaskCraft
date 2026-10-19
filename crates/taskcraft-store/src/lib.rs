@@ -3,6 +3,7 @@
 mod alerts;
 mod calendars;
 mod events;
+mod ics;
 mod model;
 mod query;
 mod recur;
@@ -10,6 +11,7 @@ mod schema;
 mod tasks;
 mod time;
 
+pub use alerts::DueAlert;
 pub use model::*;
 pub use query::{Hit, Occurrence, Scope, TaskFilter};
 pub use time::{from_parsed, local_to_utc, to_utc};

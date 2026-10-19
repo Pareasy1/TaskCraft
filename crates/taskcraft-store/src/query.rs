@@ -131,7 +131,7 @@ impl Store {
             })
             .collect();
         match f {
-            TaskFilter::Completed => v.sort_by(|a, b| b.completed_at.cmp(&a.completed_at)),
+            TaskFilter::Completed => v.sort_by_key(|t| std::cmp::Reverse(t.completed_at)),
             // Tasks without a due date go last.
             _ => v.sort_by_key(|t| (t.due.is_none(), t.due, t.id)),
         }

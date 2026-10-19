@@ -100,3 +100,22 @@ pub(crate) fn expand(
         .filter(|s| *s < to && *s + dur > from)
         .collect())
 }
+
+/// First occurrence strictly after `after` (searching up to ~2 years ahead).
+pub(crate) fn next_after(
+    col: &str,
+    dtstart: DateTime<Utc>,
+    tz: Tz,
+    after: DateTime<Utc>,
+) -> Result<Option<DateTime<Utc>>> {
+    let from = after + Duration::seconds(1);
+    let occ = expand(
+        col,
+        dtstart,
+        tz,
+        Duration::seconds(1),
+        from,
+        from + Duration::days(800),
+    )?;
+    Ok(occ.into_iter().find(|s| *s > after))
+}
