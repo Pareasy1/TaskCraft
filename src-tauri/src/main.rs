@@ -69,6 +69,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .manage(state)
         .manage(PendingFocus::default())
         .invoke_handler(tauri::generate_handler![
@@ -91,6 +95,7 @@ fn main() {
             commands::upsert_calendar,
             commands::delete_calendar,
             commands::get_settings,
+            commands::set_settings,
             commands::export_ics,
             commands::local_time_zone,
             open_main,

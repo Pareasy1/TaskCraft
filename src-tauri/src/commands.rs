@@ -217,6 +217,51 @@ pub fn delete_calendar(app: AppHandle, st: State<AppState>, id: i64, move_to: i6
     Ok(())
 }
 
+/// Validates and applies settings. `register(new, old)` swaps the global
+/// hotkey; if it fails nothing is changed.
+pub fn set_settings_impl(
+    st: &AppState,
+    new: Settings,
+    register: impl FnOnce(&str, &str) -> std::result::Result<(), String>,
+) -> CmdResult<Settings> {
+    if new.hotkey.parse::<tauri_plugin_global_shortcut::Shortcut>().is_err() {
+        return Err(CmdError::new("hotkey_invalid", format!("“{}” is not a valid shortcut", new.hotkey)));
+    }
+    if !(5..=24 * 60).contains(&new.default_event_minutes) {
+        return Err(CmdError::new("invalid", "Default event length must be between 5 minutes and 24 hours"));
+    }
+    let cals = st.store.lock().map_err(poisoned)?.calendars()?;
+    if !cals.iter().any(|c| c.id == new.default_calendar_id) {
+        return Err(CmdError::new("invalid", "Default calendar does not exist"));
+    }
+    let old = st.settings.read().map_err(poisoned)?.clone();
+    if old.hotkey != new.hotkey {
+        register(&new.hotkey, &old.hotkey).map_err(|e| CmdError::new("hotkey_unavailable", format!("Shortcut unavailable: {e}")))?;
+    }
+    if let Some(path) = &st.settings_path {
+        new.save(path).map_err(|e| CmdError::new("io", e.to_string()))?;
+    }
+    *st.settings.write().map_err(poisoned)? = new.clone();
+    Ok(new)
+}
+
+#[tauri::command]
+pub fn set_settings(app: AppHandle, st: State<AppState>, settings: Settings) -> CmdResult<Settings> {
+    let launch_changed = st.settings.read().map_err(poisoned)?.launch_at_login != settings.launch_at_login;
+    let saved = set_settings_impl(&st, settings, |new, old| crate::tray::register_hotkey(&app, new, Some(old)))?;
+    if launch_changed {
+        use tauri_plugin_autostart::ManagerExt;
+        let al = app.autolaunch();
+        let r = if saved.launch_at_login { al.enable() } else { al.disable() };
+        if let Err(e) = r {
+            tracing::warn!(error = %e, "autostart toggle failed");
+            return Err(CmdError::new("autostart", e.to_string()));
+        }
+    }
+    changed(&app);
+    Ok(saved)
+}
+
 #[tauri::command]
 pub fn get_settings(st: State<AppState>) -> CmdResult<Settings> {
     Ok(st.settings.read().map_err(poisoned)?.clone())
@@ -273,6 +318,54 @@ mod tests {
         let store = st.store.lock().unwrap();
         let work = store.calendars().unwrap().into_iter().find(|c| c.name == "Work").unwrap().id;
         assert_eq!(store.get_event(r.id).unwrap().input.calendar_id, work);
+    }
+
+    #[test]
+    fn set_settings_rejects_bad_hotkey() {
+        let st = AppState::in_memory();
+        let before = st.settings.read().unwrap().clone();
+        let mut bad = before.clone();
+        bad.hotkey = "Nope+X".into();
+        bad.default_event_minutes = 30;
+        let err = set_settings_impl(&st, bad, |_, _| Ok(())).unwrap_err();
+        assert_eq!(err.code, "hotkey_invalid");
+        assert_eq!(*st.settings.read().unwrap(), before);
+    }
+
+    #[test]
+    fn set_settings_keeps_old_hotkey_when_registration_fails() {
+        let st = AppState::in_memory();
+        let before = st.settings.read().unwrap().clone();
+        let mut new = before.clone();
+        new.hotkey = "Control+Alt+K".into();
+        let err = set_settings_impl(&st, new, |_, _| Err("taken".into())).unwrap_err();
+        assert_eq!(err.code, "hotkey_unavailable");
+        assert_eq!(*st.settings.read().unwrap(), before);
+    }
+
+    #[test]
+    fn set_settings_applies_valid_changes() {
+        let st = AppState::in_memory();
+        let mut new = st.settings.read().unwrap().clone();
+        new.hotkey = "Control+Alt+K".into();
+        new.default_event_minutes = 45;
+        let mut registered = None;
+        let saved = set_settings_impl(&st, new.clone(), |n, o| {
+            registered = Some((n.to_string(), o.to_string()));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(saved, new);
+        assert_eq!(registered, Some(("Control+Alt+K".into(), "Alt+Super+Space".into())));
+        assert_eq!(st.settings.read().unwrap().default_event_minutes, 45);
+    }
+
+    #[test]
+    fn set_settings_rejects_unknown_default_calendar() {
+        let st = AppState::in_memory();
+        let mut new = st.settings.read().unwrap().clone();
+        new.default_calendar_id = 999;
+        assert_eq!(set_settings_impl(&st, new, |_, _| Ok(())).unwrap_err().code, "invalid");
     }
 
     #[test]
