@@ -13,6 +13,9 @@
   import MonthGrid from './MonthGrid.svelte';
   import Inspector, { type Target } from './Inspector.svelte';
   import TasksView from './TasksView.svelte';
+  import Toast from './Toast.svelte';
+  import { notify } from '../lib/toast.svelte';
+  import { taskInput as toTaskInput } from '../lib/edit';
 
   type View = 'day' | 'week' | 'month' | 'tasks';
   let view = $state<View>('week');
@@ -139,7 +142,7 @@
         kind: 'task',
         id,
         completed: !!t.completedAt,
-        input: { calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz, rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name) },
+        input: toTaskInput(t),
       };
     } catch (e) {
       error = errorMessage(e);
@@ -168,6 +171,9 @@
       const scope = o.recurring ? await askScope('Move', true) : 'all';
       if (!scope) return;
       await api.moveEvent(o.eventId, o.recurring ? o.start : null, start.toISOString(), end.toISOString(), scope);
+      const msg = `Moved “${o.title}” to ${fmtShortDate(start)}${o.allDay ? '' : `, ${fmtTime(start)}`}`;
+      // Undo restores a single event; a change to a repeating series has no undo.
+      notify(msg, o.recurring ? undefined : () => api.moveEvent(o.eventId, null, o.start, o.end, 'all').then(() => {}));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -182,8 +188,10 @@
   }
 
   async function completeTask(t: Task) {
+    const before = toTaskInput(t);
     try {
       await api.setTaskCompleted(t.id, !t.completedAt);
+      notify(t.completedAt ? `Reopened “${t.title}”` : `Completed “${t.title}”`, () => api.updateTask(t.id, before));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -267,6 +275,8 @@
     <Inspector {target} {calendars} {labels} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
   {/if}
 </div>
+
+<Toast />
 
 {#if scopePrompt}
   <div class="scrim">

@@ -73,6 +73,14 @@ export function installMock() {
       case 'get_task': return all.find((t) => t.id === args.id);
       case 'set_task_status': setStatus(all.find((t) => t.id === args.id)!, args.status); changed(); return null;
       case 'set_task_completed': setStatus(all.find((t) => t.id === args.id)!, args.done ? 'done' : 'todo'); changed(); return null;
+      case 'update_task': {
+        const t = all.find((x) => x.id === args.id)!;
+        const i = args.input;
+        Object.assign(t, { title: i.title, due: i.due, dueHasTime: i.dueHasTime, notes: i.notes, labels: labels.filter((l) => i.labels.includes(l.name)) });
+        setStatus(t, i.status);
+        changed();
+        return null;
+      }
       case 'list_labels': return [...labels].sort((a, b) => a.name.localeCompare(b.name));
       case 'update_label': {
         const l = labels.find((x) => x.id === args.id)!;

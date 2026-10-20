@@ -4,8 +4,9 @@
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { api, errorMessage } from '../lib/api';
-  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { ymd } from '../lib/format';
+  import { notify } from '../lib/toast.svelte';
 
   export type Target =
     | { kind: 'event'; id: number | null; occurrence: string | null; recurring: boolean; input: EventInput }
@@ -115,11 +116,7 @@
         if (!input.title) return (error = 'Title is required');
         if (target.id == null) await api.createTask(input);
         else {
-          const t = await api.getTask(target.id);
-          const latest: TaskInput = {
-            calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz, rrule: t.rrule,
-            notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
-          };
+          const latest = taskInput(await api.getTask(target.id));
           await api.updateTask(target.id, mergeTaskSave(target.input, input, latest));
         }
       }
@@ -135,8 +132,16 @@
       if (target.kind === 'event' && target.id != null) {
         const scope = target.recurring ? await askScope('Delete', target.occurrence != null) : 'all';
         if (!scope) return;
+        const { id: _id, ...saved } = await api.getEvent(target.id);
+        void _id;
         await api.deleteEvent(target.id, target.occurrence, scope);
-      } else if (target.kind === 'task' && target.id != null) await api.deleteTask(target.id);
+        // A single event can be recreated; a repeating series change has no undo.
+        notify(`Deleted “${saved.title}”`, target.recurring ? undefined : () => api.createEvent(saved).then(() => {}));
+      } else if (target.kind === 'task' && target.id != null) {
+        const saved = taskInput(await api.getTask(target.id));
+        await api.deleteTask(target.id);
+        notify(`Deleted “${saved.title}”`, () => api.createTask(saved).then(() => {}));
+      }
       onsaved();
     } catch (e) {
       error = errorMessage(e);

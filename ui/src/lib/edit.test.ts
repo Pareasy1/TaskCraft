@@ -40,3 +40,20 @@ describe('mergeTaskSave', () => {
     expect(out.labels).toEqual(['work', 'urgent']);
   });
 });
+
+import { taskInput } from './edit';
+import type { Task } from './types';
+
+describe('taskInput', () => {
+  it('turns a stored task back into a saveable input', () => {
+    const t: Task = {
+      id: 7, calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
+      completedAt: null, recurring: false, rrule: null, notes: 'n', color: '#fff', alerts: [], status: 'inProgress',
+      labels: [{ id: 1, name: 'home', color: '#000' }],
+    };
+    expect(taskInput(t)).toEqual({
+      calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
+      rrule: null, notes: 'n', alerts: [], status: 'inProgress', labels: ['home'],
+    });
+  });
+});

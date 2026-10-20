@@ -4,10 +4,12 @@
   import { api, errorMessage } from '../lib/api';
   import { describeParsed, fmtDayHeading, fmtShortDate, fmtTime } from '../lib/format';
   import {
-    applyFilters, filterTasks, groupTasks, isOverdue, taskCounts, TASK_VIEWS,
+    applyFilters, filterTasks, groupTasks, isOverdue, STATUS_LABEL, taskCounts, TASK_VIEWS,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
   import HighlightInput from '../quick/HighlightInput.svelte';
+  import { taskInput } from '../lib/edit';
+  import { notify } from '../lib/toast.svelte';
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard from './tasks/TaskBoard.svelte';
   import LabelChip from './tasks/LabelChip.svelte';
@@ -99,8 +101,10 @@
   }
 
   async function setStatus(t: Task, s: TaskStatus) {
+    const before = taskInput(t);
     try {
       await api.setTaskStatus(t.id, s);
+      notify(s === 'done' ? `Completed “${t.title}”` : `Moved “${t.title}” to ${STATUS_LABEL[s]}`, () => api.updateTask(t.id, before));
     } catch (err) {
       onerror(errorMessage(err));
     }

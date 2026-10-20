@@ -1,5 +1,5 @@
 // Conversions between store records and inspector form fields.
-import type { AlertSpecUtc, EventInput, TaskInput, TaskStatus } from './types';
+import type { AlertSpecUtc, EventInput, Task, TaskInput, TaskStatus } from './types';
 import { addDays } from './layout';
 import { ymd } from './format';
 
@@ -80,6 +80,14 @@ export function formToEvent(f: EventForm): EventInput {
     url: strOrNull(f.url),
     rrule,
     alerts: [...f.alerts.map((m) => ({ type: 'before' as const, value: m })), ...f.absoluteAlerts],
+  };
+}
+
+/** A stored task as a saveable input (labels by name). */
+export function taskInput(t: Task): TaskInput {
+  return {
+    calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz,
+    rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
   };
 }
 
