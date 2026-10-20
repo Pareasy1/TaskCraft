@@ -262,7 +262,7 @@
   <section class="content">
     <Toolbar bind:view {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
       onnew={() => { if (view === 'tasks') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
-    {#if error}<div class="banner err"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+    {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
     <div class="body">
       {#if hits.length || query.trim()}
         <div class="results">

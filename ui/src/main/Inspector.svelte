@@ -161,7 +161,7 @@
     <span class="kind">{target.kind === 'event' ? (target.id == null ? 'New event' : 'Event') : target.id == null ? 'New task' : 'Task'}</span>
     <button class="icon-btn" aria-label="Close" onclick={onclose}><X size={16} /></button>
   </div>
-  {#if error}<div class="banner"><span>{error}</span></div>{/if}
+  {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
 
   {#if ev}
     <input class="field title" bind:value={ev.title} onblur={reparseTitle} placeholder="Title — or type “lunch tomorrow at 1”" />

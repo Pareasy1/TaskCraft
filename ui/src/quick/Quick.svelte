@@ -155,8 +155,8 @@
     <PreviewCard item={parsed} calendarColor={previewColor} />
     <div class="hint">↩ Add · ⌘↩ Add &amp; open · esc Clear</div>
   {/if}
-  {#if flash}<div class="flash">{flash}</div>{/if}
-  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+  <div role="status" aria-live="polite">{#if flash}<div class="flash">{flash}</div>{/if}</div>
+  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">

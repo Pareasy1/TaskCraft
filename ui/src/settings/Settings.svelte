@@ -110,8 +110,8 @@
 
 <main>
   <h1>Settings</h1>
-  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
-  {#if notice}<div class="notice">{notice}</div>{/if}
+  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+  <div role="status" aria-live="polite">{#if notice}<div class="notice">{notice}</div>{/if}</div>
 
   {#if settings}
     <section>
