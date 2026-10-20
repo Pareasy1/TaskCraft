@@ -44,9 +44,12 @@
   const pretty = (hk: string) =>
     hk.split('+').map((p) => SYMBOL[p] ?? (p.startsWith('Key') ? p.slice(3) : p.startsWith('Digit') ? p.slice(5) : p)).join('');
 
+  // Keys go to the shortcut button while it records, so Esc cancels the
+  // recording instead of closing the Settings dialog around it.
   function record(e: KeyboardEvent) {
     if (!recording) return;
     e.preventDefault();
+    e.stopPropagation();
     if (e.key === 'Escape') return void (recording = false);
     if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return;
     const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
@@ -107,9 +110,8 @@
   });
 </script>
 
-<svelte:window onkeydown={record} />
 
-<main>
+<div class="settings">
   {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
   <div role="status" aria-live="polite">{#if notice}<div class="notice">{notice}</div>{/if}</div>
 
@@ -119,7 +121,7 @@
       <div class="group">
       <div class="row">
         <span>{t('settings.shortcut')}</span>
-        <button class="btn hotkey" class:rec={recording} onclick={() => (recording = !recording)}>
+        <button class="btn hotkey" class:rec={recording} onclick={() => (recording = !recording)} onkeydown={record} onblur={() => (recording = false)}>
           {recording ? t('settings.recording') : pretty(settings.hotkey)}
         </button>
       </div>
@@ -193,13 +195,11 @@
       </div>
     </section>
   {/if}
-</main>
+</div>
 
 <style>
-  /* A centred column of grouped rows, like macOS settings. align-content keeps
-     the window's spare height at the bottom instead of between sections. */
-  main { height: 100%; overflow-y: auto; padding: 22px 24px 28px; display: grid; align-content: start; gap: 18px;
-    max-width: 560px; margin: 0 auto; }
+  /* Grouped rows, like macOS settings; shown inside the Settings dialog. */
+  .settings { position: relative; display: grid; align-content: start; gap: 18px; }
   h2 { margin: 0 0 6px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
   section { display: grid; }
   .group { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 10px; padding: 2px 12px; }
@@ -218,5 +218,5 @@
   .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; }
   .small { width: auto; }
   .hint { color: var(--muted); font-size: 12px; }
-  .notice { position: fixed; top: 14px; right: 18px; color: var(--label-time); font-size: 12px; }
+  .notice { position: absolute; top: 0; right: 4px; color: var(--label-time); font-size: 12px; }
 </style>

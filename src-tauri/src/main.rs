@@ -35,6 +35,11 @@ fn open_item(app: tauri::AppHandle, item: commands::ItemRef) {
 }
 
 #[tauri::command]
+fn take_pending_settings(p: tauri::State<windows::PendingSettings>) -> bool {
+    p.take()
+}
+
+#[tauri::command]
 fn take_pending_focus(p: tauri::State<PendingFocus>) -> Option<commands::ItemRef> {
     p.0.lock().ok().and_then(|mut s| s.take())
 }
@@ -95,6 +100,7 @@ fn main() {
         ))
         .manage(state)
         .manage(PendingFocus::default())
+        .manage(windows::PendingSettings::default())
         .manage(scheduler::LastFired::default())
         .invoke_handler(tauri::generate_handler![
             commands::parse_preview,
@@ -128,6 +134,7 @@ fn main() {
             open_settings,
             open_item,
             take_pending_focus,
+            take_pending_settings,
             quit_app,
         ])
         .setup(|app| {

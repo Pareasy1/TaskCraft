@@ -43,6 +43,7 @@ Requires Rust (rustup), Node, and the Tauri CLI (`cargo install tauri-cli --vers
 
 - Data: `~/Library/Application Support/TaskCraft/taskcraft.db` (+ `settings.json`)
 - Logs: `~/Library/Logs/TaskCraft/`
+- **Settings:** the gear in the main window's bottom-left corner, ⌘, or *Settings…* in the menu-bar menu. It opens as a dialog over the main window.
 - Backup / move to another calendar app: Settings → Export .ics…
 
 ## Uninstall
@@ -57,5 +58,5 @@ rm -rf /Applications/TaskCraft.app ~/Library/Application\ Support/TaskCraft ~/Li
 cargo test --workspace          # parser, store, app
 npm --prefix ui run test        # UI layout helpers
 cd src-tauri && cargo tauri dev # run with hot reload
-npm --prefix ui run dev         # browser preview with a mock backend: http://localhost:5173/?window=main|quick|settings
+npm --prefix ui run dev         # browser preview with a mock backend: http://localhost:5173/?window=main|quick (add &lang=it for Italian)
 ```

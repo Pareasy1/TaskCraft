@@ -23,7 +23,6 @@ pub struct Text {
     pub open: &'static str,
     pub settings: &'static str,
     pub quit: &'static str,
-    pub settings_window: &'static str,
     pub all_day: &'static str,
     /// Prefix for a task's due time, e.g. "Due 18:00".
     pub due: &'static str,
@@ -33,7 +32,6 @@ const EN: Text = Text {
     open: "Open TaskCraft",
     settings: "Settings…",
     quit: "Quit TaskCraft",
-    settings_window: "TaskCraft Settings",
     all_day: "All day",
     due: "Due",
 };
@@ -42,7 +40,6 @@ const IT: Text = Text {
     open: "Apri TaskCraft",
     settings: "Impostazioni…",
     quit: "Esci da TaskCraft",
-    settings_window: "Impostazioni di TaskCraft",
     all_day: "Tutto il giorno",
     due: "Scade alle",
 };
