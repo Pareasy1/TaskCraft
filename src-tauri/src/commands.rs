@@ -6,7 +6,7 @@ use crate::state::AppState;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
-use taskcraft_parse::{parse, ParseOptions, ParsedItem};
+use taskcraft_parse::{parse, parse_task, ParseOptions, ParsedItem};
 use taskcraft_store::*;
 use tauri::{AppHandle, Emitter, State};
 
@@ -80,16 +80,30 @@ fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
     })
 }
 
-pub fn parse_preview_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> CmdResult<ParsedItem> {
-    Ok(parse(text, now, &parse_options(st)?))
+pub fn parse_preview_impl(
+    st: &AppState,
+    text: &str,
+    now: DateTime<Tz>,
+    as_task: bool,
+) -> CmdResult<ParsedItem> {
+    let opts = parse_options(st)?;
+    Ok(if as_task {
+        parse_task(text, now, &opts)
+    } else {
+        parse(text, now, &opts)
+    })
 }
 
-pub fn create_from_text_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> CmdResult<ItemRef> {
+pub fn create_from_text_impl(
+    st: &AppState,
+    text: &str,
+    now: DateTime<Tz>,
+    as_task: bool,
+) -> CmdResult<ItemRef> {
     if text.trim().is_empty() {
         return Err(CmdError::new("empty", "Type something to create an item"));
     }
-    let opts = parse_options(st)?;
-    let p = parse(text, now, &opts);
+    let p = parse_preview_impl(st, text, now, as_task)?;
     let settings = st.settings.read().map_err(poisoned)?.clone();
     let store = st.store.lock().map_err(poisoned)?;
     let calendars = store.calendars()?;
@@ -127,13 +141,22 @@ fn changed(app: &AppHandle) {
 // ---------- commands ----------
 
 #[tauri::command]
-pub fn parse_preview(st: State<AppState>, text: String) -> CmdResult<ParsedItem> {
-    parse_preview_impl(&st, &text, local_now())
+pub fn parse_preview(
+    st: State<AppState>,
+    text: String,
+    as_task: Option<bool>,
+) -> CmdResult<ParsedItem> {
+    parse_preview_impl(&st, &text, local_now(), as_task.unwrap_or(false))
 }
 
 #[tauri::command]
-pub fn create_from_text(app: AppHandle, st: State<AppState>, text: String) -> CmdResult<ItemRef> {
-    let r = create_from_text_impl(&st, &text, local_now())?;
+pub fn create_from_text(
+    app: AppHandle,
+    st: State<AppState>,
+    text: String,
+    as_task: Option<bool>,
+) -> CmdResult<ItemRef> {
+    let r = create_from_text_impl(&st, &text, local_now(), as_task.unwrap_or(false))?;
     changed(&app);
     Ok(r)
 }
@@ -402,7 +425,7 @@ mod tests {
     #[test]
     fn creates_event_in_default_calendar() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "Lunch with Sam tomorrow at 1", now()).unwrap();
+        let r = create_from_text_impl(&st, "Lunch with Sam tomorrow at 1", now(), false).unwrap();
         assert_eq!(r.kind, ItemKindDb::Event);
         let e = st.store.lock().unwrap().get_event(r.id).unwrap().input;
         assert_eq!(e.title, "Lunch");
@@ -414,9 +437,22 @@ mod tests {
     }
 
     #[test]
+    fn as_task_creates_task_without_prefix() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "call mom tomorrow 9am", now(), true).unwrap();
+        assert_eq!(r.kind, ItemKindDb::Task);
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        assert_eq!(t.title, "call mom");
+        assert!(t.due_has_time);
+        let p = parse_preview_impl(&st, "buy milk", now(), true).unwrap();
+        assert_eq!(p.kind, taskcraft_parse::ItemKind::Task);
+        assert_eq!(p.start, None);
+    }
+
+    #[test]
     fn creates_task_from_prefix() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "todo buy milk friday", now()).unwrap();
+        let r = create_from_text_impl(&st, "todo buy milk friday", now(), false).unwrap();
         assert_eq!(r.kind, ItemKindDb::Task);
         assert_eq!(
             st.store.lock().unwrap().get_task(r.id).unwrap().title,
@@ -427,7 +463,7 @@ mod tests {
     #[test]
     fn slash_calendar_overrides_default() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "Standup tomorrow 9am /work", now()).unwrap();
+        let r = create_from_text_impl(&st, "Standup tomorrow 9am /work", now(), false).unwrap();
         let store = st.store.lock().unwrap();
         let work = store
             .calendars()
@@ -496,7 +532,7 @@ mod tests {
     #[test]
     fn empty_text_is_rejected() {
         let st = AppState::in_memory();
-        let err = create_from_text_impl(&st, "   ", now()).unwrap_err();
+        let err = create_from_text_impl(&st, "   ", now(), false).unwrap_err();
         assert_eq!(err.code, "empty");
     }
 }

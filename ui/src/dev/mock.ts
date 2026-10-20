@@ -32,8 +32,9 @@ export function installMock() {
     today: [task(11, 'Call mom', d(0, 18), true)],
     upcoming: [task(12, 'Buy milk', midnight(3), false), task(13, 'Read book', null, false)],
     completed: [task(14, 'Book dentist', midnight(-1), false, true)],
-    all: [],
+    all: [] as ReturnType<typeof task>[],
   };
+  tasks.all = [...tasks.overdue, ...tasks.today, ...tasks.upcoming, task(15, 'Renew passport', d(1, 11), true), ...tasks.completed];
   mockIPC((cmd, args: any) => {
     switch (cmd) {
       case 'list_calendars': return calendars;

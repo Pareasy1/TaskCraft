@@ -18,6 +18,10 @@ All data stays on this Mac.
 - **Main window:** ⌘1 Day · ⌘2 Week · ⌘3 Month · ⌘N new event · ⌘T today.
   Drag events to move them, drag the bottom edge to resize, double-click empty
   space to create. Closing the window keeps TaskCraft in the menu bar.
+- **Tasks page:** ⌘4 (or *Tasks* in the toolbar). Everything typed there becomes a
+  task — dates are optional ("buy milk", "pay rent friday 9am"). Filter by
+  All / Today / Upcoming / No date / Completed; tasks are grouped by due day,
+  overdue first. Click a task to edit it.
 
 ## Install / update
 

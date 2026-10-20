@@ -15,10 +15,23 @@ use token::{TokKind, Token};
 /// Parse a quick-entry sentence. Never panics, never fails: in the worst case
 /// the whole input becomes the title.
 pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem {
+    parse_kind(input, now, opts, false)
+}
+
+/// Like [`parse`], but the result is always a task (no prefix needed).
+pub fn parse_task(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem {
+    parse_kind(input, now, opts, true)
+}
+
+fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: bool) -> ParsedItem {
     let lead_ws = input.len() - input.trim_start().len();
     let body = &input[lead_ws..];
     let mut spans = Vec::new();
-    let mut kind = ItemKind::Event;
+    let mut kind = if force_task {
+        ItemKind::Task
+    } else {
+        ItemKind::Event
+    };
     let mut offset = lead_ws;
     if let Some(len) = rules::prefix::task_prefix_len(body) {
         kind = ItemKind::Task;

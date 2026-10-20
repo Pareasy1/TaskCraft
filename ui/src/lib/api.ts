@@ -7,8 +7,8 @@ import type {
 } from './types';
 
 export const api = {
-  parsePreview: (text: string) => invoke<ParsedItem>('parse_preview', { text }),
-  createFromText: (text: string) => invoke<ItemRef>('create_from_text', { text }),
+  parsePreview: (text: string, asTask = false) => invoke<ParsedItem>('parse_preview', { text, asTask }),
+  createFromText: (text: string, asTask = false) => invoke<ItemRef>('create_from_text', { text, asTask }),
   getEvent: (id: number) => invoke<EventFull>('get_event', { id }),
   createEvent: (input: EventInput) => invoke<number>('create_event', { input }),
   updateEvent: (id: number, input: EventInput) => invoke<void>('update_event', { id, input }),

@@ -17,7 +17,7 @@ pub fn run(text: &str, now: DateTime<Tz>) -> Result<String, CmdError> {
         settings: RwLock::new(Settings::default()),
         settings_path: None,
     };
-    let r = create_from_text_impl(&st, text, now)?;
+    let r = create_from_text_impl(&st, text, now, false)?;
     let store = st
         .store
         .lock()

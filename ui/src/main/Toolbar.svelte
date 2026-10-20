@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-svelte';
 
-  type View = 'day' | 'week' | 'month';
+  type View = 'day' | 'week' | 'month' | 'tasks';
   let {
     view = $bindable<View>('week'),
     title,
@@ -26,14 +26,16 @@
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
   <div class="right">
-    <button class="icon-btn" title="New event (⌘N)" onclick={onnew}><Plus size={17} /></button>
-    <div class="nav">
-      <button class="icon-btn" aria-label="Previous" onclick={onprev}><ChevronLeft size={17} /></button>
-      <button class="btn today" onclick={ontoday}>Today</button>
-      <button class="icon-btn" aria-label="Next" onclick={onnext}><ChevronRight size={17} /></button>
-    </div>
+    <button class="icon-btn" title={view === 'tasks' ? 'New task (⌘N)' : 'New event (⌘N)'} onclick={onnew}><Plus size={17} /></button>
+    {#if view !== 'tasks'}
+      <div class="nav">
+        <button class="icon-btn" aria-label="Previous" onclick={onprev}><ChevronLeft size={17} /></button>
+        <button class="btn today" onclick={ontoday}>Today</button>
+        <button class="icon-btn" aria-label="Next" onclick={onnext}><ChevronRight size={17} /></button>
+      </div>
+    {/if}
     <div class="seg" role="tablist">
-      {#each [['day', 'Day', '⌘1'], ['week', 'Week', '⌘2'], ['month', 'Month', '⌘3']] as [v, label, key]}
+      {#each [['day', 'Day', '⌘1'], ['week', 'Week', '⌘2'], ['month', 'Month', '⌘3'], ['tasks', 'Tasks', '⌘4']] as [v, label, key]}
         <button role="tab" class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
       {/each}
     </div>

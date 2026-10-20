@@ -11,8 +11,9 @@
   import DayWeekGrid from './DayWeekGrid.svelte';
   import MonthGrid from './MonthGrid.svelte';
   import Inspector, { type Target } from './Inspector.svelte';
+  import TasksView from './TasksView.svelte';
 
-  type View = 'day' | 'week' | 'month';
+  type View = 'day' | 'week' | 'month' | 'tasks';
   let view = $state<View>('week');
   let anchor = $state(startOfDay(new Date()));
   let sideMonth = $state(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -21,6 +22,8 @@
   let occurrences = $state<Occurrence[]>([]);
   let sideOcc = $state<Occurrence[]>([]);
   let taskSections = $state<{ name: string; tasks: Task[] }[]>([]);
+  let allTasks = $state<Task[]>([]);
+  let taskInput = $state<HTMLInputElement | undefined>();
   let query = $state('');
   let hits = $state<Hit[]>([]);
   let target = $state<Target | null>(null);
@@ -38,6 +41,7 @@
     return [days[0], addDays(days[days.length - 1], 1)] as const;
   });
   let title = $derived.by(() => {
+    if (view === 'tasks') return 'Tasks';
     if (view === 'month') return monthTitle(anchor);
     if (view === 'day') return anchor.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const a = days[0], b = days[6];
@@ -48,7 +52,7 @@
   async function refresh() {
     try {
       const sg = monthGrid(sideMonth.getFullYear(), sideMonth.getMonth(), weekStart);
-      const [occ, side, cals, s, overdue, today, upcoming, completed] = await Promise.all([
+      const [occ, side, cals, s, overdue, today, upcoming, completed, all] = await Promise.all([
         api.listRange(range[0], range[1]),
         api.listRange(sg[0], addDays(sg[41], 1)),
         api.listCalendars(),
@@ -57,7 +61,9 @@
         api.listTasks('today'),
         api.listTasks('upcoming'),
         api.listTasks('completed'),
+        api.listTasks('all'),
       ]);
+      allTasks = all;
       occurrences = occ;
       sideOcc = side;
       calendars = cals;
@@ -185,7 +191,9 @@
     if (e.key === '1') view = 'day';
     else if (e.key === '2') view = 'week';
     else if (e.key === '3') view = 'month';
+    else if (e.key === '4') view = 'tasks';
     else if (e.key === 't' && tag !== 'INPUT') goToday();
+    else if (e.key === 'n' && view === 'tasks') taskInput?.focus();
     else if (e.key === 'n') {
       const s = new Date();
       s.setMinutes(0, 0, 0);
@@ -223,7 +231,7 @@
   />
   <section class="content">
     <Toolbar bind:view {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
-      onnew={() => { const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
+      onnew={() => { if (view === 'tasks') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
     {#if error}<div class="banner err"><span>{error}</span><button class="icon-btn" onclick={() => (error = '')}>✕</button></div>{/if}
     <div class="body">
       {#if hits.length || query.trim()}
@@ -237,6 +245,8 @@
             </button>
           {/each}
         </div>
+      {:else if view === 'tasks'}
+        <TasksView tasks={allTasks} bind:input={taskInput} oncomplete={completeTask} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences}
           onselect={(o) => openEvent(o.eventId, o.start)}
