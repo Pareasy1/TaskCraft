@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
 
 pub(crate) const TASK_COLS: &str =
-    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color";
+    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status";
 
 pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
     let rrule: Option<String> = r.get(7)?;
@@ -21,6 +21,8 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         notes: r.get(8)?,
         color: r.get(9)?,
         alerts: vec![],
+        status: TaskStatus::from_sql(&r.get::<_, String>(10)?),
+        labels: vec![],
     })
 }
 

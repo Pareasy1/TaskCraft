@@ -36,8 +36,8 @@ pub(crate) fn parse_ts(s: &str) -> DateTime<Utc> {
 
 impl Store {
     /// Opens (creating if needed) the database at `path`. If migrations are
-    /// pending on an existing file, it is first copied to
-    /// `<name>.bak-v<old version>`.
+    /// pending on an existing file, a consistent copy (including rows still
+    /// in the `-wal` file) is first written to `<name>.bak-v<old version>`.
     pub fn open(path: &Path) -> Result<Store> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -48,7 +48,9 @@ impl Store {
         if existed && v < schema::CURRENT_VERSION {
             let mut bak = path.as_os_str().to_owned();
             bak.push(format!(".bak-v{v}"));
-            std::fs::copy(path, &bak)?;
+            // VACUUM INTO refuses to overwrite an existing file.
+            let _ = std::fs::remove_file(&bak);
+            conn.execute("VACUUM INTO ?1", [bak.to_string_lossy()])?;
         }
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::init(&mut conn)?;

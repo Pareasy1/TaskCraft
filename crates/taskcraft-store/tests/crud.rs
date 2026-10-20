@@ -49,7 +49,7 @@ fn open_seeds_calendars() {
     let s = Store::open_in_memory().unwrap();
     let names: Vec<String> = s.calendars().unwrap().into_iter().map(|c| c.name).collect();
     assert_eq!(names, ["Personal", "Work"]);
-    assert_eq!(s.schema_version().unwrap(), 1);
+    assert_eq!(s.schema_version().unwrap(), 2);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn migration_backs_up() {
         .execute_batch("CREATE TABLE junk(x); INSERT INTO junk VALUES (1);")
         .unwrap();
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 1);
+    assert_eq!(s.schema_version().unwrap(), 2);
     assert!(dir.path().join("taskcraft.db.bak-v0").exists());
 }
 
@@ -72,7 +72,7 @@ fn reopen_does_not_reseed_or_backup() {
     drop(Store::open(&path).unwrap());
     let s = Store::open(&path).unwrap();
     assert_eq!(s.calendars().unwrap().len(), 2);
-    assert!(!dir.path().join("taskcraft.db.bak-v1").exists());
+    assert!(!dir.path().join("taskcraft.db.bak-v2").exists());
 }
 
 #[test]
