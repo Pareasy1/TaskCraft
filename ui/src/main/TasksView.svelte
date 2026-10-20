@@ -1,11 +1,11 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
-  import { Rows3, Columns3, Tags } from 'lucide-svelte';
+  import { Rows3, Columns3 } from 'lucide-svelte';
   import type { ParsedItem, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
   import { describeParsed, fmtDayHeading, fmtShortDate, fmtTime } from '../lib/format';
   import {
-    applyFilters, filterTasks, groupTasks, isOverdue, taskCounts, TASK_VIEWS,
+    applyFilters, filterTasks, isOverdue, taskCounts, taskPageGroups,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
   import HighlightInput from '../quick/HighlightInput.svelte';
@@ -13,7 +13,6 @@
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard from './tasks/TaskBoard.svelte';
   import LabelChip from './tasks/LabelChip.svelte';
-  import LabelManager from './tasks/LabelManager.svelte';
 
   let {
     tasks,
@@ -21,18 +20,23 @@
     onopen,
     onerror,
     input = $bindable<HTMLInputElement | undefined>(),
+    active = $bindable<number[]>([]),
   }: {
     tasks: Task[];
     labels: TaskLabel[];
     onopen: (t: Task) => void;
     onerror: (msg: string) => void;
     input?: HTMLInputElement;
+    /** Label filter (ids); the sidebar's label list edits it too. */
+    active?: number[];
   } = $props();
 
   const VIEW_NAMES: Record<TaskView, string> = {
     all: t('view.all'), today: t('view.today'), upcoming: t('view.upcoming'), nodate: t('view.nodate'), completed: t('view.completed'),
   };
-  const STATUS_FILTERS: [StatusFilter, string][] = [['any', t('status.any')], ['todo', t('status.todo')], ['inProgress', t('status.inProgress')]];
+  const STATUS_FILTERS: [StatusFilter, string][] = [
+    ['any', t('status.any')], ['todo', t('status.todo')], ['inProgress', t('status.inProgress')], ['done', t('status.done')],
+  ];
   const LAYOUT_KEY = 'taskcraft.tasks.layout';
 
   const stored = (() => {
@@ -45,21 +49,19 @@
   let layout = $state<'list' | 'board'>(stored === 'board' ? 'board' : 'list');
   let view = $state<TaskView>('all');
   let status = $state<StatusFilter>('any');
-  let active = $state<number[]>([]);
-  let managing = $state(false);
   let text = $state('');
   let parsed = $state<ParsedItem | null>(null);
 
   // Re-evaluated on every data refresh so "overdue" follows the clock.
   let now = $derived.by(() => (void tasks, new Date()));
   let labelled = $derived(applyFilters(tasks, { status: 'any', labels: active }));
-  let filtered = $derived(applyFilters(tasks, { status, labels: active }));
-  let groups = $derived(groupTasks(filtered, view, now));
-  let counts = $derived(taskCounts(layout === 'list' ? filtered : labelled, now));
+  let groups = $derived(taskPageGroups(tasks, { view, status, labels: active }, now));
+  // Date-tab counts follow the status filter, except Done (which has no date tabs).
+  let counts = $derived(taskCounts(layout === 'list' && status !== 'done' ? applyFilters(tasks, { status, labels: active }) : labelled, now));
   // The board shows open tasks for the date filter plus every finished one.
   let boardTasks = $derived([...filterTasks(labelled, view, now), ...labelled.filter((t) => t.completedAt)]);
-  let usage = $derived(new Map(labels.map((l) => [l.id, tasks.filter((t) => !t.completedAt && t.labels.some((x) => x.id === l.id)).length])));
-  let views = $derived(layout === 'board' ? TASK_VIEWS.filter((v) => v !== 'completed') : TASK_VIEWS);
+  // Four date tabs; finished tasks live under the Done status (or the board's Done column).
+  const views: TaskView[] = ['all', 'today', 'upcoming', 'nodate'];
 
   $effect(() => {
     try {
@@ -67,7 +69,7 @@
     } catch {
       // Storage unavailable: the choice just isn't remembered.
     }
-    if (layout === 'board' && view === 'completed') view = 'all';
+    if (layout === 'board' && status === 'done') status = 'any';
   });
 
   // Drop filters for labels that were deleted.
@@ -125,14 +127,13 @@
   };
 
   const emptyText = () =>
-    active.length || status !== 'any'
+    active.length || (status !== 'any' && status !== 'done')
       ? t('tasks.emptyFiltered')
-      : view === 'completed'
+      : status === 'done'
         ? t('tasks.emptyCompleted')
         : t('tasks.empty');
 </script>
 
-<svelte:window onpointerdown={(e) => managing && !(e.target as HTMLElement).closest?.('.mgr') && (managing = false)} />
 
 <div class="page" class:board={layout === 'board'}>
   <div class="head">
@@ -155,28 +156,22 @@
   </div>
 
   <div class="filters">
-    <div class="views" role="tablist" aria-label={t('tasks.due')}>
-      {#each views as v}
-        <button role="tab" aria-selected={view === v} class:on={view === v} onclick={() => (view = v)}>
-          {VIEW_NAMES[v]}<span class="n">{counts[v]}</span>
-        </button>
-      {/each}
-    </div>
-    {#if layout === 'list'}
-      <select class="status" bind:value={status} aria-label={t('inspector.status')}>
-        {#each STATUS_FILTERS as [v, name]}<option value={v}>{name}</option>{/each}
-      </select>
+    {#if !(layout === 'list' && status === 'done')}
+      <div class="views" role="group" aria-label={t('tasks.due')}>
+        {#each views as v}
+          <button aria-pressed={view === v} class:on={view === v} onclick={() => (view = v)}>
+            {VIEW_NAMES[v]}<span class="n">{counts[v]}</span>
+          </button>
+        {/each}
+      </div>
     {/if}
-    <div class="labels">
-      {#each labels as l (l.id)}
-        <LabelChip name={l.name} color={l.color} active={active.includes(l.id)} count={usage.get(l.id)} onclick={() => toggleLabel(l.id)} />
-      {/each}
-      {#if active.length}<button class="clear" onclick={() => (active = [])}>{t('tasks.clear')}</button>{/if}
-      <span class="mgr">
-        <button class="icon-btn" title={t('tasks.manageLabels')} aria-label={t('tasks.manageLabels')} aria-expanded={managing} onclick={() => (managing = !managing)}><Tags size={15} /></button>
-        {#if managing}<LabelManager {labels} onclose={() => (managing = false)} {onerror} />{/if}
-      </span>
-    </div>
+    {#if layout === 'list'}
+      <div class="status" role="group" aria-label={t('inspector.status')}>
+        {#each STATUS_FILTERS as [v, name]}
+          <button aria-pressed={status === v} class:on={status === v} onclick={() => (status = v)}>{name}</button>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   <div class="content">
@@ -217,10 +212,10 @@
   .views button.on { color: var(--text); background: var(--hover); font-weight: 600; }
   .views button:focus-visible { outline: 2px solid var(--accent); }
   .n { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--faint); font-weight: 400; }
-  .status { border: 1px solid var(--border); background: var(--surface-strong); border-radius: 7px; padding: 3px 6px; color: var(--muted); }
-  .labels { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
-  .clear { border: none; background: none; color: var(--accent); font-size: 12px; padding: 2px 4px; }
-  .mgr { position: relative; }
+  /* Status: a small segmented control at the end of the row. */
+  .status { display: flex; margin-left: auto; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .status button { border: none; background: none; padding: 3px 9px; border-radius: 6px; color: var(--muted); font-size: 12px; }
+  .status button.on { background: var(--surface-strong); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 
   .content { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 24px; }
   .board .content { padding-top: 14px; overflow: hidden; }
@@ -231,6 +226,6 @@
   @media (max-width: 640px) {
     .page { padding: 12px 16px 0; }
     .layout span { display: none; }
-    .labels { margin-left: 0; }
+    .status { margin-left: 0; }
   }
 </style>

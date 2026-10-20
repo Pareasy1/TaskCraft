@@ -107,3 +107,41 @@ describe('nextStatus', () => {
     expect(nextStatus('done')).toBe('todo');
   });
 });
+
+import { sidebarSections, taskPageGroups } from './tasks';
+
+describe('sidebarSections (same rules as the Tasks page)', () => {
+  type W = T & { status: S; labels: { id: number }[] };
+  const w = (id: number, due: string | null, dueHasTime = false, status: S = 'todo'): W =>
+    ({ id, due, dueHasTime, completedAt: status === 'done' ? at(20, 8) : null, status, labels: [] });
+  const xs = [w(1, at(18)), w(2, at(20, 18), true), w(3, at(22)), w(4, null), w(5, at(19), false, 'done'), w(6, at(20, 9), true)];
+  it('splits into overdue, today, upcoming, no date and completed', () => {
+    const s = sidebarSections(xs, now);
+    expect(s.map((x) => [x.key, ids(x.tasks)])).toEqual([
+      ['overdue', [1, 6]],
+      ['today', [2]],
+      ['upcoming', [3]],
+      ['nodate', [4]],
+      ['completed', [5]],
+    ]);
+  });
+});
+
+describe('taskPageGroups (date tabs + status + labels)', () => {
+  type W = T & { status: S; labels: { id: number }[] };
+  const w = (id: number, due: string | null, status: S = 'todo', lbl: number[] = []): W =>
+    ({ id, due, dueHasTime: false, completedAt: status === 'done' ? at(19, 8) : null, status, labels: lbl.map((x) => ({ id: x })) });
+  const xs = [w(1, at(20), 'todo', [1]), w(2, at(22), 'inProgress', [2]), w(3, null, 'todo', [1]), w(4, at(19), 'done', [1])];
+  const flat = (g: { tasks: W[] }[]) => g.flatMap((x) => ids(x.tasks));
+  it('open tasks by date tab, filtered by status and labels', () => {
+    expect(flat(taskPageGroups(xs, { view: 'all', status: 'any', labels: [] }, now))).toEqual([1, 2, 3]);
+    expect(flat(taskPageGroups(xs, { view: 'all', status: 'inProgress', labels: [] }, now))).toEqual([2]);
+    expect(flat(taskPageGroups(xs, { view: 'nodate', status: 'any', labels: [1] }, now))).toEqual([3]);
+  });
+  it('status Done lists finished tasks (any date), still label-filtered', () => {
+    const g = taskPageGroups(xs, { view: 'today', status: 'done', labels: [1] }, now);
+    expect(g.map((x) => x.kind)).toEqual(['completed']);
+    expect(flat(g)).toEqual([4]);
+    expect(taskPageGroups(xs, { view: 'all', status: 'done', labels: [2] }, now)).toEqual([]);
+  });
+});

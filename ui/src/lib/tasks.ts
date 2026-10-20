@@ -76,7 +76,7 @@ export function taskCounts(tasks: TaskLike[], now: Date): Record<TaskView, numbe
 
 // ── Status and labels ────────────────────────────────────────────────
 
-export type StatusFilter = 'any' | 'todo' | 'inProgress';
+export type StatusFilter = 'any' | 'todo' | 'inProgress' | 'done';
 type WithStatus = TaskLike & { status: TaskStatus; labels: { id: number }[] };
 
 export const STATUSES: TaskStatus[] = ['todo', 'inProgress', 'done'];
@@ -108,4 +108,32 @@ export function boardColumns<T extends WithStatus>(
 
 export function nextStatus(s: TaskStatus): TaskStatus {
   return STATUSES[(STATUSES.indexOf(s) + 1) % STATUSES.length];
+}
+
+/**
+ * The Tasks page: open tasks for the date tab, filtered by status and labels.
+ * Status "done" lists finished tasks instead (any date, newest first).
+ */
+export function taskPageGroups<T extends WithStatus>(
+  tasks: T[],
+  f: { view: TaskView; status: StatusFilter; labels: number[] },
+  now: Date,
+): TaskGroup<T>[] {
+  if (f.status === 'done') return groupTasks(applyFilters(tasks, { status: 'any', labels: f.labels }), 'completed', now);
+  return groupTasks(applyFilters(tasks, { status: f.status, labels: f.labels }), f.view, now);
+}
+
+const DONE_SHOWN = 30;
+
+/** The sidebar's task groups, using the same rules as the Tasks page. */
+export function sidebarSections<T extends TaskLike>(tasks: T[], now: Date): { key: 'overdue' | 'today' | 'upcoming' | 'nodate' | 'completed'; tasks: T[] }[] {
+  const open = tasks.filter((t) => !t.completedAt);
+  const today = startOfDay(now);
+  return [
+    { key: 'overdue', tasks: open.filter((t) => isOverdue(t, now)).sort(byDue) },
+    { key: 'today', tasks: open.filter((t) => t.due && !isOverdue(t, now) && sameDay(new Date(t.due), now)).sort(byDue) },
+    { key: 'upcoming', tasks: open.filter((t) => t.due && startOfDay(new Date(t.due)) > today).sort(byDue) },
+    { key: 'nodate', tasks: open.filter((t) => !t.due).sort((a, b) => a.id - b.id) },
+    { key: 'completed', tasks: filterTasks(tasks, 'completed', now).slice(0, DONE_SHOWN) },
+  ];
 }

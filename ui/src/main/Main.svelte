@@ -17,6 +17,7 @@
   import Toast from './Toast.svelte';
   import { notify } from '../lib/toast.svelte';
   import { changeStatus } from '../lib/actions';
+  import { sidebarSections } from '../lib/tasks';
   import { taskInput as toTaskInput } from '../lib/edit';
 
   type View = 'day' | 'week' | 'month' | 'tasks';
@@ -27,8 +28,14 @@
   let settings = $state<Settings | null>(null);
   let occurrences = $state<Occurrence[]>([]);
   let sideOcc = $state<Occurrence[]>([]);
-  let taskSections = $state<{ key: string; name: string; tasks: Task[] }[]>([]);
   let allTasks = $state<Task[]>([]);
+  // Sidebar groups use the same rules as the Tasks page (see sidebarSections).
+  const SECTION_NAMES = {
+    overdue: t('group.overdue'), today: t('view.today'), upcoming: t('view.upcoming'), nodate: t('view.nodate'), completed: t('view.completed'),
+  };
+  let taskSections = $derived(sidebarSections(allTasks, new Date()).map((sec) => ({ ...sec, name: SECTION_NAMES[sec.key] })));
+  /** Label filter shared by the Tasks page and the sidebar's label list. */
+  let activeLabels = $state<number[]>([]);
   let labels = $state<TaskLabel[]>([]);
   let taskInput = $state<HTMLInputElement | undefined>();
   let query = $state('');
@@ -48,7 +55,11 @@
     return [days[0], addDays(days[days.length - 1], 1)] as const;
   });
   let title = $derived.by(() => {
-    if (view === 'tasks') return t('toolbar.tasks');
+    if (view === 'tasks') {
+      // The view switcher already says "Tasks"; the title says how many are open.
+      const n = allTasks.filter((x) => !x.completedAt).length;
+      return n === 0 ? t('tasks.openNone') : n === 1 ? t('tasks.openOne') : t('tasks.openMany', { n });
+    }
     if (view === 'month') return monthTitle(anchor);
     if (view === 'day') return fmtLongDate(anchor);
     const a = days[0], b = days[6];
@@ -59,15 +70,11 @@
   async function refresh() {
     try {
       const sg = monthGrid(sideMonth.getFullYear(), sideMonth.getMonth(), weekStart);
-      const [occ, side, cals, s, overdue, today, upcoming, completed, all, lbls] = await Promise.all([
+      const [occ, side, cals, s, all, lbls] = await Promise.all([
         api.listRange(range[0], range[1]),
         api.listRange(sg[0], addDays(sg[41], 1)),
         api.listCalendars(),
         api.getSettings(),
-        api.listTasks('overdue'),
-        api.listTasks('today'),
-        api.listTasks('upcoming'),
-        api.listTasks('completed'),
         api.listTasks('all'),
         api.listLabels(),
       ]);
@@ -77,12 +84,6 @@
       sideOcc = side;
       calendars = cals;
       settings = s;
-      taskSections = [
-        { key: 'overdue', name: t('group.overdue'), tasks: overdue },
-        { key: 'today', name: t('view.today'), tasks: today },
-        { key: 'upcoming', name: t('view.upcoming'), tasks: upcoming },
-        { key: 'completed', name: t('view.completed'), tasks: completed.slice(0, 30) },
-      ];
     } catch (e) {
       error = errorMessage(e);
     }
@@ -272,6 +273,11 @@
     {marked}
     {weekStart}
     {taskSections}
+    tasksMode={view === 'tasks'}
+    {labels}
+    tasks={allTasks}
+    bind:activeLabels
+    onerror={(m) => (error = m)}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
     onstatus={setStatus}
@@ -294,7 +300,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={allTasks} {labels} bind:input={taskInput} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={allTasks} {labels} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}
