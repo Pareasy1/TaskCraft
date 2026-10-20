@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download TaskCraft</title>
+  <meta name="description" content="TaskCraft: calendar and tasks with natural-language quick entry, for Mac, Windows and Linux.">
+  <link rel="icon" href="icon.png">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f9;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #545458;
+      --border: rgba(0, 0, 0, 0.1);
+      --accent: #1268d6;
+      --on-accent: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #161618;
+        --card: #1f1f22;
+        --text: #f5f5f7;
+        --muted: #a1a1a6;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #5aa2ff;
+        --on-accent: #1c1c1e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 16px;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+    main { width: min(520px, 100%); text-align: center; }
+    img.icon { width: 112px; height: 112px; }
+    h1 { font-size: 32px; margin: 12px 0 4px; letter-spacing: -0.02em; }
+    .lede { color: var(--muted); margin: 0 auto 28px; max-width: 34ch; }
+    .primary {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: var(--on-accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 18px;
+    }
+    .primary small { font-weight: 400; font-size: 13px; opacity: 0.85; }
+    .primary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .others { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; }
+    .others a { color: var(--accent); }
+    .card {
+      margin-top: 32px;
+      padding: 18px 20px;
+      text-align: left;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .card h2 { font-size: 15px; margin: 0 0 6px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .card a { color: var(--accent); }
+    footer { margin-top: 24px; font-size: 13px; color: var(--muted); }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="icon" src="icon.png" alt="">
+    <h1>TaskCraft</h1>
+    <p class="lede" data-i18n="lede">Your calendar and tasks. Type one sentence to add an event or a task.</p>
+
+    <a class="primary" id="primary" href="https://github.com/Pareasy1/TaskCraft/releases/latest">
+      <span id="primary-label" data-i18n="download">Download</span>
+      <small id="primary-note"></small>
+    </a>
+    <ul class="others" id="others" aria-label="Other systems"></ul>
+
+    <section class="card">
+      <h2 data-i18n="firstTitle">The first time you open it</h2>
+      <p id="first-note"></p>
+    </section>
+
+    <footer>
+      <span id="version"></span>
+      <a href="https://github.com/Pareasy1/TaskCraft/blob/main/docs/INSTALL.md" data-i18n="guide">Install guide</a> ·
+      <a href="https://github.com/Pareasy1/TaskCraft/releases" data-i18n="all">All downloads</a>
+    </footer>
+  </main>
+
+  <script>
+    // Picks the installer for the visitor's system from the latest GitHub release.
+    const REPO = 'Pareasy1/TaskCraft';
+    const RELEASES = `https://github.com/${REPO}/releases/latest`;
+    const it = (navigator.language || '').toLowerCase().startsWith('it');
+    const T = it ? {
+      lede: 'Il tuo calendario e le tue attività. Scrivi una frase per aggiungere un evento o un’attività.',
+      download: 'Scarica', for: 'Scarica per', firstTitle: 'La prima volta che lo apri',
+      guide: 'Guida all’installazione', all: 'Tutti i download', version: 'Versione',
+      notReady: 'I programmi di installazione non sono ancora pubblicati.',
+      first: {
+        mac: 'macOS potrebbe bloccarlo una volta: apri Impostazioni di Sistema → Privacy e sicurezza e clicca “Apri comunque”.',
+        windows: 'Se compare “PC protetto da Windows”, clicca “Ulteriori informazioni” e poi “Esegui comunque”.',
+        linux: 'Fai doppio clic sul file .deb: si apre l’app Software, poi clicca “Installa”.',
+      },
+    } : {
+      lede: 'Your calendar and tasks. Type one sentence to add an event or a task.',
+      download: 'Download', for: 'Download for', firstTitle: 'The first time you open it',
+      guide: 'Install guide', all: 'All downloads', version: 'Version',
+      notReady: 'Installers have not been published yet.',
+      first: {
+        mac: 'macOS may block it once: open System Settings → Privacy & Security and click “Open Anyway”.',
+        windows: 'If “Windows protected your PC” appears, click “More info”, then “Run anyway”.',
+        linux: 'Double-click the .deb file: the Software app opens, then click “Install”.',
+      },
+    };
+    document.documentElement.lang = it ? 'it' : 'en';
+    document.querySelectorAll('[data-i18n]').forEach((el) => (el.textContent = T[el.dataset.i18n]));
+
+    const SYSTEMS = {
+      mac: { name: 'Mac', note: 'macOS 14+ · Apple Silicon & Intel', match: (n) => n.endsWith('.dmg') },
+      windows: { name: 'Windows', note: 'Windows 10 & 11', match: (n) => /setup\.exe$/i.test(n) },
+      linux: { name: 'Linux', note: 'Ubuntu, Debian, Mint (.deb)', match: (n) => n.endsWith('.deb') },
+    };
+    const ua = navigator.userAgent;
+    const mine = /Mac/.test(ua) ? 'mac' : /Windows/.test(ua) ? 'windows' : /Linux|X11/.test(ua) ? 'linux' : 'mac';
+
+    function render(assets) {
+      const url = (key) => assets.find((a) => SYSTEMS[key].match(a.name))?.browser_download_url || RELEASES;
+      const primary = document.getElementById('primary');
+      primary.href = url(mine);
+      document.getElementById('primary-label').textContent = `${T.for} ${SYSTEMS[mine].name}`;
+      document.getElementById('primary-note').textContent = assets.length ? SYSTEMS[mine].note : T.notReady;
+      document.getElementById('first-note').textContent = T.first[mine];
+      const others = document.getElementById('others');
+      others.replaceChildren(...Object.keys(SYSTEMS).filter((k) => k !== mine).map((k) => {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = url(k);
+        a.textContent = `${T.for} ${SYSTEMS[k].name}`;
+        li.append(a);
+        return li;
+      }));
+      const appImage = assets.find((a) => a.name.endsWith('.AppImage'));
+      if (appImage) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = appImage.browser_download_url;
+        a.textContent = 'Linux AppImage';
+        li.append(a);
+        others.append(li);
+      }
+    }
+
+    render([]);
+    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((release) => {
+        if (!release) return;
+        render(release.assets || []);
+        document.getElementById('version').textContent = `${T.version} ${release.tag_name.replace(/^v/, '')} · `;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
