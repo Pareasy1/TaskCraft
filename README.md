@@ -21,7 +21,7 @@ All data stays on this Mac.
 - **Tasks page:** ⌘4 (or *Tasks* in the toolbar). Everything typed there becomes a
   task — dates are optional ("buy milk", "pay rent friday 9am"). Filter by
   All / Today / Upcoming / No date / Completed; tasks are grouped by due day,
-  overdue first. Click a task to edit it.
+  overdue first. Click a task or event to select it; double-click it (or press Return) to open its details in a dialog.
   - **Status:** To do → In progress → Done. Click the round status mark to move a
     task to the next status, or right-click it to pick one. Done is the same as ticking it off.
   - **Labels:** type `#home`, `#work`… in a task to label it (created

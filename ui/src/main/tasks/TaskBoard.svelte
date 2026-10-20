@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { activate, isSelected, select } from '../../lib/selection.svelte';
   // `t` names a task throughout this component, so the translator is `tr`.
   import { t as tr } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
@@ -93,13 +94,15 @@
             animate:flip={{ duration: reduce ? 0 : 180 }}
             ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
             ondragend={() => { dragging = null; over = null; }}
-            onclick={() => onopen(t)}
+            class:is-selected={isSelected('task', t.id)}
+            onclick={() => select({ kind: 'task', id: t.id })}
+            ondblclick={() => onopen(t)}
           >
             <div class="top">
               <StatusGlyph status={t.status} size={16} onchange={(s) => onstatus(t, s)} />
               <button class="open-btn title" data-card={t.id}
                 aria-label={tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] })}
-                onclick={(e) => { e.stopPropagation(); onopen(t); }} onkeydown={(e) => keys(e, t)}>{t.title}</button>
+                onclick={(e) => { e.stopPropagation(); activate(e, () => onopen(t), () => select({ kind: 'task', id: t.id })); }} onkeydown={(e) => keys(e, t)}>{t.title}</button>
             </div>
             {#if t.labels.length || t.due || t.recurring}
               <div class="meta">

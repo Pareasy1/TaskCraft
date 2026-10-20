@@ -18,6 +18,7 @@
   import SettingsDialog from './SettingsDialog.svelte';
   import { notify } from '../lib/toast.svelte';
   import { changeStatus } from '../lib/actions';
+  import { activate, clearSelection, isSelected, select } from '../lib/selection.svelte';
   import { sidebarSections } from '../lib/tasks';
   import { taskInput as toTaskInput } from '../lib/edit';
 
@@ -145,6 +146,7 @@
   }
 
   async function openEvent(id: number, occurrence: string | null) {
+    select({ kind: 'event', id, occurrence });
     try {
       const e = await api.getEvent(id);
       const { id: _id, ...input } = e;
@@ -161,6 +163,7 @@
   }
 
   async function openTask(id: number) {
+    select({ kind: 'task', id });
     try {
       const t = await api.getTask(id);
       target = {
@@ -235,6 +238,7 @@
   }
 
   function keys(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !target && !settingsOpen && !scopePrompt) return clearSelection();
     if (!e.metaKey) return;
     const tag = (e.target as HTMLElement)?.tagName;
     const views: Record<string, View> = { '1': 'day', '2': 'week', '3': 'month', '4': 'tasks' };
@@ -301,7 +305,9 @@
         <div class="results">
           <div class="rhead">{hits.length === 1 ? t('main.result', { q: query }) : t('main.results', { n: hits.length, q: query })}</div>
           {#each hits as h (h.kind + h.id)}
-            <button class="hit" onclick={() => (h.kind === 'event' ? reveal({ kind: 'event', id: h.id }) : openTask(h.id))}>
+            {@const openHit = () => (h.kind === 'event' ? reveal({ kind: 'event', id: h.id }) : openTask(h.id))}
+            <button class="hit" class:is-selected={isSelected(h.kind, h.id, null)}
+              onclick={(e) => activate(e, openHit, () => select({ kind: h.kind, id: h.id }))} ondblclick={openHit}>
               <span class="hk">{h.kind === 'event' ? t('common.event') : t('common.task')}</span>
               <span class="ht">{h.title}</span>
               <span class="hw">{h.when ? `${fmtShortDate(new Date(h.when))} ${fmtTime(new Date(h.when))}` : ''}</span>
@@ -376,7 +382,8 @@
   .hit:hover { background: var(--hover); }
   .hk { color: var(--muted); font-size: 11px; padding-top: 2px; }
   .hw { color: var(--muted); }
-  .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: grid; place-items: center; z-index: 20; }
+  /* Above the item dialog, which asks this question (z-index 25). */
+  .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: grid; place-items: center; z-index: 40; }
   .dialog { background: var(--bg); border-radius: 12px; padding: 16px 18px; width: 340px; box-shadow: var(--shadow); }
   .dialog p { margin: 6px 0 14px; }
   .dactions { display: flex; justify-content: flex-end; gap: 6px; }

@@ -162,6 +162,18 @@
     }
   }
 
+  // Keep Tab inside the dialog.
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab' || !panelEl) return;
+    const list = [...panelEl.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
+      (el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null,
+    );
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement as HTMLElement);
+    e.preventDefault();
+    list[e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : i === list.length - 1 ? 0 : i + 1].focus();
+  }
+
   function keys(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
     if (e.key === 'Enter' && e.metaKey) save();
@@ -170,9 +182,11 @@
 
 <svelte:window onkeydown={keys} />
 
-<div class="panel" role="dialog" aria-label={t('inspector.label')} bind:this={panelEl}>
-  <div class="top" data-tauri-drag-region>
-    <span class="kind" data-tauri-drag-region>{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (backdrop click closes; Esc is the keyboard path) -->
+<div class="scrim" onclick={(e) => e.target === e.currentTarget && onclose()}>
+<div class="panel" role="dialog" aria-modal="true" aria-label={t('inspector.label')} tabindex="-1" bind:this={panelEl} onkeydown={trapTab}>
+  <div class="top">
+    <span class="kind">{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
     <button class="icon-btn" aria-label={t('common.close')} onclick={onclose}><X size={16} /></button>
   </div>
   {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
@@ -261,25 +275,37 @@
     <button class="btn primary" onclick={save}>{t('common.save')}</button>
   </div>
 </div>
+</div>
 
 <style>
+  /* Item details open as a centred dialog over the main window. */
+  .scrim { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, 0.32); }
   .panel {
-    width: 320px;
-    flex: none;
-    border-left: 1px solid var(--border);
+    width: min(460px, 100%);
+    max-height: min(640px, 100%);
     background: var(--bg);
-    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 14px 18px 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
     overflow-y: auto;
+  }
+  .panel:focus { outline: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .scrim { animation: fade 0.14s ease-out; }
+    .panel { animation: rise 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    @keyframes fade { from { opacity: 0; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
   }
   .top { display: flex; justify-content: space-between; align-items: center; }
   .kind { font-size: 12px; font-weight: 600; color: var(--muted); }
   .title { font-size: 15px; font-weight: 600; }
-  .row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; }
+  .row { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 10px; }
   .row > span { color: var(--muted); font-size: 12px; }
-  .check { display: flex; align-items: center; gap: 6px; padding-left: 80px; }
+  .check { display: flex; align-items: center; gap: 6px; padding-left: 98px; }
   .alerts { display: flex; flex-wrap: wrap; gap: 4px; }
   .pill {
     display: inline-flex;
@@ -306,5 +332,5 @@
   .actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
   .actions .danger { display: inline-flex; align-items: center; gap: 4px; }
   .spacer { flex: 1; }
-  .link { align-self: flex-start; margin-left: 80px; }
+  .link { align-self: flex-start; margin-left: 98px; }
 </style>
