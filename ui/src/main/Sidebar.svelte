@@ -56,11 +56,9 @@
   }
   .traffic { height: 46px; flex: none; }
   .label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
     padding: 14px 8px 4px;
   }
   .cal { display: flex; align-items: center; gap: 7px; padding: 3px 8px; border-radius: 6px; }

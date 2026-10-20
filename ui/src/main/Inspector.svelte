@@ -261,7 +261,7 @@
     overflow-y: auto;
   }
   .top { display: flex; justify-content: space-between; align-items: center; }
-  .kind { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; }
+  .kind { font-size: 12px; font-weight: 600; color: var(--muted); }
   .title { font-size: 15px; font-weight: 600; }
   .row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; }
   .row > span { color: var(--muted); font-size: 12px; }

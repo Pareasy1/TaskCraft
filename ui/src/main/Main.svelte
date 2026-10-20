@@ -269,7 +269,7 @@
           <div class="rhead">{hits.length} result{hits.length === 1 ? '' : 's'} for “{query}”</div>
           {#each hits as h (h.kind + h.id)}
             <button class="hit" onclick={() => (h.kind === 'event' ? reveal({ kind: 'event', id: h.id }) : openTask(h.id))}>
-              <span class="hk">{h.kind}</span>
+              <span class="hk">{h.kind === 'event' ? 'Event' : 'Task'}</span>
               <span class="ht">{h.title}</span>
               <span class="hw">{h.when ? `${fmtShortDate(new Date(h.when))} ${fmtTime(new Date(h.when))}` : ''}</span>
             </button>
@@ -335,7 +335,7 @@
     border-radius: 6px;
   }
   .hit:hover { background: var(--hover); }
-  .hk { color: var(--muted); text-transform: uppercase; font-size: 11px; padding-top: 2px; }
+  .hk { color: var(--muted); font-size: 11px; padding-top: 2px; }
   .hw { color: var(--muted); }
   .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: grid; place-items: center; z-index: 20; }
   .dialog { background: var(--bg); border-radius: 12px; padding: 16px 18px; width: 340px; box-shadow: var(--shadow); }

@@ -192,7 +192,7 @@
 <style>
   main { padding: 18px 22px; display: grid; gap: 14px; height: 100%; overflow-y: auto; }
   h1 { margin: 0; font-size: 18px; }
-  h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
   section { display: grid; gap: 8px; }
   .row { display: grid; grid-template-columns: 1fr 230px; align-items: center; gap: 10px; }
   .row input[type='checkbox'] { justify-self: start; }
