@@ -44,3 +44,34 @@ pub fn show_settings(app: &AppHandle) -> tauri::Result<()> {
     w.set_focus()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    /// The main window hides the system title bar and uses
+    /// `data-tauri-drag-region` instead; Tauri only honours it when the
+    /// window may start dragging (and toggle zoom on double-click).
+    #[test]
+    fn main_window_can_be_dragged_by_its_toolbar() {
+        let caps: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let windows: Vec<&str> = caps["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|w| w.as_str())
+            .collect();
+        let perms: Vec<&str> = caps["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p.as_str())
+            .collect();
+        assert!(windows.contains(&"main"));
+        for p in [
+            "core:window:allow-start-dragging",
+            "core:window:allow-internal-toggle-maximize",
+        ] {
+            assert!(perms.contains(&p), "missing permission {p}");
+        }
+    }
+}

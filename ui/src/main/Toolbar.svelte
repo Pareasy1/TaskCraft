@@ -26,7 +26,7 @@
   <div class="left" data-tauri-drag-region>
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
-  <div class="right">
+  <div class="right" data-tauri-drag-region>
     <button class="icon-btn" title={view === 'tasks' ? t('toolbar.newTaskKey') : t('toolbar.newEventKey')} aria-label={view === 'tasks' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
     {#if view !== 'tasks'}
       <div class="nav">

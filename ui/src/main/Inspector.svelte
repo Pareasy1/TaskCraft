@@ -159,8 +159,8 @@
 <svelte:window onkeydown={keys} />
 
 <div class="panel" role="dialog" aria-label={t('inspector.label')}>
-  <div class="top">
-    <span class="kind">{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
+  <div class="top" data-tauri-drag-region>
+    <span class="kind" data-tauri-drag-region>{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
     <button class="icon-btn" aria-label={t('common.close')} onclick={onclose}><X size={16} /></button>
   </div>
   {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
