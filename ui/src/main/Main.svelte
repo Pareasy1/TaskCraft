@@ -4,7 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task, TaskLabel } from '../lib/types';
+  import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { addDays, monthGrid, startOfDay, weekDays } from '../lib/layout';
   import { fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
   import Toolbar from './Toolbar.svelte';
@@ -15,6 +15,7 @@
   import TasksView from './TasksView.svelte';
   import Toast from './Toast.svelte';
   import { notify } from '../lib/toast.svelte';
+  import { changeStatus } from '../lib/actions';
   import { taskInput as toTaskInput } from '../lib/edit';
 
   type View = 'day' | 'week' | 'month' | 'tasks';
@@ -25,7 +26,7 @@
   let settings = $state<Settings | null>(null);
   let occurrences = $state<Occurrence[]>([]);
   let sideOcc = $state<Occurrence[]>([]);
-  let taskSections = $state<{ name: string; tasks: Task[] }[]>([]);
+  let taskSections = $state<{ key: string; name: string; tasks: Task[] }[]>([]);
   let allTasks = $state<Task[]>([]);
   let labels = $state<TaskLabel[]>([]);
   let taskInput = $state<HTMLInputElement | undefined>();
@@ -76,10 +77,10 @@
       calendars = cals;
       settings = s;
       taskSections = [
-        { name: 'Overdue', tasks: overdue },
-        { name: 'Today', tasks: today },
-        { name: 'Upcoming', tasks: upcoming },
-        { name: 'Completed', tasks: completed.slice(0, 30) },
+        { key: 'overdue', name: 'Overdue', tasks: overdue },
+        { key: 'today', name: 'Today', tasks: today },
+        { key: 'upcoming', name: 'Upcoming', tasks: upcoming },
+        { key: 'completed', name: 'Completed', tasks: completed.slice(0, 30) },
       ];
     } catch (e) {
       error = errorMessage(e);
@@ -206,11 +207,9 @@
     }
   }
 
-  async function completeTask(t: Task) {
-    const before = toTaskInput(t);
+  async function setStatus(t: Task, s: TaskStatus) {
     try {
-      await api.setTaskCompleted(t.id, !t.completedAt);
-      notify(t.completedAt ? `Reopened “${t.title}”` : `Completed “${t.title}”`, () => api.updateTask(t.id, before));
+      await changeStatus(t, s);
     } catch (e) {
       error = errorMessage(e);
     }
@@ -257,7 +256,7 @@
     {taskSections}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
-    oncomplete={completeTask}
+    onstatus={setStatus}
     onopentask={(t) => openTask(t.id)}
   />
   <section class="content">

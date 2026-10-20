@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Calendar, Task } from '../lib/types';
+  import type { Calendar, Task, TaskStatus } from '../lib/types';
   import MiniMonth from '../quick/MiniMonth.svelte';
   import TaskList from './TaskList.svelte';
 
@@ -12,7 +12,7 @@
     taskSections,
     onselectday,
     ontogglecalendar,
-    oncomplete,
+    onstatus,
     onopentask,
   }: {
     calendars: Calendar[];
@@ -20,10 +20,10 @@
     selected: Date;
     marked: Set<string>;
     weekStart: 0 | 1;
-    taskSections: { name: string; tasks: Task[] }[];
+    taskSections: { key: string; name: string; tasks: Task[] }[];
     onselectday: (d: Date) => void;
     ontogglecalendar: (c: Calendar) => void;
-    oncomplete: (t: Task) => void;
+    onstatus: (t: Task, s: TaskStatus) => void;
     onopentask: (t: Task) => void;
   } = $props();
 </script>
@@ -39,7 +39,7 @@
     </label>
   {/each}
   <div class="tasks">
-    <TaskList sections={taskSections} {oncomplete} onopen={onopentask} />
+    <TaskList sections={taskSections} {onstatus} onopen={onopentask} />
   </div>
 </aside>
 

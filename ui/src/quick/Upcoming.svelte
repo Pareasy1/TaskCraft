@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Occurrence, Task } from '../lib/types';
+  import type { Occurrence, Task, TaskStatus } from '../lib/types';
+  import StatusGlyph from '../main/tasks/StatusGlyph.svelte';
+  import LabelChip from '../main/tasks/LabelChip.svelte';
   import { fmtDayHeading, fmtTime, ymd } from '../lib/format';
   import { dayGroups } from '../lib/layout';
 
@@ -9,7 +11,7 @@
     dated,
     from,
     days,
-    oncomplete,
+    onstatus,
     onopen,
   }: {
     occurrences: Occurrence[];
@@ -19,7 +21,7 @@
     dated: Task[];
     from: Date;
     days: number;
-    oncomplete: (t: Task) => void;
+    onstatus: (t: Task, s: TaskStatus) => void;
     onopen: (kind: 'event' | 'task', id: number) => void;
   } = $props();
 
@@ -30,9 +32,9 @@
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
   <div class="item task" role="button" tabindex="0" aria-label="Open task {t.title}"
     onclick={() => onopen('task', t.id)} onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onopen('task', t.id)}>
-    <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" aria-label="Complete {t.title}"
-      onclick={(e) => e.stopPropagation()} onchange={() => oncomplete(t)} />
+    <StatusGlyph status={t.status} size={15} onchange={(s) => onstatus(t, s)} />
     <span class="name">{t.title}</span>
+    {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
     <span class="meta" class:late>{meta}</span>
   </div>
 {/snippet}
@@ -65,12 +67,10 @@
 <style>
   .list { display: grid; gap: 1px; }
   .heading {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 8px 6px 3px;
+    padding: 10px 6px 3px;
   }
   .item {
     display: flex;
@@ -84,6 +84,5 @@
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .late { color: var(--danger); }
-  .task input { margin: 0; }
   .empty { color: var(--faint); text-align: center; padding: 18px 0; }
 </style>

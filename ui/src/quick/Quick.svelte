@@ -4,7 +4,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { Settings as Gear, AppWindow, Power, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task } from '../lib/types';
+  import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task, TaskStatus } from '../lib/types';
+  import { STATUS_LABEL } from '../lib/tasks';
   import { monthGrid, addDays, startOfDay } from '../lib/layout';
   import { ymd } from '../lib/format';
   import HighlightInput from './HighlightInput.svelte';
@@ -17,6 +18,12 @@
   let parsed = $state<ParsedItem | null>(null);
   let error = $state('');
   let flash = $state('');
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+  function showFlash(m: string) {
+    clearTimeout(flashTimer);
+    flash = m;
+    flashTimer = setTimeout(() => (flash = ''), 2200);
+  }
   let input = $state<HTMLInputElement | undefined>();
   let month = $state(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   let selected = $state<Date | null>(null);
@@ -80,8 +87,7 @@
     if (!text.trim()) return;
     try {
       const ref: ItemRef = await api.createFromText(text);
-      flash = `Added ${parsed?.kind === 'task' ? 'task' : 'event'} “${parsed?.title || text}”`;
-      setTimeout(() => (flash = ''), 2200);
+      showFlash(`Added ${parsed?.kind === 'task' ? 'task' : 'event'} “${parsed?.title || text}”`);
       text = '';
       parsed = null;
       error = '';
@@ -105,9 +111,10 @@
     }
   }
 
-  async function complete(t: Task) {
+  async function setStatus(t: Task, s: TaskStatus) {
     try {
-      await api.setTaskCompleted(t.id, !t.completedAt);
+      await api.setTaskStatus(t.id, s);
+      showFlash(s === 'done' ? `Completed “${t.title}”` : `Moved “${t.title}” to ${STATUS_LABEL[s]}`);
     } catch (e) {
       error = errorMessage(e);
     }
@@ -153,7 +160,7 @@
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">
-    <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} oncomplete={complete} onopen={openItem} />
+    <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} onstatus={setStatus} onopen={openItem} />
   </div>
   <footer>
     <button class="icon-btn" title="Open TaskCraft" aria-label="Open TaskCraft window" onclick={() => api.openMain()}><AppWindow size={16} /></button>
