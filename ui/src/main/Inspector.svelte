@@ -4,7 +4,7 @@
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { api, errorMessage } from '../lib/api';
-  import { eventToForm, formToEvent, formToTask, recurrenceToRrule, sameInstant, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { ymd } from '../lib/format';
 
   export type Target =
@@ -114,7 +114,14 @@
         const input = formToTask(task);
         if (!input.title) return (error = 'Title is required');
         if (target.id == null) await api.createTask(input);
-        else await api.updateTask(target.id, input);
+        else {
+          const t = await api.getTask(target.id);
+          const latest: TaskInput = {
+            calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz, rrule: t.rrule,
+            notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
+          };
+          await api.updateTask(target.id, mergeTaskSave(target.input, input, latest));
+        }
       }
       onsaved();
     } catch (e) {

@@ -130,6 +130,22 @@ export function formToTask(f: TaskForm): TaskInput {
   };
 }
 
+/**
+ * Three-way merge for saving a task the side panel opened as `original`:
+ * fields the user left alone take the `latest` stored value (the task may have
+ * been moved on the board meanwhile); fields the user edited win.
+ */
+export function mergeTaskSave(original: TaskInput, edited: TaskInput, latest: TaskInput): TaskInput {
+  // Compare against the original as it comes back through the form, so
+  // normalisation (trimming, date formatting) doesn't count as an edit.
+  const base = formToTask(taskToForm(original));
+  const out = { ...edited };
+  for (const k of Object.keys(edited) as (keyof TaskInput)[]) {
+    if (JSON.stringify(edited[k]) === JSON.stringify(base[k])) (out as Record<string, unknown>)[k] = latest[k];
+  }
+  return out;
+}
+
 /** RRULE body from a parser recurrence (mirrors Rust `RecurrenceSpec::to_rrule`). */
 export function recurrenceToRrule(r: NonNullable<import('./types').ParsedItem['recurrence']>): string {
   let s = `FREQ=${r.rule.freq.toUpperCase()};INTERVAL=${r.rule.interval}`;
