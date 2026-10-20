@@ -53,7 +53,7 @@
   .title { border: none; background: none; font-weight: 600; font-size: 13px; padding: 2px 4px; border-radius: 5px; }
   .title:hover { background: var(--hover); }
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; text-align: center; }
-  .wd { font-size: 10px; color: var(--faint); font-weight: 600; padding-bottom: 2px; }
+  .wd { font-size: 12px; color: var(--faint); font-weight: 600; padding-bottom: 2px; }
   .day {
     position: relative;
     border: none;

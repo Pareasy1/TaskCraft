@@ -196,7 +196,7 @@
     padding: 0 6px;
   }
   .gutter { width: 54px; }
-  .gutter.small { font-size: 10px; color: var(--faint); text-align: right; padding: 4px 6px 0 0; }
+  .gutter.small { font-size: 11px; color: var(--muted); text-align: right; padding: 4px 6px 0 0; }
   .allday { border-bottom: 1px solid var(--border); min-height: 26px; }
   .adcol { border-left: 1px solid var(--border); padding: 2px; display: grid; gap: 2px; align-content: start; }
   .chip {
@@ -218,8 +218,8 @@
     position: absolute;
     top: -7px;
     right: 6px;
-    font-size: 10px;
-    color: var(--faint);
+    font-size: 11px;
+    color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
   .cols { display: grid; grid-template-columns: repeat(var(--n), 1fr); position: relative; }
@@ -256,6 +256,6 @@
   .ev:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
   .ev.dragging { opacity: 0.85; box-shadow: var(--shadow); z-index: 4; }
   .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .time { font-size: 11px; opacity: 0.8; }
+  .time { font-size: 11px; }
   .resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 </style>

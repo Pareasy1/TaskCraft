@@ -173,7 +173,7 @@
     background: var(--surface);
     border-radius: 12px;
   }
-  .hint { font-size: 11px; color: var(--faint); text-align: right; margin-top: -4px; }
+  .hint { font-size: 12px; color: var(--faint); text-align: right; margin-top: -4px; }
   .flash {
     font-size: 12px;
     color: var(--label-time);

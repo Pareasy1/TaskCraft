@@ -216,7 +216,7 @@
   .views button:hover { color: var(--text); }
   .views button.on { color: var(--text); background: var(--hover); font-weight: 600; }
   .views button:focus-visible { outline: 2px solid var(--accent); }
-  .n { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--faint); font-weight: 400; }
+  .n { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--faint); font-weight: 400; }
   .status { border: 1px solid var(--border); background: var(--surface-strong); border-radius: 7px; padding: 3px 6px; color: var(--muted); }
   .labels { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
   .clear { border: none; background: none; color: var(--accent); font-size: 12px; padding: 2px 4px; }

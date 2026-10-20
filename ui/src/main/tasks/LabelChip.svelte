@@ -34,5 +34,5 @@
   button.chip:hover { background: var(--hover); color: var(--text); }
   button.chip:focus-visible { outline: 2px solid var(--accent); }
   .chip.active { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text); }
-  .n { margin-left: 5px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .n { margin-left: 5px; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 </style>

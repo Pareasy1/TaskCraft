@@ -317,7 +317,7 @@
     border-radius: 6px;
   }
   .hit:hover { background: var(--hover); }
-  .hk { color: var(--faint); text-transform: uppercase; font-size: 10px; padding-top: 2px; }
+  .hk { color: var(--muted); text-transform: uppercase; font-size: 11px; padding-top: 2px; }
   .hw { color: var(--muted); }
   .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: grid; place-items: center; z-index: 20; }
   .dialog { background: var(--bg); border-radius: 12px; padding: 16px 18px; width: 340px; box-shadow: var(--shadow); }
