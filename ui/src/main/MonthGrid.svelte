@@ -86,7 +86,7 @@
     min-width: 0;
   }
   .item:hover { background: var(--hover); }
-  .item.allday { background: color-mix(in srgb, var(--c) 20%, var(--bg)); color: color-mix(in srgb, var(--c) 70%, var(--text)); }
+  .item.allday { background: color-mix(in srgb, var(--c) 20%, var(--bg)); color: color-mix(in srgb, var(--c) 40%, var(--text)); }
   .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .time { color: var(--muted); font-size: 11px; }
   .more { border: none; background: none; font-size: 11px; color: var(--muted); text-align: left; padding: 0 4px; }

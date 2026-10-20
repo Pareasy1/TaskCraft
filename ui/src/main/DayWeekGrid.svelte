@@ -158,6 +158,7 @@
               {@const v = preview(o, p.top, p.height)}
               <div
                 class="ev"
+                class:compact={v.height * PX_MIN < 40}
                 class:dragging={drag && key(drag.o) === p.id}
                 style="--c:{o.color}; top:{v.top * PX_MIN}px; height:{v.height * PX_MIN - 2}px;
                        left:calc({(p.col / p.cols) * 100}% + {v.shift * 100}%); width:calc({100 / p.cols}% - 3px)"
@@ -169,7 +170,7 @@
                 onkeydown={(e) => keydown(e, o)}
               >
                 <span class="t">{o.title}</span>
-                {#if v.height >= 30}<span class="time">{fmtTime(new Date(o.start))}</span>{/if}
+                <span class="time">{fmtTime(new Date(o.start))}</span>
                 <div class="resize" role="presentation" onpointerdown={(e) => begin(e, o, 'resize')}></div>
               </div>
             {/each}
@@ -206,7 +207,7 @@
     padding: 2px 6px;
     font-size: 12px;
     background: color-mix(in srgb, var(--c) 22%, var(--bg));
-    color: color-mix(in srgb, var(--c) 70%, var(--text));
+    color: color-mix(in srgb, var(--c) 40%, var(--text));
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -244,7 +245,7 @@
     padding: 2px 6px;
     background: color-mix(in srgb, var(--c) 20%, var(--bg));
     border-left: 3px solid var(--c);
-    color: color-mix(in srgb, var(--c) 65%, var(--text));
+    color: color-mix(in srgb, var(--c) 40%, var(--text));
     font-size: 12px;
     overflow: hidden;
     display: flex;
@@ -256,6 +257,10 @@
   .ev:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
   .ev.dragging { opacity: 0.85; box-shadow: var(--shadow); z-index: 4; }
   .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Short events: title and time on one line, title first. */
+  .ev.compact { flex-direction: row; align-items: baseline; gap: 5px; padding-top: 1px; padding-bottom: 0; }
+  .ev.compact .t { flex: 0 1 auto; min-width: 0; }
+  .ev.compact .time { flex: none; }
   .time { font-size: 11px; }
   .resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 </style>
