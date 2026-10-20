@@ -1,6 +1,8 @@
 <script lang="ts">
   import { X, Trash2 } from 'lucide-svelte';
-  import type { Calendar, EventInput, TaskInput } from '../lib/types';
+  import type { Calendar, EventInput, TaskInput, TaskLabel } from '../lib/types';
+  import { STATUSES, STATUS_LABEL } from '../lib/tasks';
+  import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { api, errorMessage } from '../lib/api';
   import { eventToForm, formToEvent, formToTask, recurrenceToRrule, sameInstant, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { ymd } from '../lib/format';
@@ -12,12 +14,14 @@
   let {
     target,
     calendars,
+    labels = [],
     onclose,
     onsaved,
     askScope,
   }: {
     target: Target;
     calendars: Calendar[];
+    labels?: TaskLabel[];
     onclose: () => void;
     onsaved: () => void;
     askScope: (verb: string, allowThis: boolean) => Promise<'this' | 'all' | null>;
@@ -34,6 +38,16 @@
     confirmDelete = false;
     error = '';
   });
+
+  let labelText = $state('');
+  const labelColor = (name: string) => labels.find((l) => l.name.toLowerCase() === name.toLowerCase())?.color ?? 'var(--faint)';
+  function addLabel() {
+    const name = labelText.trim().replace(/^#/, '').trim();
+    labelText = '';
+    if (!task || !name) return;
+    if (name.length > 32) return void (error = 'A label name needs 1–32 characters');
+    if (!task.labels.some((l) => l.toLowerCase() === name.toLowerCase())) task.labels = [...task.labels, name];
+  }
 
   const ALERTS = [0, 5, 10, 15, 30, 60, 120, 1440];
   const alertLabel = (m: number) => (m === 0 ? 'At time of event' : m < 60 ? `${m} min before` : m < 1440 ? `${m / 60} h before` : `${m / 1440} day before`);
@@ -182,6 +196,25 @@
     <textarea class="field notes" bind:value={ev.notes} placeholder="Notes"></textarea>
   {:else if task}
     <input class="field title" bind:value={task.title} onblur={reparseTitle} placeholder="Task" />
+    <div class="row"><span>Status</span>
+      <div class="seg" role="radiogroup" aria-label="Status">
+        {#each STATUSES as s}
+          <button role="radio" aria-checked={task.status === s} class:on={task.status === s} onclick={() => task && (task.status = s)}>
+            <StatusGlyph status={s} size={13} />{STATUS_LABEL[s]}
+          </button>
+        {/each}
+      </div>
+    </div>
+    <div class="row top-align"><span>Labels</span>
+      <div class="lbls">
+        {#each task.labels as name, i (name)}
+          <span class="lbl"><span class="hash" style="color:{labelColor(name)}">#</span>{name}<button class="icon-btn" aria-label="Remove {name}" onclick={() => task && (task.labels = task.labels.filter((_, j) => j !== i))}><X size={11} /></button></span>
+        {/each}
+        <input class="field small" list="label-names" bind:value={labelText} placeholder="Add label" maxlength="33"
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addLabel(); } }} onblur={addLabel} />
+        <datalist id="label-names">{#each labels as l}<option value={l.name}></option>{/each}</datalist>
+      </div>
+    </div>
     <label class="row"><span>List</span>
       <select class="field" bind:value={task.calendarId}>{#each calendars as c}<option value={c.id}>{c.name}</option>{/each}</select>
     </label>
@@ -233,6 +266,16 @@
     font-size: 11.5px;
   }
   .small { width: auto; }
+  .top-align { align-items: start; }
+  .top-align > span { padding-top: 4px; }
+  .seg { display: flex; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .seg button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; border: none; background: none; padding: 4px 2px; border-radius: 6px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .seg button.on { background: var(--surface-strong); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); }
+  .lbls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .lbl { display: inline-flex; align-items: center; font-size: 12px; background: var(--hover); border-radius: 6px; padding: 1px 1px 1px 6px; }
+  .hash { font-weight: 700; margin-right: 1px; }
+  .lbls input { flex: 1; min-width: 90px; }
   .notes { min-height: 90px; resize: vertical; }
   .actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
   .actions .danger { display: inline-flex; align-items: center; gap: 4px; }

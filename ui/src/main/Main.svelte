@@ -3,7 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task } from '../lib/types';
+  import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task, TaskLabel } from '../lib/types';
   import { addDays, monthGrid, startOfDay, weekDays } from '../lib/layout';
   import { fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
   import Toolbar from './Toolbar.svelte';
@@ -23,6 +23,7 @@
   let sideOcc = $state<Occurrence[]>([]);
   let taskSections = $state<{ name: string; tasks: Task[] }[]>([]);
   let allTasks = $state<Task[]>([]);
+  let labels = $state<TaskLabel[]>([]);
   let taskInput = $state<HTMLInputElement | undefined>();
   let query = $state('');
   let hits = $state<Hit[]>([]);
@@ -52,7 +53,7 @@
   async function refresh() {
     try {
       const sg = monthGrid(sideMonth.getFullYear(), sideMonth.getMonth(), weekStart);
-      const [occ, side, cals, s, overdue, today, upcoming, completed, all] = await Promise.all([
+      const [occ, side, cals, s, overdue, today, upcoming, completed, all, lbls] = await Promise.all([
         api.listRange(range[0], range[1]),
         api.listRange(sg[0], addDays(sg[41], 1)),
         api.listCalendars(),
@@ -62,8 +63,10 @@
         api.listTasks('upcoming'),
         api.listTasks('completed'),
         api.listTasks('all'),
+        api.listLabels(),
       ]);
       allTasks = all;
+      labels = lbls;
       occurrences = occ;
       sideOcc = side;
       calendars = cals;
@@ -246,7 +249,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={allTasks} bind:input={taskInput} oncomplete={completeTask} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={allTasks} {labels} bind:input={taskInput} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences}
           onselect={(o) => openEvent(o.eventId, o.start)}
@@ -260,7 +263,7 @@
     </div>
   </section>
   {#if target}
-    <Inspector {target} {calendars} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
+    <Inspector {target} {calendars} {labels} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
   {/if}
 </div>
 

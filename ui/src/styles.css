@@ -27,6 +27,9 @@
   --label-calendar: #0891b2;
   --label-url: #0d9488;
   --label-prefix: #5b5bd6;
+  --label-tag: #0e7490;
+  --status-progress: #c98a12;
+  --status-done: #2f9e6a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -53,6 +56,9 @@
     --label-calendar: #22d3ee;
     --label-url: #2dd4bf;
     --label-prefix: #8b8bf5;
+    --label-tag: #67e8f9;
+    --status-progress: #f0b44c;
+    --status-done: #4cc38a;
   }
 }
 
