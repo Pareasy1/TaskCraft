@@ -116,6 +116,7 @@
   {#if settings}
     <section>
       <h2>General</h2>
+      <div class="group">
       <div class="row">
         <span>Quick entry shortcut</span>
         <button class="btn hotkey" class:rec={recording} onclick={() => (recording = !recording)}>
@@ -150,10 +151,12 @@
           <option value="dayMonth">Day/Month (7/11 = 7 Nov)</option><option value="monthDay">Month/Day (7/11 = Jul 11)</option>
         </select>
       </label>
+      </div>
     </section>
 
     <section>
       <h2>Calendars</h2>
+      <div class="group">
       {#each calendars as c (c.id)}
         <div class="cal">
           <input type="color" aria-label="Color of {c.name}" value={c.color} onchange={(e) => saveCalendar(c, { color: e.currentTarget.value })} />
@@ -177,31 +180,41 @@
           <button class="btn danger" onclick={confirmDelete}>Delete</button>
         </div>
       {/if}
+      </div>
     </section>
 
     <section>
       <h2>Data</h2>
+      <div class="group">
       <div class="row">
-        <span>Export everything as an .ics file</span>
+        <span>Export all events and tasks<br /><span class="hint">An .ics file Apple Calendar and Google Calendar can import</span></span>
         <button class="btn" onclick={exportIcs}>Export .ics…</button>
+      </div>
       </div>
     </section>
   {/if}
 </main>
 
 <style>
-  main { padding: 18px 22px; display: grid; gap: 14px; height: 100%; overflow-y: auto; }
-  h1 { margin: 0; font-size: 18px; }
-  h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
-  section { display: grid; gap: 8px; }
-  .row { display: grid; grid-template-columns: 1fr 230px; align-items: center; gap: 10px; }
-  .row input[type='checkbox'] { justify-self: start; }
+  /* A centred column of grouped rows, like macOS settings. align-content keeps
+     the window's spare height at the bottom instead of between sections. */
+  main { height: 100%; overflow-y: auto; padding: 22px 24px 28px; display: grid; align-content: start; gap: 18px;
+    max-width: 560px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 20px; font-weight: 700; }
+  h2 { margin: 0 0 6px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  section { display: grid; }
+  .group { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 10px; padding: 2px 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 40px; padding: 6px 0; }
+  .group > :not(:last-child) { border-bottom: 1px solid var(--border); }
+  .row > :last-child { flex: 0 1 240px; }
+  .row input[type='checkbox'] { flex: none; }
   .hotkey { font-size: 14px; letter-spacing: 0.08em; }
   .hotkey.rec { border-color: var(--accent); color: var(--accent); letter-spacing: normal; font-size: 12px; }
-  .cal { display: grid; grid-template-columns: 28px 1fr 28px; gap: 8px; align-items: center; }
+  .cal { display: grid; grid-template-columns: 28px 1fr 28px; gap: 8px; align-items: center; padding: 6px 0; }
   .cal input[type='color'] { width: 24px; height: 24px; border: none; padding: 0; background: none; }
-  .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px dashed var(--faint); justify-self: center; }
-  .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--bg-sunken); border-radius: 8px; padding: 8px; }
+  .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px dashed var(--muted); justify-self: center; }
+  .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; }
   .small { width: auto; }
+  .hint { color: var(--muted); font-size: 12px; }
   .notice { position: fixed; top: 14px; right: 18px; color: var(--label-time); font-size: 12px; }
 </style>
