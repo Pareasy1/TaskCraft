@@ -1,11 +1,13 @@
 # TaskCraft
 
-A personal macOS calendar and task app with Fantastical-style natural-language
+A personal calendar and task app (Mac, Windows, Linux) with Fantastical-style natural-language
 quick entry. Rust core (parser, SQLite store, alerts) with a Tauri 2 + Svelte UI.
-All data stays on this Mac.
+All data stays on your computer.
 
-**Installing on another Mac** (family, friends, a second computer): see [docs/INSTALL.md](docs/INSTALL.md).
-To make a shareable copy, run `./scripts/package.sh` (creates `dist/TaskCraft-<version>-macos-universal.zip`).
+## Download
+
+**Mac, Windows and Linux:** <https://pareasy1.github.io/TaskCraft/> (picks the right installer for your computer).
+Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Using it
 

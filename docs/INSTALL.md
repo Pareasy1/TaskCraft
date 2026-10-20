@@ -1,134 +1,132 @@
-# Installing TaskCraft on another Mac
+# Installing TaskCraft
 
-TaskCraft is a calendar and task app that lives in the Mac's menu bar. This guide is for installing it on someone else's Mac, for example a family member's.
+TaskCraft is a calendar and task app. It runs on **Mac, Windows and Linux**. Installing it takes a couple of minutes and **needs no Terminal or technical knowledge**.
 
-**Before you start**
+**Download:** <https://pareasy1.github.io/TaskCraft/>
 
-- **macOS only.** TaskCraft needs **macOS 14 Sonoma or newer**, on an Apple Silicon (M1 or later) or Intel Mac. It does not run on Windows or Linux.
-- **Each Mac keeps its own data.** Nothing is shared or synced between Macs and there is no account. Everything stays on the Mac it was typed on.
-- **Expect one extra "Open Anyway" step the first time.** TaskCraft is a personal app and isn't distributed through the App Store or checked (notarized) by Apple. macOS will block it once, and you allow it in System Settings. Step 3 shows how.
+The page offers the right installer for your computer. All files are also on the [releases page](https://github.com/Pareasy1/TaskCraft/releases/latest).
 
-There are two ways to install it:
+> **Why the extra security step?** TaskCraft is a free, personal app. It isn't sold in an app store, and it isn't signed with a paid certificate. So the first time you open it, macOS or Windows asks you to confirm. You do this **once**, and the steps below show exactly where to click.
 
-| | Who it's for | What you need |
-|---|---|---|
-| **A. Ready-made copy** (recommended) | Anyone | The file `TaskCraft-0.1.0-macos-universal.zip` |
-| **B. Build it yourself** | Comfortable with Terminal | The source code and about 15 minutes |
-
----
-
-## A. Install a ready-made copy
-
-### 1. Get the file
-
-Ask whoever runs TaskCraft for **`TaskCraft-0.1.0-macos-universal.zip`** (about 12 MB). AirDrop, a USB stick, or a shared folder all work. The same file works on both Apple Silicon and Intel Macs.
-
-> **For the person sharing it:** create the file on your Mac with `./scripts/package.sh` from the project folder. It ends up in the `dist/` folder.
-
-### 2. Put TaskCraft in Applications
-
-1. Double-click the zip. **TaskCraft** appears next to it.
-2. Drag **TaskCraft** into the **Applications** folder (Finder → Go → Applications).
-
-### 3. Open it the first time
-
-1. Open **Applications** and double-click **TaskCraft**.
-2. macOS says it can't verify the app and offers **Done** (on macOS 14: **OK**) or **Move to Trash**. Click **Done** / **OK**. Do not move it to the Trash.
-3. Open **System Settings** → **Privacy & Security**.
-4. Scroll down to the **Security** section. Next to the line about TaskCraft being blocked, click **Open Anyway**.
-5. Confirm with your password or Touch ID, then click **Open Anyway** again.
-
-You only do this once. From then on TaskCraft opens normally.
-
-<details>
-<summary>Shortcut for Terminal users</summary>
-
-Instead of steps 2–5, run this once and then open TaskCraft normally:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/TaskCraft.app
-```
-</details>
-
-### 4. Allow notifications
-
-On first launch macOS asks whether TaskCraft may send notifications. Click **Allow**, or reminders for events and tasks won't appear. You can change this later in **System Settings** → **Notifications** → **TaskCraft**.
-
-That's it. Continue with [Using TaskCraft](#using-taskcraft).
+- [Mac](#mac)
+- [Windows](#windows)
+- [Linux](#linux)
+- [Using TaskCraft](#using-taskcraft)
+- [Updating, moving and removing](#updating-moving-and-removing)
+- [Problems?](#problems)
 
 ---
 
-## B. Build it yourself
+## Mac
 
-1. Install Apple's command-line tools. Run this in Terminal and accept the prompt:
-   ```bash
-   xcode-select --install
-   ```
-2. Install **Rust**, then add the TaskCraft build tool:
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "$HOME/.cargo/env"
-   cargo install tauri-cli --version "^2" --locked
-   ```
-3. Install **Node.js** (version 22 or newer) from <https://nodejs.org> or with Homebrew (`brew install node`).
-4. Get the code and install:
-   ```bash
-   git clone https://github.com/Pareasy1/TaskCraft.git
-   cd TaskCraft
-   ./scripts/install.sh
-   ```
-   The script runs the tests, builds the app, signs it for this Mac, copies it to Applications and opens it. Because it was built on this Mac, there is no "Open Anyway" step.
+**You need:** macOS 14 Sonoma or newer. It works on both Apple Silicon (M1 and later) and Intel Macs.
 
-To make a copy for other Macs instead, run `./scripts/package.sh` and follow section A with the file it creates.
+1. On the download page, click **Download for Mac**. You get a file ending in **`.dmg`**.
+2. Double-click the `.dmg` file. A window opens showing TaskCraft and an Applications folder.
+3. **Drag TaskCraft onto the Applications folder.**
+4. Open **Applications** (in Finder's sidebar) and double-click **TaskCraft**.
+5. macOS says it can't verify the app. Click **Done** (on macOS 14: **OK**). Don't move it to the Trash.
+6. Open **System Settings** → **Privacy & Security**. Scroll down to **Security**, and next to the message about TaskCraft click **Open Anyway**. Confirm with your password or Touch ID.
+7. When macOS asks whether TaskCraft may send **notifications**, click **Allow**. This is what makes reminders work.
+
+TaskCraft's icon now appears in the menu bar at the top of the screen. You can eject the TaskCraft disk on the desktop.
+
+## Windows
+
+**You need:** Windows 10 or 11 (64-bit).
+
+1. On the download page, click **Download for Windows**. You get a file ending in **`setup.exe`**.
+2. Open the file. You'll find it in your **Downloads** folder, or click it in the browser's download list.
+3. If a blue box says **"Windows protected your PC"**, click **More info**, then **Run anyway**.
+4. The installer opens. Click **Install** (choose a language first if it asks), then **Finish**. No administrator password is needed.
+5. TaskCraft starts. Its icon sits in the **system tray**, at the bottom-right next to the clock.
+   - If you don't see it, click the small **^** arrow by the clock.
+   - To keep it always visible, drag it from there onto the taskbar.
+6. If Windows asks whether TaskCraft may send **notifications**, click **Allow**.
+
+You'll also find TaskCraft in the **Start** menu.
+
+## Linux
+
+**You need:** a 64-bit Ubuntu 22.04 or newer, or a similar system (Linux Mint, Pop!\_OS, Debian 12, Zorin OS). The `.AppImage` works on most other systems.
+
+**Ubuntu, Mint, Debian and similar (recommended):**
+
+1. On the download page, click **Download for Linux**. You get a file ending in **`.deb`**.
+2. Double-click the file in your **Downloads** folder. The **App Center** (or **Software**) app opens. Click **Install** and enter your password.
+   - If double-clicking opens something else, right-click the file and choose **Open With → App Center** (or **Software Install**).
+3. Open **TaskCraft** from your applications menu.
+
+**Any other system (AppImage):**
+
+1. Download the **Linux AppImage** from the download page.
+2. Right-click the file → **Properties** → **Permissions**, and tick **Allow executing file as program** (or *Executable as Program*).
+3. Double-click it to start TaskCraft.
+
+> **Tray icon on Linux.** Click TaskCraft's icon in the top bar to open its menu, then choose **Quick Entry**. On plain GNOME (for example Fedora), install the **AppIndicator and KStatusNotifierItem Support** extension so the icon appears. Ubuntu has it already.
 
 ---
 
 ## Using TaskCraft
 
-- **Open quick entry** from anywhere with **⌥⌘Space** (Option-Command-Space), or click the calendar icon in the menu bar.
-- **Type a sentence and press Return.** Quick entry understands **English**, even when the rest of the app is in Italian:
-  - `Lunch with Sam tomorrow at 1` creates an event.
-  - `todo pay rent friday 9am #home` creates a task with a label.
-  - `Gym every monday at 7am alert 15 min before` creates a repeating event with a reminder.
-- **Open the main window** from the menu-bar icon (or ⌘↩ after typing). It has Day, Week, Month and Tasks views.
-- **Settings:** the gear in the main window's bottom-left corner, or ⌘,. There you can change the shortcut, turn on *Launch at login*, add calendars, and export everything as an `.ics` file.
-- **Language:** TaskCraft uses English or Italian, following the Mac's language (System Settings → General → Language & Region).
+- **Add something quickly from anywhere.** Press the quick-entry shortcut, type a sentence, and press **Return**:
+  - **Mac:** **⌥⌘Space** (Option-Command-Space)
+  - **Windows and Linux:** **Ctrl+Alt+Space**
 
-Closing the main window keeps TaskCraft running in the menu bar so reminders still arrive. To quit it completely, use the power icon at the bottom of the quick-entry popover, or *Quit TaskCraft* in the menu-bar menu.
+  You can also click TaskCraft's icon in the menu bar or tray. Quick entry understands **English**, even when the rest of the app is in Italian:
+  - `Lunch with Sam tomorrow at 1` adds an event.
+  - `todo pay rent friday 9am #home` adds a task with a label.
+  - `Gym every monday at 7am alert 15 min before` adds a repeating event with a reminder.
+- **Plan in the main window.** It has Day, Week, Month and Tasks views. **Double-click** anything to open its details.
+- **Settings:** the gear at the bottom-left of the main window, or **⌘,** on Mac and **Ctrl+,** on Windows and Linux. There you can change the shortcut, choose **Launch at login**, add calendars, and export everything.
+- **Language:** English or Italian, following your computer's language.
+
+Closing the main window keeps TaskCraft running in the menu bar or tray, so reminders still arrive. To quit completely, choose **Quit TaskCraft** from its icon's menu.
+
+**Your data stays on your computer.** There's no account and nothing is uploaded. Each computer keeps its own events and tasks; they don't sync with each other.
+
+## Updating, moving and removing
+
+**Update:** download the newer installer and install it the same way (on Mac, choose **Replace**). Your events and tasks are kept.
+
+**Back up:** Settings → **Export .ics…** saves everything in a file that Apple Calendar, Google Calendar and Outlook can import.
+
+**Move to another computer:** quit TaskCraft on both computers, then copy the TaskCraft data folder across to the same place on the new one:
+
+| System | Data folder |
+|---|---|
+| Mac | `~/Library/Application Support/TaskCraft` (Finder → Go → Go to Folder…) |
+| Windows | `%APPDATA%\TaskCraft` (paste into File Explorer's address bar) |
+| Linux | `~/.local/share/TaskCraft` |
+
+**Remove:**
+
+- **Mac:** quit TaskCraft, then drag it from Applications to the Trash.
+- **Windows:** Settings → Apps → Installed apps → TaskCraft → **Uninstall**.
+- **Linux:** in App Center (or Software), go to **Installed**, find TaskCraft and click **Uninstall**. For the AppImage, delete the file.
+
+Removing the app keeps your data folder (see the table above), in case you reinstall. Delete that folder too if you want everything gone.
+
+## Problems?
+
+| What you see | What to do |
+|---|---|
+| **Mac:** "TaskCraft can't be opened", "can't be verified" or "is damaged" | Follow Mac steps 5–6 (**Open Anyway**). The app isn't damaged; macOS says this about apps that aren't signed with a paid certificate. |
+| **Windows:** "Windows protected your PC" | Click **More info**, then **Run anyway**. |
+| **Mac:** ⌥⌘Space opens a Finder search window | Choose another shortcut in TaskCraft's Settings, or turn off *Show Finder search window* in System Settings → Keyboard → Keyboard Shortcuts → Spotlight. |
+| **Linux:** the shortcut does nothing | Some Linux desktops (Wayland) don't allow global shortcuts. Use the tray icon → **Quick Entry**, or log in with an "on Xorg" session. |
+| **No reminders appear** | Allow notifications for TaskCraft in your system's notification settings, and check TaskCraft is running (its icon is in the menu bar or tray). |
+| **Can't find the app after closing it** | It's still running. Click its icon in the menu bar (Mac) or tray (Windows: the **^** by the clock). |
+| **Dates aren't recognised** | Type the sentence in English: `tomorrow at 1`, `friday 9am`, `every monday`. |
+| **Mac:** it won't start | TaskCraft needs macOS 14 Sonoma or newer. |
+| **Linux:** the AppImage won't start | Use the `.deb` instead, or install the `libfuse2` package. |
 
 ---
 
-## Updating
+## For developers
 
-Repeat section A with the newer zip, and choose **Replace** when copying into Applications. Your events and tasks are kept. If you built it yourself, run `git pull` and then `./scripts/install.sh` again.
+To build from source (Rust, Node.js 22+ and the Tauri CLI), see the project [README](../README.md).
 
-## Moving or backing up your data
-
-All data is in one folder:
-
-```
-~/Library/Application Support/TaskCraft/
-```
-
-- **Backup:** Settings → **Export .ics…** saves everything in a format Apple Calendar and Google Calendar can import. To keep TaskCraft's own data, quit TaskCraft and copy the folder above.
-- **Moving to a new Mac:** quit TaskCraft on both Macs, then copy the folder above to the same place on the new Mac.
-
-## Uninstalling
-
-1. Quit TaskCraft (menu-bar icon → *Quit TaskCraft*).
-2. Drag **TaskCraft** from Applications to the Trash.
-3. To also delete your data, run this in Terminal (this cannot be undone):
-   ```bash
-   rm -rf ~/Library/Application\ Support/TaskCraft ~/Library/Logs/TaskCraft
-   ```
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| **"TaskCraft is damaged and can't be opened"** or **"can't be verified"** | Follow step 3 above (*Open Anyway*), or run the Terminal shortcut. The app isn't damaged; macOS shows this for apps not notarized by Apple. |
-| **⌥⌘Space opens a Finder search window instead** | macOS uses that shortcut for Finder search on some Macs. Pick another one in TaskCraft's Settings, or turn off *Show Finder search window* in System Settings → Keyboard → Keyboard Shortcuts → Spotlight. |
-| **No reminders appear** | System Settings → Notifications → TaskCraft → allow notifications. Also check that TaskCraft is running (its icon is in the menu bar). |
-| **Can't find the app after closing it** | It's still in the menu bar. Click the calendar icon there. |
-| **Dates in quick entry aren't recognised** | Type the sentence in English (`tomorrow at 1`, `friday 9am`). |
-| **It doesn't start on an older Mac** | TaskCraft needs macOS 14 Sonoma or newer. |
+- `./scripts/install.sh` builds and installs it on your own Mac.
+- `./scripts/package.sh` makes a shareable Mac zip.
+- Release installers for all three systems are built by GitHub Actions when a version tag such as `v0.2.0` is pushed (`.github/workflows/release.yml`).
