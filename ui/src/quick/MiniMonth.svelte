@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
   import { monthGrid, sameDay } from '../lib/layout';
   import { monthTitle, weekdayInitials, ymd } from '../lib/format';
@@ -26,8 +27,8 @@
   <div class="head">
     <button class="title" onclick={() => { month = new Date(today.getFullYear(), today.getMonth(), 1); onselect?.(null); }}>{monthTitle(month)}</button>
     <div>
-      <button class="icon-btn" aria-label="Previous month" onclick={() => shift(-1)}><ChevronLeft size={15} /></button>
-      <button class="icon-btn" aria-label="Next month" onclick={() => shift(1)}><ChevronRight size={15} /></button>
+      <button class="icon-btn" aria-label={t('common.previousMonth')} onclick={() => shift(-1)}><ChevronLeft size={15} /></button>
+      <button class="icon-btn" aria-label={t('common.nextMonth')} onclick={() => shift(1)}><ChevronRight size={15} /></button>
     </div>
   </div>
   <div class="grid">

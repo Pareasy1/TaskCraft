@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { onMount, tick } from 'svelte';
   import type { Occurrence } from '../lib/types';
   import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
@@ -133,7 +134,7 @@
     {/each}
   </div>
   <div class="allday">
-    <div class="gutter small">all-day</div>
+    <div class="gutter small">{t('grid.allDay')}</div>
     {#each allDay as items}
       <div class="adcol">
         {#each items as o (key(o))}
@@ -165,7 +166,7 @@
                 role="button"
                 tabindex="0"
                 data-event={o.eventId}
-                aria-label="{o.title}, {fmtTime(new Date(o.start))} to {fmtTime(new Date(o.end))}. Enter to open, arrow keys to move, Shift plus up or down to change length."
+                aria-label={t('grid.eventAria', { title: o.title, start: fmtTime(new Date(o.start)), end: fmtTime(new Date(o.end)) })}
                 onpointerdown={(e) => begin(e, o, 'move')}
                 onkeydown={(e) => keydown(e, o)}
               >

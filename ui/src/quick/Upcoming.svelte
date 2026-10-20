@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tr } from '../lib/i18n';
   import type { Occurrence, Task, TaskStatus } from '../lib/types';
   import StatusGlyph from '../main/tasks/StatusGlyph.svelte';
   import LabelChip from '../main/tasks/LabelChip.svelte';
@@ -30,7 +31,7 @@
 </script>
 
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
-  <div class="item task" role="button" tabindex="0" aria-label="Open task {t.title}"
+  <div class="item task" role="button" tabindex="0" aria-label={tr('quick.openTask', { title: t.title })}
     onclick={() => onopen('task', t.id)} onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onopen('task', t.id)}>
     <StatusGlyph status={t.status} size={15} onchange={(s) => onstatus(t, s)} />
     <span class="name">{t.title}</span>
@@ -41,9 +42,9 @@
 
 <div class="list">
   {#if pinned.length}
-    <div class="heading">Tasks</div>
+    <div class="heading">{tr('group.tasks')}</div>
     {#each pinned as t (t.id)}
-      {@render taskRow(t, overdue(t) ? 'Overdue' : t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', overdue(t))}
+      {@render taskRow(t, overdue(t) ? tr('group.overdue') : t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', overdue(t))}
     {/each}
   {/if}
   {#each groups as g (g.day.getTime())}
@@ -52,15 +53,15 @@
       {@render taskRow(t, t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', false)}
     {/each}
     {#each g.events as o (o.eventId + o.start)}
-      <div class="item" role="button" tabindex="0" aria-label="Open event {o.title}"
+      <div class="item" role="button" tabindex="0" aria-label={tr('quick.openEvent', { title: o.title })}
         onclick={() => onopen('event', o.eventId)} onkeydown={(e) => e.key === 'Enter' && onopen('event', o.eventId)}>
         <span class="dot" style="background:{o.color}"></span>
         <span class="name">{o.title}</span>
-        <span class="meta">{o.allDay ? 'all-day' : fmtTime(new Date(o.start))}</span>
+        <span class="meta">{o.allDay ? tr('grid.allDay') : fmtTime(new Date(o.start))}</span>
       </div>
     {/each}
   {:else}
-    {#if !pinned.length}<div class="empty">Nothing scheduled</div>{/if}
+    {#if !pinned.length}<div class="empty">{tr('quick.nothing')}</div>{/if}
   {/each}
 </div>
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  // `t` names a task throughout this component, so the translator is `tr`.
+  import { t as tr } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
   import { flip } from 'svelte/animate';
   import type { Task, TaskStatus } from '../../lib/types';
@@ -73,7 +75,7 @@
             role="button"
             tabindex="0"
             draggable="true"
-            aria-label="{t.title}, {STATUS_LABEL[t.status]}. Arrow keys move between columns."
+            aria-label={tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] })}
             animate:flip={{ duration: reduce ? 0 : 180 }}
             ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
             ondragend={() => { dragging = null; over = null; }}
@@ -90,18 +92,18 @@
                   <LabelChip name={l.name} color={l.color} active={activeLabels.includes(l.id)} onclick={() => onlabel(l.id)} />
                 {/each}
                 <span class="spacer"></span>
-                {#if t.recurring}<Repeat size={11} class="rep" aria-label="Repeats" />{/if}
+                {#if t.recurring}<Repeat size={11} class="rep" aria-label={tr('common.repeats')} />{/if}
                 {#if t.due && t.status !== 'done'}<span class="due" class:late={isOverdue(t, now)}>{due(t)}</span>{/if}
                 <span class="cal" style="background:{t.color}"></span>
               </div>
             {/if}
           </div>
         {:else}
-          <p class="empty">{col.status === 'inProgress' ? 'Drag a task here when you start it.' : col.status === 'done' ? 'Finished tasks land here.' : 'Nothing to do.'}</p>
+          <p class="empty">{col.status === 'inProgress' ? tr('board.emptyProgress') : col.status === 'done' ? tr('board.emptyDone') : tr('board.emptyTodo')}</p>
         {/each}
         {#if col.status === 'done' && (col.hidden || showAllDone)}
           <button class="more" onclick={() => (showAllDone = !showAllDone)}>
-            {showAllDone ? 'Show recent only' : `Show ${col.hidden} older`}
+            {showAllDone ? tr('board.showRecent') : tr('board.showOlder', { n: col.hidden })}
           </button>
         {/if}
       </div>

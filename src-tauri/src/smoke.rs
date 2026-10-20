@@ -16,6 +16,7 @@ pub fn run(text: &str, now: DateTime<Tz>) -> Result<String, CmdError> {
         store: Mutex::new(store),
         settings: RwLock::new(Settings::default()),
         settings_path: None,
+        lang: RwLock::default(),
     };
     let r = create_from_text_impl(&st, text, now, false)?;
     let store = st

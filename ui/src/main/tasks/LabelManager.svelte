@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n';
   import { Trash2 } from 'lucide-svelte';
   import type { TaskLabel } from '../../lib/types';
   import { api, errorMessage } from '../../lib/api';
@@ -28,29 +29,29 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
-<div class="pop" role="dialog" aria-label="Labels">
-  <p class="intro">Type <strong>#name</strong> in a task to add a label. Renaming a label to one that already exists merges them.</p>
+<div class="pop" role="dialog" aria-label={t('labels.title')}>
+  <p class="intro">{t('labels.intro')}</p>
   {#each labels as l (l.id)}
     <div class="item">
-      <button class="sw" style="background:{l.color}" aria-label="Change color of {l.name}" onclick={() => (picking = picking === l.id ? null : l.id)}></button>
+      <button class="sw" style="background:{l.color}" aria-label={t('labels.changeColor', { name: l.name })} onclick={() => (picking = picking === l.id ? null : l.id)}></button>
       <input
         value={l.name}
-        aria-label="Label name"
+        aria-label={t('labels.name')}
         maxlength="32"
         onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
         onblur={(e) => save(l, (e.currentTarget as HTMLInputElement).value, l.color)}
       />
-      <button class="icon-btn" aria-label="Delete {l.name}" title="Delete label (tasks keep everything else)" onclick={() => remove(l)}><Trash2 size={13} /></button>
+      <button class="icon-btn" aria-label={t('labels.delete', { name: l.name })} title={t('labels.deleteTitle')} onclick={() => remove(l)}><Trash2 size={13} /></button>
     </div>
     {#if picking === l.id}
       <div class="palette">
         {#each PALETTE as c}
-          <button class="sw" class:on={c === l.color} style="background:{c}" aria-label="Use {c}" onclick={() => { picking = null; save(l, l.name, c); }}></button>
+          <button class="sw" class:on={c === l.color} style="background:{c}" aria-label={t('labels.useColor', { color: c })} onclick={() => { picking = null; save(l, l.name, c); }}></button>
         {/each}
       </div>
     {/if}
   {:else}
-    <p class="empty">No labels yet.</p>
+    <p class="empty">{t('labels.empty')}</p>
   {/each}
 </div>
 

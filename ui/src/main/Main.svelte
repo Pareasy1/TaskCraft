@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { X } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
@@ -47,7 +48,7 @@
     return [days[0], addDays(days[days.length - 1], 1)] as const;
   });
   let title = $derived.by(() => {
-    if (view === 'tasks') return 'Tasks';
+    if (view === 'tasks') return t('toolbar.tasks');
     if (view === 'month') return monthTitle(anchor);
     if (view === 'day') return anchor.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const a = days[0], b = days[6];
@@ -77,10 +78,10 @@
       calendars = cals;
       settings = s;
       taskSections = [
-        { key: 'overdue', name: 'Overdue', tasks: overdue },
-        { key: 'today', name: 'Today', tasks: today },
-        { key: 'upcoming', name: 'Upcoming', tasks: upcoming },
-        { key: 'completed', name: 'Completed', tasks: completed.slice(0, 30) },
+        { key: 'overdue', name: t('group.overdue'), tasks: overdue },
+        { key: 'today', name: t('view.today'), tasks: today },
+        { key: 'upcoming', name: t('view.upcoming'), tasks: upcoming },
+        { key: 'completed', name: t('view.completed'), tasks: completed.slice(0, 30) },
       ];
     } catch (e) {
       error = errorMessage(e);
@@ -188,10 +189,10 @@
 
   async function move(o: Occurrence, start: Date, end: Date) {
     try {
-      const scope = o.recurring ? await askScope('Move', true) : 'all';
+      const scope = o.recurring ? await askScope(t('scope.move'), true) : 'all';
       if (!scope) return;
       await api.moveEvent(o.eventId, o.recurring ? o.start : null, start.toISOString(), end.toISOString(), scope);
-      const msg = `Moved “${o.title}” to ${fmtShortDate(start)}${o.allDay ? '' : `, ${fmtTime(start)}`}`;
+      const msg = t('msg.movedTo', { title: o.title, where: `${fmtShortDate(start)}${o.allDay ? '' : `, ${fmtTime(start)}`}` });
       // Undo restores a single event; a change to a repeating series has no undo.
       notify(msg, o.recurring ? undefined : () => api.moveEvent(o.eventId, null, o.start, o.end, 'all').then(() => {}));
     } catch (e) {
@@ -262,14 +263,14 @@
   <section class="content">
     <Toolbar bind:view {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
       onnew={() => { if (view === 'tasks') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
-    {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+    {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
     <div class="body">
       {#if hits.length || query.trim()}
         <div class="results">
-          <div class="rhead">{hits.length} result{hits.length === 1 ? '' : 's'} for “{query}”</div>
+          <div class="rhead">{hits.length === 1 ? t('main.result', { q: query }) : t('main.results', { n: hits.length, q: query })}</div>
           {#each hits as h (h.kind + h.id)}
             <button class="hit" onclick={() => (h.kind === 'event' ? reveal({ kind: 'event', id: h.id }) : openTask(h.id))}>
-              <span class="hk">{h.kind === 'event' ? 'Event' : 'Task'}</span>
+              <span class="hk">{h.kind === 'event' ? t('common.event') : t('common.task')}</span>
               <span class="ht">{h.title}</span>
               <span class="hw">{h.when ? `${fmtShortDate(new Date(h.when))} ${fmtTime(new Date(h.when))}` : ''}</span>
             </button>
@@ -299,17 +300,17 @@
 {#if scopePrompt}
   <div class="scrim">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="scope-title" tabindex="-1" bind:this={dialogEl} onkeydown={dialogKeys}>
-      <strong id="scope-title">{scopePrompt.verb} a repeating event</strong>
+      <strong id="scope-title">{t('scope.title', { verb: scopePrompt.verb })}</strong>
       <p class="muted">
         {scopePrompt.allowThis
-          ? 'Apply the change to this occurrence only, or to every event in the series?'
-          : 'This applies to every event in the series. Open a single occurrence from the calendar to change just that one.'}
+          ? t('scope.question')
+          : t('scope.allOnly')}
       </p>
       <div class="dactions">
-        <button class="btn" onclick={() => scopePrompt?.resolve(null)}>Cancel</button>
-        <button class="btn" onclick={() => scopePrompt?.resolve('all')}>All events</button>
+        <button class="btn" onclick={() => scopePrompt?.resolve(null)}>{t('common.cancel')}</button>
+        <button class="btn" onclick={() => scopePrompt?.resolve('all')}>{t('scope.all')}</button>
         {#if scopePrompt.allowThis}
-          <button class="btn primary" onclick={() => scopePrompt?.resolve('this')}>This event</button>
+          <button class="btn primary" onclick={() => scopePrompt?.resolve('this')}>{t('scope.this')}</button>
         {/if}
       </div>
     </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { Plus, Trash2, X } from 'lucide-svelte';
@@ -26,7 +27,7 @@
     try {
       settings = await api.setSettings({ ...settings, ...patch });
       error = '';
-      flash('Saved');
+      flash(t('settings.saved'));
     } catch (e) {
       error = errorMessage(e);
       await load();
@@ -49,7 +50,7 @@
     if (e.key === 'Escape') return void (recording = false);
     if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return;
     const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
-    if (!mods.length) return void (error = 'Use at least one modifier key (⌘, ⌥, ⌃ or ⇧)');
+    if (!mods.length) return void (error = t('settings.needModifier'));
     const key = e.code.startsWith('Key') ? e.code.slice(3) : e.code.startsWith('Digit') ? e.code.slice(5) : e.code;
     recording = false;
     update({ hotkey: [...mods, key].join('+') });
@@ -93,7 +94,7 @@
       const path = await saveDialog({ defaultPath: 'TaskCraft.ics', filters: [{ name: 'iCalendar', extensions: ['ics'] }] });
       if (!path) return;
       await api.exportIcs(path);
-      flash('Exported');
+      flash(t('settings.exported'));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -109,86 +110,86 @@
 <svelte:window onkeydown={record} />
 
 <main>
-  <h1>Settings</h1>
-  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+  <h1>{t('settings.title')}</h1>
+  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
   <div role="status" aria-live="polite">{#if notice}<div class="notice">{notice}</div>{/if}</div>
 
   {#if settings}
     <section>
-      <h2>General</h2>
+      <h2>{t('settings.general')}</h2>
       <div class="group">
       <div class="row">
-        <span>Quick entry shortcut</span>
+        <span>{t('settings.shortcut')}</span>
         <button class="btn hotkey" class:rec={recording} onclick={() => (recording = !recording)}>
-          {recording ? 'Press keys… (esc to cancel)' : pretty(settings.hotkey)}
+          {recording ? t('settings.recording') : pretty(settings.hotkey)}
         </button>
       </div>
       <label class="row">
-        <span>Launch at login</span>
+        <span>{t('settings.login')}</span>
         <input type="checkbox" checked={settings.launchAtLogin} onchange={(e) => update({ launchAtLogin: e.currentTarget.checked })} />
       </label>
       <label class="row">
-        <span>Default calendar</span>
+        <span>{t('settings.defaultCalendar')}</span>
         <select class="field" value={settings.defaultCalendarId} onchange={(e) => update({ defaultCalendarId: Number(e.currentTarget.value) })}>
           {#each calendars as c}<option value={c.id}>{c.name}</option>{/each}
         </select>
       </label>
       <label class="row">
-        <span>Default event length</span>
+        <span>{t('settings.eventLength')}</span>
         <select class="field" value={settings.defaultEventMinutes} onchange={(e) => update({ defaultEventMinutes: Number(e.currentTarget.value) })}>
           {#each [15, 30, 45, 60, 90, 120] as m}<option value={m}>{m < 60 ? `${m} min` : `${m / 60} h`}</option>{/each}
         </select>
       </label>
       <label class="row">
-        <span>Week starts on</span>
+        <span>{t('settings.weekStart')}</span>
         <select class="field" value={settings.weekStart} onchange={(e) => update({ weekStart: e.currentTarget.value as Settings['weekStart'] })}>
-          <option value="Mon">Monday</option><option value="Sun">Sunday</option>
+          <option value="Mon">{t('settings.monday')}</option><option value="Sun">{t('settings.sunday')}</option>
         </select>
       </label>
       <label class="row">
-        <span>Numeric dates</span>
+        <span>{t('settings.numericDates')}</span>
         <select class="field" value={settings.dateOrder} onchange={(e) => update({ dateOrder: e.currentTarget.value as Settings['dateOrder'] })}>
-          <option value="dayMonth">Day/Month (7/11 = 7 Nov)</option><option value="monthDay">Month/Day (7/11 = Jul 11)</option>
+          <option value="dayMonth">{t('settings.dayMonth')}</option><option value="monthDay">{t('settings.monthDay')}</option>
         </select>
       </label>
       </div>
     </section>
 
     <section>
-      <h2>Calendars</h2>
+      <h2>{t('settings.calendars')}</h2>
       <div class="group">
       {#each calendars as c (c.id)}
         <div class="cal">
-          <input type="color" aria-label="Color of {c.name}" value={c.color} onchange={(e) => saveCalendar(c, { color: e.currentTarget.value })} />
-          <input class="field" aria-label="Calendar name" value={c.name} onchange={(e) => saveCalendar(c, { name: e.currentTarget.value })} />
-          <button class="icon-btn" title="Delete calendar" aria-label="Delete calendar {c.name}" disabled={calendars.length < 2}
+          <input type="color" aria-label={t('settings.calendarColor', { name: c.name })} value={c.color} onchange={(e) => saveCalendar(c, { color: e.currentTarget.value })} />
+          <input class="field" aria-label={t('settings.calendarName')} value={c.name} onchange={(e) => saveCalendar(c, { name: e.currentTarget.value })} />
+          <button class="icon-btn" title={t('settings.deleteCalendar')} aria-label={t('settings.deleteCalendarNamed', { name: c.name })} disabled={calendars.length < 2}
             onclick={() => (deleting = { cal: c, moveTo: calendars.find((x) => x.id !== c.id)!.id })}><Trash2 size={14} /></button>
         </div>
       {/each}
       <div class="cal">
         <span class="swatch"></span>
-        <input class="field" placeholder="New calendar" aria-label="New calendar name" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && addCalendar()} />
-        <button class="icon-btn" title="Add calendar" aria-label="Add calendar" onclick={addCalendar}><Plus size={15} /></button>
+        <input class="field" placeholder={t('settings.newCalendar')} aria-label={t('settings.newCalendarName')} bind:value={newName} onkeydown={(e) => e.key === 'Enter' && addCalendar()} />
+        <button class="icon-btn" title={t('settings.addCalendar')} aria-label={t('settings.addCalendar')} onclick={addCalendar}><Plus size={15} /></button>
       </div>
       {#if deleting}
         <div class="confirm">
-          <span>Delete “{deleting.cal.name}” and move its items to</span>
+          <span>{t('settings.deleteMove', { name: deleting.cal.name })}</span>
           <select class="field small" bind:value={deleting.moveTo}>
             {#each calendars.filter((c) => c.id !== deleting?.cal.id) as c}<option value={c.id}>{c.name}</option>{/each}
           </select>
-          <button class="btn" onclick={() => (deleting = null)}>Cancel</button>
-          <button class="btn danger" onclick={confirmDelete}>Delete</button>
+          <button class="btn" onclick={() => (deleting = null)}>{t('common.cancel')}</button>
+          <button class="btn danger" onclick={confirmDelete}>{t('common.delete')}</button>
         </div>
       {/if}
       </div>
     </section>
 
     <section>
-      <h2>Data</h2>
+      <h2>{t('settings.data')}</h2>
       <div class="group">
       <div class="row">
-        <span>Export all events and tasks<br /><span class="hint">An .ics file Apple Calendar and Google Calendar can import</span></span>
-        <button class="btn" onclick={exportIcs}>Export .ics…</button>
+        <span>{t('settings.export')}<br /><span class="hint">{t('settings.exportHint')}</span></span>
+        <button class="btn" onclick={exportIcs}>{t('settings.exportButton')}</button>
       </div>
       </div>
     </section>

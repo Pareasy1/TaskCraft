@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n';
   import type { TaskStatus } from '../../lib/types';
   import { nextStatus, STATUSES, STATUS_LABEL } from '../../lib/tasks';
 
@@ -28,8 +29,8 @@
   <span class="wrap">
     <button
       class="btn-glyph"
-      title="{STATUS_LABEL[status]} — click for {STATUS_LABEL[nextStatus(status)]}, right-click to choose"
-      aria-label="Status: {STATUS_LABEL[status]}. Change to {STATUS_LABEL[nextStatus(status)]}"
+      title={t('status.title', { status: STATUS_LABEL[status], next: STATUS_LABEL[nextStatus(status)] })}
+      aria-label={t('status.aria', { status: STATUS_LABEL[status], next: STATUS_LABEL[nextStatus(status)] })}
       onclick={(e) => { e.stopPropagation(); onchange(nextStatus(status)); }}
       oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menu = !menu; }}
     >{@render glyph(status, size)}</button>

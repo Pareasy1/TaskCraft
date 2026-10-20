@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
   import type { Task, TaskStatus } from '../../lib/types';
   import StatusGlyph from './StatusGlyph.svelte';
@@ -33,9 +34,9 @@
       {/each}
     </span>
   {/if}
-  {#if task.recurring}<Repeat size={12} class="rep" aria-label="Repeats" />{/if}
+  {#if task.recurring}<Repeat size={12} class="rep" aria-label={t('common.repeats')} />{/if}
   {#if due}<span class="due" class:late>{due}</span>{/if}
-  <span class="cal" style="background:{task.color}" title="Calendar color"></span>
+  <span class="cal" style="background:{task.color}" title={t('labels.calendarColor')}></span>
 </div>
 
 <style>

@@ -23,11 +23,19 @@ pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(w)
 }
 
+fn settings_title(app: &AppHandle) -> &'static str {
+    let lang = app
+        .try_state::<crate::state::AppState>()
+        .map(|s| *s.lang.read().unwrap_or_else(|e| e.into_inner()))
+        .unwrap_or_default();
+    crate::i18n::text(lang).settings_window
+}
+
 pub fn show_settings(app: &AppHandle) -> tauri::Result<()> {
     let w = match existing(app, "settings") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
-            .title("TaskCraft Settings")
+            .title(settings_title(app))
             .inner_size(560.0, 620.0)
             .resizable(false)
             .build()?,

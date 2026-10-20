@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { Rows3, Columns3, Tags } from 'lucide-svelte';
   import type { ParsedItem, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
@@ -28,8 +29,10 @@
     input?: HTMLInputElement;
   } = $props();
 
-  const VIEW_NAMES: Record<TaskView, string> = { all: 'All', today: 'Today', upcoming: 'Upcoming', nodate: 'No date', completed: 'Completed' };
-  const STATUS_FILTERS: [StatusFilter, string][] = [['any', 'Any status'], ['todo', 'To do'], ['inProgress', 'In progress']];
+  const VIEW_NAMES: Record<TaskView, string> = {
+    all: t('view.all'), today: t('view.today'), upcoming: t('view.upcoming'), nodate: t('view.nodate'), completed: t('view.completed'),
+  };
+  const STATUS_FILTERS: [StatusFilter, string][] = [['any', t('status.any')], ['todo', t('status.todo')], ['inProgress', t('status.inProgress')]];
   const LAYOUT_KEY = 'taskcraft.tasks.layout';
 
   const stored = (() => {
@@ -111,7 +114,7 @@
   const labelColor = (name: string) => labels.find((l) => l.name.toLowerCase() === name.toLowerCase())?.color ?? 'var(--accent)';
 
   const heading = (g: TaskGroup<Task>) =>
-    g.kind === 'overdue' ? 'Overdue' : g.kind === 'nodate' ? 'No date' : g.kind === 'completed' ? 'Completed' : fmtDayHeading(g.day!, now);
+    g.kind === 'overdue' ? t('group.overdue') : g.kind === 'nodate' ? t('view.nodate') : g.kind === 'completed' ? t('view.completed') : fmtDayHeading(g.day!, now);
 
   const dueLabel = (t: Task, g: TaskGroup<Task>) => {
     if (!t.due) return '';
@@ -123,10 +126,10 @@
 
   const emptyText = () =>
     active.length || status !== 'any'
-      ? 'No tasks match these filters.'
+      ? t('tasks.emptyFiltered')
       : view === 'completed'
-        ? 'Tasks you finish show up here.'
-        : 'Nothing here. Type a task above and press Return.';
+        ? t('tasks.emptyCompleted')
+        : t('tasks.empty');
 </script>
 
 <svelte:window onpointerdown={(e) => managing && !(e.target as HTMLElement).closest?.('.mgr') && (managing = false)} />
@@ -134,25 +137,25 @@
 <div class="page" class:board={layout === 'board'}>
   <div class="head">
     <div class="add">
-      <HighlightInput label="New task" bind:value={text} bind:input spans={parsed?.spans ?? []} placeholder="Add a task, like “pay rent friday 9am #home”" onkeydown={add} />
+      <HighlightInput label={t('common.newTask')} bind:value={text} bind:input spans={parsed?.spans ?? []} placeholder={t('tasks.addPlaceholder')} onkeydown={add} />
       <div class="hint">
         {#if parsed}
-          <strong>{parsed.title || 'Untitled'}</strong>
+          <strong>{parsed.title || t('common.untitled')}</strong>
           <span>{describeParsed(parsed)}</span>
           {#each parsed.tags as tag}<LabelChip name={tag} color={labelColor(tag)} />{/each}
         {:else}
-          Press Return to add. Dates and #labels are optional.
+          {t('tasks.addHint')}
         {/if}
       </div>
     </div>
-    <div class="layout" role="radiogroup" aria-label="Layout">
-      <button role="radio" aria-checked={layout === 'list'} class:on={layout === 'list'} onclick={() => (layout = 'list')} title="List"><Rows3 size={15} /><span>List</span></button>
-      <button role="radio" aria-checked={layout === 'board'} class:on={layout === 'board'} onclick={() => (layout = 'board')} title="Board"><Columns3 size={15} /><span>Board</span></button>
+    <div class="layout" role="radiogroup" aria-label={t('tasks.layout')}>
+      <button role="radio" aria-checked={layout === 'list'} class:on={layout === 'list'} onclick={() => (layout = 'list')} title={t('tasks.list')}><Rows3 size={15} /><span>{t('tasks.list')}</span></button>
+      <button role="radio" aria-checked={layout === 'board'} class:on={layout === 'board'} onclick={() => (layout = 'board')} title={t('tasks.board')}><Columns3 size={15} /><span>{t('tasks.board')}</span></button>
     </div>
   </div>
 
   <div class="filters">
-    <div class="views" role="tablist" aria-label="Due">
+    <div class="views" role="tablist" aria-label={t('tasks.due')}>
       {#each views as v}
         <button role="tab" aria-selected={view === v} class:on={view === v} onclick={() => (view = v)}>
           {VIEW_NAMES[v]}<span class="n">{counts[v]}</span>
@@ -160,7 +163,7 @@
       {/each}
     </div>
     {#if layout === 'list'}
-      <select class="status" bind:value={status} aria-label="Status">
+      <select class="status" bind:value={status} aria-label={t('inspector.status')}>
         {#each STATUS_FILTERS as [v, name]}<option value={v}>{name}</option>{/each}
       </select>
     {/if}
@@ -168,9 +171,9 @@
       {#each labels as l (l.id)}
         <LabelChip name={l.name} color={l.color} active={active.includes(l.id)} count={usage.get(l.id)} onclick={() => toggleLabel(l.id)} />
       {/each}
-      {#if active.length}<button class="clear" onclick={() => (active = [])}>Clear</button>{/if}
+      {#if active.length}<button class="clear" onclick={() => (active = [])}>{t('tasks.clear')}</button>{/if}
       <span class="mgr">
-        <button class="icon-btn" title="Manage labels" aria-label="Manage labels" aria-expanded={managing} onclick={() => (managing = !managing)}><Tags size={15} /></button>
+        <button class="icon-btn" title={t('tasks.manageLabels')} aria-label={t('tasks.manageLabels')} aria-expanded={managing} onclick={() => (managing = !managing)}><Tags size={15} /></button>
         {#if managing}<LabelManager {labels} onclose={() => (managing = false)} {onerror} />{/if}
       </span>
     </div>

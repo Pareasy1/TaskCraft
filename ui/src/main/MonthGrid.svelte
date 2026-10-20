@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import type { Occurrence } from '../lib/types';
   import { addDays, monthBars, monthGrid, sameDay } from '../lib/layout';
   import { fmtTime } from '../lib/format';
@@ -53,7 +54,7 @@
               <span class="time">{fmtTime(new Date(o.start))}</span>
             </button>
           {/each}
-          {#if more}<button class="more" onclick={() => onday(d)}>+{more} more</button>{/if}
+          {#if more}<button class="more" onclick={() => onday(d)}>{t('common.more', { n: more })}</button>{/if}
         </div>
       </div>
     {/each}

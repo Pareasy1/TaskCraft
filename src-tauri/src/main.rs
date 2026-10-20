@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod i18n;
 mod logging;
 mod scheduler;
 mod settings;
@@ -112,6 +113,7 @@ fn main() {
             commands::list_labels,
             commands::update_label,
             commands::delete_label,
+            commands::set_ui_language,
             commands::list_range,
             commands::list_tasks,
             commands::search,

@@ -1,5 +1,6 @@
 // One transient message at the bottom of the main window, optionally with Undo.
 import { errorMessage } from './api';
+import { t } from './i18n';
 
 const SHOW_MS = 6000;
 
@@ -28,6 +29,6 @@ export async function undo() {
   try {
     await fn();
   } catch (e) {
-    notify(`Couldn’t undo: ${errorMessage(e)}`);
+    notify(t('msg.undoFailed', { reason: errorMessage(e) }));
   }
 }

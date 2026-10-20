@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
@@ -87,7 +88,7 @@
     if (!text.trim()) return;
     try {
       const ref: ItemRef = await api.createFromText(text);
-      showFlash(`Added ${parsed?.kind === 'task' ? 'task' : 'event'} “${parsed?.title || text}”`);
+      showFlash(t(parsed?.kind === 'task' ? 'msg.addedTask' : 'msg.addedEvent', { title: parsed?.title || text }));
       text = '';
       parsed = null;
       error = '';
@@ -111,10 +112,10 @@
     }
   }
 
-  async function setStatus(t: Task, s: TaskStatus) {
+  async function setStatus(task: Task, s: TaskStatus) {
     try {
-      await api.setTaskStatus(t.id, s);
-      showFlash(s === 'done' ? `Completed “${t.title}”` : `Moved “${t.title}” to ${STATUS_LABEL[s]}`);
+      await api.setTaskStatus(task.id, s);
+      showFlash(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -144,29 +145,29 @@
 
 <main class="pop">
   <HighlightInput
-    label="New event or task"
+    label={t('quick.inputLabel')}
     bind:value={text}
     bind:input
     spans={parsed?.spans ?? []}
-    placeholder="Lunch with Sam tomorrow at 1 · todo buy milk friday"
+    placeholder={t('quick.placeholder')}
     {onkeydown}
   />
   {#if parsed}
     <PreviewCard item={parsed} calendarColor={previewColor} />
-    <div class="hint">↩ Add · ⌘↩ Add &amp; open · esc Clear</div>
+    <div class="hint">{t('quick.hint')}</div>
   {/if}
   <div role="status" aria-live="polite">{#if flash}<div class="flash">{flash}</div>{/if}</div>
-  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
+  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">
     <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} onstatus={setStatus} onopen={openItem} />
   </div>
   <footer>
-    <button class="icon-btn" title="Open TaskCraft" aria-label="Open TaskCraft window" onclick={() => api.openMain()}><AppWindow size={16} /></button>
-    <button class="icon-btn" title="Settings" aria-label="Settings" onclick={() => api.openSettings()}><Gear size={16} /></button>
+    <button class="icon-btn" title={t('quick.open')} aria-label={t('quick.openLabel')} onclick={() => api.openMain()}><AppWindow size={16} /></button>
+    <button class="icon-btn" title={t('quick.settings')} aria-label={t('quick.settings')} onclick={() => api.openSettings()}><Gear size={16} /></button>
     <span class="spacer"></span>
-    <button class="icon-btn" title="Quit TaskCraft" aria-label="Quit TaskCraft" onclick={() => invoke('quit_app')}><Power size={16} /></button>
+    <button class="icon-btn" title={t('quick.quit')} aria-label={t('quick.quit')} onclick={() => invoke('quit_app')}><Power size={16} /></button>
   </footer>
 </main>
 

@@ -8,7 +8,7 @@ use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use taskcraft_parse::{parse, parse_task, ParseOptions, ParsedItem};
 use taskcraft_store::*;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CmdError {
@@ -274,6 +274,21 @@ pub fn set_task_status(
         .map_err(poisoned)?
         .set_task_status(id, status, Utc::now())?;
     changed(&app);
+    Ok(())
+}
+
+/// The UI reports the language it picked from the Mac's settings; the
+/// menu-bar menu, settings window title and notifications follow it.
+#[tauri::command]
+pub fn set_ui_language(app: AppHandle, st: State<AppState>, lang: String) -> CmdResult<()> {
+    let lang = crate::i18n::Lang::from_code(&lang);
+    *st.lang.write().map_err(poisoned)? = lang;
+    if let Err(e) = crate::tray::set_menu_language(&app, lang) {
+        tracing::warn!(error = %e, "cannot update tray menu language");
+    }
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.set_title(crate::i18n::text(lang).settings_window);
+    }
     Ok(())
 }
 

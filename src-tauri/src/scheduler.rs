@@ -1,6 +1,7 @@
 //! Background thread that turns due alerts into macOS notifications.
 
 use crate::commands::{local_tz, ItemRef};
+use crate::i18n::Lang;
 use crate::state::AppState;
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
@@ -19,11 +20,12 @@ pub trait Notifier {
 #[derive(Default)]
 pub struct LastFired(pub Mutex<Option<(ItemRef, DateTime<Utc>)>>);
 
-fn body(store: &Store, a: &DueAlert, tz: Tz) -> String {
+fn body(store: &Store, a: &DueAlert, tz: Tz, lang: Lang) -> String {
+    let text = crate::i18n::text(lang);
     let t = |d: DateTime<Utc>| d.with_timezone(&tz).format("%H:%M").to_string();
     let mut s = match a.owner {
         ItemKindDb::Event => match store.get_event(a.owner_id) {
-            Ok(e) if e.input.all_day => "All day".to_string(),
+            Ok(e) if e.input.all_day => text.all_day.to_string(),
             Ok(e) => format!(
                 "{} – {}",
                 t(a.when),
@@ -31,7 +33,7 @@ fn body(store: &Store, a: &DueAlert, tz: Tz) -> String {
             ),
             Err(_) => t(a.when),
         },
-        ItemKindDb::Task => format!("Due {}", t(a.when)),
+        ItemKindDb::Task => format!("{} {}", text.due, t(a.when)),
     };
     if let Some(l) = &a.location {
         s.push_str(" · ");
@@ -46,10 +48,11 @@ pub fn tick(
     n: &dyn Notifier,
     now: DateTime<Utc>,
     tz: Tz,
+    lang: Lang,
 ) -> Result<Vec<DueAlert>, StoreError> {
     let due = store.due_alerts(now)?;
     for a in &due {
-        n.notify(&a.title, &body(store, a, tz));
+        n.notify(&a.title, &body(store, a, tz, lang));
         store.mark_fired(a.alert_id, now)?;
     }
     Ok(due)
@@ -103,7 +106,8 @@ fn run_once(app: &AppHandle) {
     let Ok(store) = state.store.lock() else {
         return;
     };
-    match tick(&store, &AppNotifier(app), Utc::now(), local_tz()) {
+    let lang = *state.lang.read().unwrap_or_else(|e| e.into_inner());
+    match tick(&store, &AppNotifier(app), Utc::now(), local_tz(), lang) {
         Ok(fired) => {
             if let Some(last) = fired.last() {
                 tracing::info!(count = fired.len(), "alerts fired");
@@ -209,7 +213,7 @@ mod tests {
         add(&s, "Dentist", "2026-10-20T15:05:00Z", Some("Via Roma 12"));
         let fake = Fake::default();
         let now = utc("2026-10-20T14:58:00Z");
-        let fired = tick(&s, &fake, now, chrono_tz::Europe::Rome).unwrap();
+        let fired = tick(&s, &fake, now, chrono_tz::Europe::Rome, Lang::En).unwrap();
         assert_eq!(fired.len(), 2);
         let calls = fake.0.borrow();
         assert_eq!(calls.len(), 2);
@@ -217,5 +221,46 @@ mod tests {
         assert_eq!(calls[0].1, "17:00 – 18:00");
         assert_eq!(calls[1].1, "17:05 – 18:05 · Via Roma 12");
         assert!(s.due_alerts(now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn notification_text_in_italian() {
+        let s = Store::open_in_memory().unwrap();
+        s.insert_event(&EventInput {
+            calendar_id: 1,
+            title: "Ferie".into(),
+            start: utc("2026-10-20T22:00:00Z"),
+            end: utc("2026-10-21T22:00:00Z"),
+            tz: "Europe/Rome".into(),
+            all_day: true,
+            location: None,
+            attendees: vec![],
+            notes: None,
+            url: None,
+            rrule: None,
+            alerts: vec![AlertSpecUtc::Before(0)],
+        })
+        .unwrap();
+        s.insert_task(&taskcraft_store::TaskInput {
+            calendar_id: 1,
+            title: "Pagare affitto".into(),
+            due: Some(utc("2026-10-20T16:00:00Z")),
+            due_has_time: true,
+            tz: "Europe/Rome".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let fake = Fake::default();
+        tick(
+            &s,
+            &fake,
+            utc("2026-10-20T23:00:00Z"),
+            chrono_tz::Europe::Rome,
+            Lang::It,
+        )
+        .unwrap();
+        let mut bodies: Vec<String> = fake.0.borrow().iter().map(|c| c.1.clone()).collect();
+        bodies.sort();
+        assert_eq!(bodies, ["Scade alle 18:00", "Tutto il giorno"]);
     }
 }

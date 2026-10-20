@@ -1,6 +1,7 @@
 // Filtering and grouping for the Tasks view.
 import { sameDay, startOfDay } from './layout';
 import type { TaskStatus } from './types';
+import { t } from './i18n';
 
 export type TaskView = 'all' | 'today' | 'upcoming' | 'nodate' | 'completed';
 export const TASK_VIEWS: TaskView[] = ['all', 'today', 'upcoming', 'nodate', 'completed'];
@@ -79,7 +80,7 @@ export type StatusFilter = 'any' | 'todo' | 'inProgress';
 type WithStatus = TaskLike & { status: TaskStatus; labels: { id: number }[] };
 
 export const STATUSES: TaskStatus[] = ['todo', 'inProgress', 'done'];
-export const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'To do', inProgress: 'In progress', done: 'Done' };
+export const STATUS_LABEL: Record<TaskStatus, string> = { todo: t('status.todo'), inProgress: t('status.inProgress'), done: t('status.done') };
 const DONE_LIMIT = 30;
 
 /** Status filter, then labels: a task matches if it has any of `labels` (empty = no label filter). */

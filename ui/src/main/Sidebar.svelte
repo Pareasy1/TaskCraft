@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import type { Calendar, Task, TaskStatus } from '../lib/types';
   import MiniMonth from '../quick/MiniMonth.svelte';
   import TaskList from './TaskList.svelte';
@@ -31,7 +32,7 @@
 <aside>
   <div class="traffic" data-tauri-drag-region></div>
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => d && onselectday(d)} />
-  <div class="label">Calendars</div>
+  <div class="label">{t('main.calendars')}</div>
   {#each calendars as c (c.id)}
     <label class="cal">
       <input type="checkbox" checked={c.visible} style="accent-color:{c.color}" onchange={() => ontogglecalendar(c)} />

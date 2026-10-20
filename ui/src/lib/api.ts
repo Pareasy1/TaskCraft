@@ -1,6 +1,7 @@
 // Typed wrappers over the Rust commands.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { t } from './i18n';
 import type {
   Calendar, CalendarInput, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem,
   Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus,
@@ -45,7 +46,14 @@ export function onItemsChanged(cb: () => void): Promise<UnlistenFn> {
   return listen('items-changed', cb);
 }
 
+const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable'] as const;
+
+/** A user-facing message for an error from a command, in the app language when known. */
 export function errorMessage(e: unknown): string {
+  if (e && typeof e === 'object' && 'code' in e) {
+    const code = String((e as { code: unknown }).code);
+    if ((TRANSLATED_ERRORS as readonly string[]).includes(code)) return t(`error.${code as (typeof TRANSLATED_ERRORS)[number]}`);
+  }
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message);
   return String(e);
 }
