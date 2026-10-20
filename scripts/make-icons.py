@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the app icons in src-tauri/icons from icon/TaskCraft.png.
+"""Builds the app icons in src-tauri/icons from Icon/TaskCraft.png.
 
 The source artwork is a full-bleed rounded square. macOS app icons place that
 shape at 824×824 inside a transparent 1024×1024 canvas (Apple's icon grid), so
@@ -16,7 +16,7 @@ import tempfile
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "icon" / "TaskCraft.png"
+SRC = ROOT / "Icon" / "TaskCraft.png"
 OUT = ROOT / "src-tauri" / "icons"
 CANVAS = 1024
 SHAPE = 824  # Apple's rounded-square size on a 1024 canvas
@@ -51,7 +51,7 @@ def main() -> None:
         subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(OUT / "icon.icns")], check=True)
 
     # Keep the fitted 1024 master next to the source for reference.
-    img.save(ROOT / "icon" / "TaskCraft-1024.png", optimize=True)
+    img.save(ROOT / "Icon" / "TaskCraft-1024.png", optimize=True)
     print("icons written to", OUT)
 
 
