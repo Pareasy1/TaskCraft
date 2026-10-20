@@ -93,3 +93,28 @@ export function dayGroups<E extends { start: string; end: string }, T extends { 
   }
   return out;
 }
+
+/**
+ * Keyboard move/resize for a timed event: ↑/↓ move 15 minutes, Shift+↑/↓
+ * change the length (at least 15 minutes), ←/→ move a day at the same local time.
+ */
+export function nudgeEvent(start: Date, end: Date, key: string, shift: boolean): { start: Date; end: Date } | null {
+  const STEP = 15 * 60_000;
+  const len = end.getTime() - start.getTime();
+  switch (key) {
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      const d = key === 'ArrowUp' ? -STEP : STEP;
+      if (shift) return { start, end: new Date(Math.max(start.getTime() + STEP, end.getTime() + d)) };
+      return { start: new Date(start.getTime() + d), end: new Date(end.getTime() + d) };
+    }
+    case 'ArrowLeft':
+    case 'ArrowRight': {
+      const ns = addDays(start, key === 'ArrowLeft' ? -1 : 1);
+      const ne = addDays(end, key === 'ArrowLeft' ? -1 : 1);
+      return { start: ns, end: ne.getTime() > ns.getTime() ? ne : new Date(ns.getTime() + len) };
+    }
+    default:
+      return null;
+  }
+}

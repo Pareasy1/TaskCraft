@@ -28,8 +28,10 @@
 </script>
 
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
-  <div class="item task" role="button" tabindex="-1" ondblclick={() => onopen('task', t.id)}>
-    <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" onchange={() => oncomplete(t)} />
+  <div class="item task" role="button" tabindex="0" aria-label="Open task {t.title}"
+    onclick={() => onopen('task', t.id)} onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onopen('task', t.id)}>
+    <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" aria-label="Complete {t.title}"
+      onclick={(e) => e.stopPropagation()} onchange={() => oncomplete(t)} />
     <span class="name">{t.title}</span>
     <span class="meta" class:late>{meta}</span>
   </div>
@@ -48,7 +50,8 @@
       {@render taskRow(t, t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', false)}
     {/each}
     {#each g.events as o (o.eventId + o.start)}
-      <div class="item" role="button" tabindex="-1" ondblclick={() => onopen('event', o.eventId)}>
+      <div class="item" role="button" tabindex="0" aria-label="Open event {o.title}"
+        onclick={() => onopen('event', o.eventId)} onkeydown={(e) => e.key === 'Enter' && onopen('event', o.eventId)}>
         <span class="dot" style="background:{o.color}"></span>
         <span class="name">{o.title}</span>
         <span class="meta">{o.allDay ? 'all-day' : fmtTime(new Date(o.start))}</span>
@@ -76,6 +79,7 @@
     padding: 5px 6px;
     border-radius: 6px;
   }
+  .item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .item:hover { background: var(--hover); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

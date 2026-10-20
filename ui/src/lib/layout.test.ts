@@ -117,3 +117,33 @@ describe('review fixes', () => {
     expect(g[1].tasks.map((t) => t.id)).toEqual(['t1']);
   });
 });
+
+import { nudgeEvent } from './layout';
+
+describe('nudgeEvent', () => {
+  const s = new Date(2026, 9, 21, 9, 0);
+  const e = new Date(2026, 9, 21, 10, 0);
+  const hm = (d: Date) => `${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  it('↑/↓ move by 15 minutes keeping the length', () => {
+    const up = nudgeEvent(s, e, 'ArrowUp', false)!;
+    expect([hm(up.start), hm(up.end)]).toEqual(['21 8:45', '21 9:45']);
+    const down = nudgeEvent(s, e, 'ArrowDown', false)!;
+    expect([hm(down.start), hm(down.end)]).toEqual(['21 9:15', '21 10:15']);
+  });
+
+  it('Shift+↑/↓ change the length, never below 15 minutes', () => {
+    expect(hm(nudgeEvent(s, e, 'ArrowDown', true)!.end)).toBe('21 10:15');
+    expect(hm(nudgeEvent(s, e, 'ArrowUp', true)!.end)).toBe('21 9:45');
+    const short = nudgeEvent(s, new Date(2026, 9, 21, 9, 15), 'ArrowUp', true)!;
+    expect(hm(short.end)).toBe('21 9:15');
+  });
+
+  it('←/→ move a day at the same local time, across the DST change', () => {
+    const sat = nudgeEvent(new Date(2026, 9, 24, 9, 0), new Date(2026, 9, 24, 10, 0), 'ArrowRight', false)!;
+    expect([hm(sat.start), hm(sat.end)]).toEqual(['25 9:00', '25 10:00']);
+    expect(hm(nudgeEvent(s, e, 'ArrowLeft', false)!.start)).toBe('20 9:00');
+  });
+
+  it('other keys do nothing', () => expect(nudgeEvent(s, e, 'a', false)).toBeNull());
+});

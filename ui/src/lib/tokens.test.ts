@@ -1,8 +1,10 @@
 // Contrast checks for the colour tokens in styles.css (WCAG 2.1 AA).
+/// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+
 
 function block(selector: RegExp): Record<string, string> {
   const m = css.match(selector);

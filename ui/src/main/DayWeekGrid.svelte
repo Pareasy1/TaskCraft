@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { Occurrence } from '../lib/types';
-  import { addDays, layoutDay, sameDay, snap15 } from '../lib/layout';
+  import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
   import { fmtTime } from '../lib/format';
 
   const HOUR = 48; // px per hour
@@ -78,6 +78,33 @@
       : { top, height: Math.max(15, height + drag.dMin), shift: 0 };
   };
 
+  // ---- keyboard: Enter opens, arrows move/resize (see nudgeEvent) ----
+  let refocus: number | null = null;
+  function keydown(e: KeyboardEvent, o: Occurrence) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      return onselect(o);
+    }
+    const n = nudgeEvent(new Date(o.start), new Date(o.end), e.key, e.shiftKey);
+    if (!n) return;
+    e.preventDefault();
+    refocus = o.eventId;
+    onmove(o, n.start, n.end);
+  }
+  // Keep focus on the event after it re-renders at its new time.
+  $effect(() => {
+    void timed;
+    if (refocus == null) return;
+    const id = refocus;
+    tick().then(() => {
+      const el = colsEl?.querySelector<HTMLElement>(`[data-event="${id}"]`);
+      if (el) {
+        el.focus();
+        refocus = null;
+      }
+    });
+  });
+
   function dblclick(e: MouseEvent, day: Date) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const min = Math.floor((e.clientY - rect.top) / PX_MIN / 30) * 30;
@@ -135,8 +162,11 @@
                 style="--c:{o.color}; top:{v.top * PX_MIN}px; height:{v.height * PX_MIN - 2}px;
                        left:calc({(p.col / p.cols) * 100}% + {v.shift * 100}%); width:calc({100 / p.cols}% - 3px)"
                 role="button"
-                tabindex="-1"
+                tabindex="0"
+                data-event={o.eventId}
+                aria-label="{o.title}, {fmtTime(new Date(o.start))} to {fmtTime(new Date(o.end))}. Enter to open, arrow keys to move, Shift plus up or down to change length."
                 onpointerdown={(e) => begin(e, o, 'move')}
+                onkeydown={(e) => keydown(e, o)}
               >
                 <span class="t">{o.title}</span>
                 {#if v.height >= 30}<span class="time">{fmtTime(new Date(o.start))}</span>{/if}
@@ -223,6 +253,7 @@
     touch-action: none;
   }
   .ev:hover { background: color-mix(in srgb, var(--c) 28%, var(--bg)); }
+  .ev:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
   .ev.dragging { opacity: 0.85; box-shadow: var(--shadow); z-index: 4; }
   .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .time { font-size: 11px; opacity: 0.8; }
