@@ -16,10 +16,20 @@ pub struct Settings {
     pub date_order: DateOrder,
 }
 
+/// Quick-entry shortcut out of the box: ⌥⌘Space on macOS, Ctrl+Alt+Space
+/// elsewhere (Windows reserves most Windows-key combinations).
+pub fn default_hotkey_for(os: &str) -> &'static str {
+    if os == "macos" {
+        "Alt+Super+Space"
+    } else {
+        "Control+Alt+Space"
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            hotkey: "Alt+Super+Space".into(),
+            hotkey: default_hotkey_for(std::env::consts::OS).into(),
             launch_at_login: false,
             default_calendar_id: 1,
             default_event_minutes: 60,
@@ -71,6 +81,17 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_hotkey_per_platform() {
+        assert_eq!(default_hotkey_for("macos"), "Alt+Super+Space");
+        assert_eq!(default_hotkey_for("windows"), "Control+Alt+Space");
+        assert_eq!(default_hotkey_for("linux"), "Control+Alt+Space");
+        assert_eq!(
+            Settings::default().hotkey,
+            default_hotkey_for(std::env::consts::OS)
+        );
+    }
 
     #[test]
     fn locale_date_order() {

@@ -7,6 +7,24 @@ fn existing(app: &AppHandle, label: &str) -> Option<WebviewWindow> {
     app.get_webview_window(label)
 }
 
+/// The main window's title bar: macOS overlays its traffic lights on the
+/// app's own toolbar; other systems keep their native title bar.
+trait MainChrome {
+    fn build_main_chrome(self) -> tauri::Result<WebviewWindow>;
+}
+
+impl MainChrome for WebviewWindowBuilder<'_, tauri::Wry, AppHandle> {
+    fn build_main_chrome(self) -> tauri::Result<WebviewWindow> {
+        #[cfg(target_os = "macos")]
+        let builder = self
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+        #[cfg(not(target_os = "macos"))]
+        let builder = self;
+        builder.build()
+    }
+}
+
 /// Shows (creating if needed) the main calendar window.
 pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let w = match existing(app, "main") {
@@ -15,9 +33,7 @@ pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             .title("TaskCraft")
             .inner_size(1100.0, 720.0)
             .min_inner_size(800.0, 560.0)
-            .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true)
-            .build()?,
+            .build_main_chrome()?,
     };
     w.show()?;
     w.set_focus()?;

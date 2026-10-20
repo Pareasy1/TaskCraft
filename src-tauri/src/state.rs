@@ -44,7 +44,39 @@ pub fn data_dir() -> PathBuf {
 }
 
 pub fn log_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Library/Logs/TaskCraft")
+    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+    log_dir_for(std::env::consts::OS, &home, &data_dir())
+}
+
+/// Logs go where each system expects them: `~/Library/Logs/TaskCraft` on
+/// macOS, a `logs` folder next to the data elsewhere.
+pub fn log_dir_for(os: &str, home: &std::path::Path, data: &std::path::Path) -> PathBuf {
+    if os == "macos" {
+        home.join("Library/Logs/TaskCraft")
+    } else {
+        data.join("logs")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::log_dir_for;
+    use std::path::Path;
+
+    #[test]
+    fn log_dir_per_platform() {
+        let (home, data) = (Path::new("/home/u"), Path::new("/data/TaskCraft"));
+        assert_eq!(
+            log_dir_for("macos", home, data),
+            Path::new("/home/u/Library/Logs/TaskCraft")
+        );
+        assert_eq!(
+            log_dir_for("windows", home, data),
+            Path::new("/data/TaskCraft/logs")
+        );
+        assert_eq!(
+            log_dir_for("linux", home, data),
+            Path::new("/data/TaskCraft/logs")
+        );
+    }
 }

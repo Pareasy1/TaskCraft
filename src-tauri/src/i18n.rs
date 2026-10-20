@@ -20,6 +20,8 @@ impl Lang {
 }
 
 pub struct Text {
+    /// Tray menu item that opens quick entry (Linux trays can't report clicks).
+    pub quick_entry: &'static str,
     pub open: &'static str,
     pub settings: &'static str,
     pub quit: &'static str,
@@ -29,6 +31,7 @@ pub struct Text {
 }
 
 const EN: Text = Text {
+    quick_entry: "Quick Entry",
     open: "Open TaskCraft",
     settings: "Settings…",
     quit: "Quit TaskCraft",
@@ -37,6 +40,7 @@ const EN: Text = Text {
 };
 
 const IT: Text = Text {
+    quick_entry: "Inserimento rapido",
     open: "Apri TaskCraft",
     settings: "Impostazioni…",
     quit: "Esci da TaskCraft",

@@ -2,7 +2,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::EnvFilter;
 
-/// Daily-rotated log files in ~/Library/Logs/TaskCraft, keeping 7.
+/// Daily-rotated log files (see `state::log_dir`), keeping 7.
 pub fn init() -> Option<WorkerGuard> {
     let dir = crate::state::log_dir();
     std::fs::create_dir_all(&dir).ok()?;
