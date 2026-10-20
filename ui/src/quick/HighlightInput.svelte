@@ -6,12 +6,14 @@
     value = $bindable(''),
     spans = [],
     placeholder = '',
+    label = '',
     onkeydown,
     input = $bindable<HTMLInputElement | undefined>(),
   }: {
     value?: string;
     spans?: Span[];
     placeholder?: string;
+    label?: string;
     onkeydown?: (e: KeyboardEvent) => void;
     input?: HTMLInputElement;
   } = $props();
@@ -58,6 +60,7 @@
     bind:this={input}
     bind:value
     {placeholder}
+    aria-label={label || placeholder}
     {onkeydown}
     oninput={sync}
     onscroll={sync}

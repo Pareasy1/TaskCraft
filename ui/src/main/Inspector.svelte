@@ -188,7 +188,7 @@
     <div class="row"><span>Alerts</span>
       <div class="alerts">
         {#each ev.alerts as a, i}
-          <span class="pill">{alertLabel(a)}<button class="icon-btn" onclick={() => ev && (ev.alerts = ev.alerts.filter((_, j) => j !== i))}><X size={11} /></button></span>
+          <span class="pill">{alertLabel(a)}<button class="icon-btn" aria-label="Remove alert {alertLabel(a)}" onclick={() => ev && (ev.alerts = ev.alerts.filter((_, j) => j !== i))}><X size={11} /></button></span>
         {/each}
         <select class="field small" value="" onchange={(e) => {
           const v = Number((e.currentTarget as HTMLSelectElement).value);

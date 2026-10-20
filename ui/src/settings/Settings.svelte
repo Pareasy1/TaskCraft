@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
-  import { Plus, Trash2 } from 'lucide-svelte';
+  import { Plus, Trash2, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import type { Calendar, Settings } from '../lib/types';
 
@@ -110,7 +110,7 @@
 
 <main>
   <h1>Settings</h1>
-  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" onclick={() => (error = '')}>✕</button></div>{/if}
+  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
   {#if notice}<div class="notice">{notice}</div>{/if}
 
   {#if settings}
@@ -156,16 +156,16 @@
       <h2>Calendars</h2>
       {#each calendars as c (c.id)}
         <div class="cal">
-          <input type="color" value={c.color} onchange={(e) => saveCalendar(c, { color: e.currentTarget.value })} />
-          <input class="field" value={c.name} onchange={(e) => saveCalendar(c, { name: e.currentTarget.value })} />
-          <button class="icon-btn" title="Delete calendar" disabled={calendars.length < 2}
+          <input type="color" aria-label="Color of {c.name}" value={c.color} onchange={(e) => saveCalendar(c, { color: e.currentTarget.value })} />
+          <input class="field" aria-label="Calendar name" value={c.name} onchange={(e) => saveCalendar(c, { name: e.currentTarget.value })} />
+          <button class="icon-btn" title="Delete calendar" aria-label="Delete calendar {c.name}" disabled={calendars.length < 2}
             onclick={() => (deleting = { cal: c, moveTo: calendars.find((x) => x.id !== c.id)!.id })}><Trash2 size={14} /></button>
         </div>
       {/each}
       <div class="cal">
         <span class="swatch"></span>
-        <input class="field" placeholder="New calendar" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && addCalendar()} />
-        <button class="icon-btn" title="Add calendar" onclick={addCalendar}><Plus size={15} /></button>
+        <input class="field" placeholder="New calendar" aria-label="New calendar name" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && addCalendar()} />
+        <button class="icon-btn" title="Add calendar" aria-label="Add calendar" onclick={addCalendar}><Plus size={15} /></button>
       </div>
       {#if deleting}
         <div class="confirm">

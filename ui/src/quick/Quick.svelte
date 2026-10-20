@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
-  import { Settings as Gear, AppWindow, Power } from 'lucide-svelte';
+  import { Settings as Gear, AppWindow, Power, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task } from '../lib/types';
   import { monthGrid, addDays, startOfDay } from '../lib/layout';
@@ -137,6 +137,7 @@
 
 <main class="pop">
   <HighlightInput
+    label="New event or task"
     bind:value={text}
     bind:input
     spans={parsed?.spans ?? []}
@@ -148,17 +149,17 @@
     <div class="hint">↩ Add · ⌘↩ Add &amp; open · esc Clear</div>
   {/if}
   {#if flash}<div class="flash">{flash}</div>{/if}
-  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" onclick={() => (error = '')}>✕</button></div>{/if}
+  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" aria-label="Dismiss message" onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">
     <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} oncomplete={complete} onopen={openItem} />
   </div>
   <footer>
-    <button class="icon-btn" title="Open TaskCraft" onclick={() => api.openMain()}><AppWindow size={16} /></button>
-    <button class="icon-btn" title="Settings" onclick={() => api.openSettings()}><Gear size={16} /></button>
+    <button class="icon-btn" title="Open TaskCraft" aria-label="Open TaskCraft window" onclick={() => api.openMain()}><AppWindow size={16} /></button>
+    <button class="icon-btn" title="Settings" aria-label="Settings" onclick={() => api.openSettings()}><Gear size={16} /></button>
     <span class="spacer"></span>
-    <button class="icon-btn" title="Quit TaskCraft" onclick={() => invoke('quit_app')}><Power size={16} /></button>
+    <button class="icon-btn" title="Quit TaskCraft" aria-label="Quit TaskCraft" onclick={() => invoke('quit_app')}><Power size={16} /></button>
   </footer>
 </main>
 

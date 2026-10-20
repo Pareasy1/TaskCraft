@@ -26,7 +26,7 @@
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
   <div class="right">
-    <button class="icon-btn" title={view === 'tasks' ? 'New task (⌘N)' : 'New event (⌘N)'} onclick={onnew}><Plus size={17} /></button>
+    <button class="icon-btn" title={view === 'tasks' ? 'New task (⌘N)' : 'New event (⌘N)'} aria-label={view === 'tasks' ? 'New task' : 'New event'} onclick={onnew}><Plus size={17} /></button>
     {#if view !== 'tasks'}
       <div class="nav">
         <button class="icon-btn" aria-label="Previous" onclick={onprev}><ChevronLeft size={17} /></button>
@@ -41,7 +41,7 @@
     </div>
     <label class="search">
       <Search size={13} />
-      <input placeholder="Search" bind:value={query} />
+      <input placeholder="Search" aria-label="Search events and tasks" bind:value={query} />
     </label>
   </div>
 </header>

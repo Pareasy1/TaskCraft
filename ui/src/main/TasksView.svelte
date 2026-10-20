@@ -133,7 +133,7 @@
 <div class="page" class:board={layout === 'board'}>
   <div class="head">
     <div class="add">
-      <HighlightInput bind:value={text} bind:input spans={parsed?.spans ?? []} placeholder="Add a task, like “pay rent friday 9am #home”" onkeydown={add} />
+      <HighlightInput label="New task" bind:value={text} bind:input spans={parsed?.spans ?? []} placeholder="Add a task, like “pay rent friday 9am #home”" onkeydown={add} />
       <div class="hint">
         {#if parsed}
           <strong>{parsed.title || 'Untitled'}</strong>
