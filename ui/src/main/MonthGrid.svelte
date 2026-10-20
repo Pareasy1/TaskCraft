@@ -1,6 +1,9 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
-  import type { Occurrence } from '../lib/types';
+  import type { Occurrence, Task, TaskStatus } from '../lib/types';
+  import { tasksForDay } from '../lib/calendarTasks';
+  import { STATUS_LABEL } from '../lib/tasks';
+  import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { addDays, monthBars, monthGrid, sameDay } from '../lib/layout';
   import { fmtTime, fmtWeekdayShort } from '../lib/format';
 
@@ -10,12 +13,18 @@
     occurrences,
     onselect,
     onday,
+    tasks = [],
+    ontaskopen = () => {},
+    ontaskstatus = () => {},
   }: {
     month: Date;
     weekStart: 0 | 1;
     occurrences: Occurrence[];
     onselect: (o: Occurrence) => void;
     onday: (d: Date) => void;
+    tasks?: Task[];
+    ontaskopen?: (t: Task) => void;
+    ontaskstatus?: (t: Task, s: TaskStatus) => void;
   } = $props();
 
   let days = $derived(monthGrid(month.getFullYear(), month.getMonth(), weekStart));
@@ -29,6 +38,11 @@
     Array.from({ length: 6 }, (_, r) => Math.min(LANES, Math.max(0, ...bars.filter((b) => b.row === r).map((b) => b.lane + 1)))),
   );
   const timedOn = (d: Date) => itemsOn(d).filter((o) => !barItems.has(o));
+  // Tasks due on the day (date-only first), listed under its events.
+  const tasksOn = (d: Date) => {
+    const r = tasksForDay(tasks, d, today);
+    return [...r.allDay.filter((x) => sameDay(new Date(x.task.due!), d)), ...r.timed];
+  };
   const hiddenBarsAt = (i: number) =>
     bars.filter((b) => b.lane >= LANES && b.row === Math.floor(i / 7) && b.col <= i % 7 && i % 7 < b.col + b.span).length;
   const names = $derived(
@@ -41,8 +55,10 @@
   <div class="cells">
     {#each days as d, i (d.getTime())}
       {@const items = timedOn(d)}
+      {@const dayTasks = tasksOn(d)}
       {@const room = LANES - rowLanes[Math.floor(i / 7)]}
-      {@const more = Math.max(0, items.length - room) + hiddenBarsAt(i)}
+      {@const taskRoom = Math.max(0, room - items.length)}
+      {@const more = Math.max(0, items.length + dayTasks.length - room) + hiddenBarsAt(i)}
       <div class="cell" class:other={d.getMonth() !== month.getMonth()} role="gridcell" tabindex="-1"
         style="grid-row:{Math.floor(i / 7) + 1}; grid-column:{(i % 7) + 1}" ondblclick={() => onday(d)}>
         <button class="num" class:today={sameDay(d, today)} onclick={() => onday(d)}>{d.getDate()}</button>
@@ -53,6 +69,14 @@
               <span class="t">{o.title}</span>
               <span class="time">{fmtTime(new Date(o.start))}</span>
             </button>
+          {/each}
+          {#each dayTasks.slice(0, taskRoom) as x (x.task.id)}
+            <div class="titem" class:done={x.task.status === 'done'} class:overdue={x.overdue}>
+              <StatusGlyph status={x.task.status} size={12} onchange={(st) => ontaskstatus(x.task, st)} />
+              <button class="t" onclick={() => ontaskopen(x.task)}
+                aria-label="{x.task.title}, {STATUS_LABEL[x.task.status]}">{x.task.title}</button>
+              {#if x.task.dueHasTime}<span class="time">{fmtTime(new Date(x.task.due!))}</span>{/if}
+            </div>
           {/each}
           {#if more}<button class="more" onclick={() => onday(d)}>{t('common.more', { n: more })}</button>{/if}
         </div>
@@ -135,5 +159,10 @@
   .bar.to-next { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .time { color: var(--muted); font-size: 11px; }
+  .titem { display: flex; align-items: center; gap: 4px; padding: 1px 4px 1px 3px; min-width: 0; border-radius: 4px; }
+  .titem:hover { background: var(--hover); }
+  .titem .t { border: none; background: none; padding: 0; text-align: left; font-size: 11.5px; color: var(--text); }
+  .titem.done .t { color: var(--muted); text-decoration: line-through; }
+  .titem.overdue .time { color: var(--danger); }
   .more { border: none; background: none; font-size: 11px; color: var(--muted); text-align: left; padding: 0 4px; }
 </style>

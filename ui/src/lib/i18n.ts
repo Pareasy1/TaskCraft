@@ -71,6 +71,7 @@ const en = {
   'scope.this': 'This event',
   'grid.allDay': 'all-day',
   'grid.eventAria': '{title}, {start} to {end}. Enter to open, arrow keys to move, Shift plus up or down to change length.',
+  'grid.taskAria': 'Task: {title}, due {when}, {status}. Enter to open, Space to change status, arrow keys to move.',
 
   // tasks page
   'tasks.addPlaceholder': 'Add a task, like “pay rent friday 9am #home”',
@@ -272,6 +273,7 @@ const it: Record<Key, string> = {
   'scope.this': 'Questo evento',
   'grid.allDay': 'giornata',
   'grid.eventAria': '{title}, dalle {start} alle {end}. Invio per aprire, frecce per spostare, Maiuscole più su o giù per cambiare la durata.',
+  'grid.taskAria': 'Attività: {title}, scadenza {when}, {status}. Invio per aprire, Spazio per cambiare stato, frecce per spostare.',
 
   'tasks.addPlaceholder': 'Aggiungi un’attività in inglese, es. “pay rent friday 9am #home”',
   'tasks.addHint': 'Premi Invio per aggiungere. Date ed #etichette sono facoltative.',

@@ -4,8 +4,14 @@ import { isOverdue } from './tasks';
 
 type TaskLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
 
-/** A timed task occupies this many minutes in the day's overlap layout (tasks have no duration). */
-export const TASK_SLOT_MIN = 15;
+/**
+ * A timed task occupies this many minutes in the day's overlap layout (tasks
+ * have no duration): enough for a one-line row (~20px at 48px per hour), so it
+ * never covers the next item's title.
+ */
+export const TASK_SLOT_MIN = 25;
+/** Keyboard moves shift a timed task by this many minutes. */
+const MOVE_STEP_MIN = 15;
 
 export interface DayTask<T> {
   task: T;
@@ -47,7 +53,7 @@ export function movedDue(task: TaskLike, key: string): string | null {
     case 'ArrowUp':
     case 'ArrowDown':
       if (!task.dueHasTime) return null;
-      return new Date(d.getTime() + (key === 'ArrowUp' ? -1 : 1) * TASK_SLOT_MIN * 60_000).toISOString();
+      return new Date(d.getTime() + (key === 'ArrowUp' ? -1 : 1) * MOVE_STEP_MIN * 60_000).toISOString();
     case 'ArrowLeft':
     case 'ArrowRight':
       return addDays(d, key === 'ArrowLeft' ? -1 : 1).toISOString();

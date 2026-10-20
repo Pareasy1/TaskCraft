@@ -44,7 +44,8 @@ describe('tasksForDay', () => {
     expect(tasksForDay(tasks, day(22), now)).toEqual({ timed: [], allDay: [] });
   });
 
-  it('a task takes a 15-minute slot', () => expect(TASK_SLOT_MIN).toBe(15));
+  // A row needs ~20px for its mark and title: 25 min at 48px per hour, so it never covers the next item.
+  it('a task reserves a 25-minute slot', () => expect(TASK_SLOT_MIN).toBe(25));
 });
 
 describe('movedDue', () => {

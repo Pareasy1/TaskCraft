@@ -208,6 +208,20 @@
     }
   }
 
+  /** Moves a task to a new due date from the calendar, with Undo. */
+  async function moveTask(task: Task, due: string) {
+    const before = toTaskInput(task);
+    try {
+      await api.updateTask(task.id, { ...before, due });
+      const d = new Date(due);
+      notify(t('msg.movedTo', { title: task.title, where: `${fmtShortDate(d)}${task.dueHasTime ? `, ${fmtTime(d)}` : ''}` }), () =>
+        api.updateTask(task.id, before),
+      );
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
   async function setStatus(t: Task, s: TaskStatus) {
     try {
       await changeStatus(t, s);
@@ -279,11 +293,13 @@
       {:else if view === 'tasks'}
         <TasksView tasks={allTasks} {labels} bind:input={taskInput} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
-        <MonthGrid month={anchor} {weekStart} {occurrences}
+        <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
+          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}
           onselect={(o) => openEvent(o.eventId, o.start)}
           onday={(d) => { anchor = startOfDay(d); view = 'day'; }} />
       {:else}
-        <DayWeekGrid {days} {occurrences}
+        <DayWeekGrid {days} {occurrences} tasks={allTasks}
+          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} ontaskmove={moveTask}
           onselect={(o) => openEvent(o.eventId, o.start)}
           oncreate={newEvent}
           onmove={move} />

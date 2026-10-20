@@ -1,9 +1,12 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import { onMount, tick } from 'svelte';
-  import type { Occurrence } from '../lib/types';
+  import type { Occurrence, Task, TaskStatus } from '../lib/types';
   import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
-  import { fmtHour, fmtTime, fmtWeekdayShort } from '../lib/format';
+  import { fmtHour, fmtShortDate, fmtTime, fmtWeekdayShort } from '../lib/format';
+  import { movedDue, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
+  import { nextStatus, STATUS_LABEL } from '../lib/tasks';
+  import StatusGlyph from './tasks/StatusGlyph.svelte';
 
   const HOUR = 48; // px per hour
   const PX_MIN = HOUR / 60;
@@ -14,17 +17,27 @@
     onselect,
     oncreate,
     onmove,
+    tasks = [],
+    ontaskopen = () => {},
+    ontaskstatus = () => {},
+    ontaskmove = () => {},
   }: {
     days: Date[];
     occurrences: Occurrence[];
     onselect: (o: Occurrence) => void;
     oncreate: (start: Date) => void;
     onmove: (o: Occurrence, start: Date, end: Date) => void;
+    tasks?: Task[];
+    ontaskopen?: (t: Task) => void;
+    ontaskstatus?: (t: Task, s: TaskStatus) => void;
+    /** `due` is the new ISO due date. */
+    ontaskmove?: (t: Task, due: string) => void;
   } = $props();
 
   let now = $state(new Date());
   let scroller: HTMLDivElement | undefined = $state();
   let colsEl: HTMLDivElement | undefined = $state();
+  let gridEl: HTMLDivElement | undefined = $state();
 
   const key = (o: Occurrence) => `${o.eventId}@${o.start}`;
   const isAllDay = (o: Occurrence) => o.allDay || new Date(o.end).getTime() - new Date(o.start).getTime() >= 86_400_000;
@@ -32,11 +45,31 @@
   let allDay = $derived(
     days.map((d) => occurrences.filter((o) => isAllDay(o) && new Date(o.start) < addDays(d, 1) && new Date(o.end) > d)),
   );
+  // Tasks share each day with events: timed ones in the overlap layout, the rest in the all-day strip.
+  let dayTasks = $derived(days.map((d) => tasksForDay(tasks, d, now)));
+  const tkey = (task: Task) => `task:${task.id}`;
+  type Placed =
+    | { kind: 'event'; p: ReturnType<typeof layoutDay>[number]; o: Occurrence }
+    | { kind: 'task'; p: ReturnType<typeof layoutDay>[number]; x: DayTask<Task> };
   let timed = $derived(
-    days.map((d) => {
+    days.map((d, i): Placed[] => {
       const items = occurrences.filter((o) => !isAllDay(o) && new Date(o.start) < addDays(d, 1) && new Date(o.end) > d);
-      const pos = layoutDay(items.map((o) => ({ id: key(o), start: new Date(o.start), end: new Date(o.end) })), d);
-      return pos.map((p) => ({ p, o: items.find((o) => key(o) === p.id)! }));
+      const ts = dayTasks[i].timed;
+      const pos = layoutDay(
+        [
+          ...items.map((o) => ({ id: key(o), start: new Date(o.start), end: new Date(o.end) })),
+          ...ts.map((x) => {
+            const due = new Date(x.task.due!);
+            return { id: tkey(x.task), start: due, end: new Date(due.getTime() + TASK_SLOT_MIN * 60_000) };
+          }),
+        ],
+        d,
+      );
+      return pos.map((p) =>
+        p.id.startsWith('task:')
+          ? { kind: 'task' as const, p, x: ts.find((x) => tkey(x.task) === p.id)! }
+          : { kind: 'event' as const, p, o: items.find((o) => key(o) === p.id)! },
+      );
     }),
   );
 
@@ -106,6 +139,75 @@
     });
   });
 
+  // ---- tasks: drag to move (time and day on the grid, day in the all-day strip) ----
+  type TaskDrag = { task: Task; timed: boolean; x0: number; y0: number; colW: number; dMin: number; dDay: number; moved: boolean };
+  let tdrag = $state<TaskDrag | null>(null);
+  function beginTask(e: PointerEvent, task: Task, isTimed: boolean) {
+    // The status mark handles its own clicks.
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.wrap')) return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const colW = (colsEl?.clientWidth ?? 0) / days.length;
+    tdrag = { task, timed: isTimed, x0: e.clientX, y0: e.clientY, colW, dMin: 0, dDay: 0, moved: false };
+  }
+  function moveTask(e: PointerEvent) {
+    if (!tdrag) return;
+    const dy = e.clientY - tdrag.y0;
+    tdrag.dMin = tdrag.timed ? snap15(Math.abs(dy / PX_MIN)) * Math.sign(dy) : 0;
+    tdrag.dDay = tdrag.colW ? Math.round((e.clientX - tdrag.x0) / tdrag.colW) : 0;
+    tdrag.moved ||= Math.abs(dy) > 3 || Math.abs(e.clientX - tdrag.x0) > 3;
+  }
+  function endTask() {
+    const d = tdrag;
+    tdrag = null;
+    if (!d) return;
+    if (!d.moved) return ontaskopen(d.task);
+    if (!d.dMin && !d.dDay) return;
+    const due = new Date(d.task.due!);
+    ontaskmove(d.task, addDays(new Date(due.getTime() + d.dMin * 60_000), d.dDay).toISOString());
+  }
+  const dragging = (task: Task) => (tdrag && tdrag.moved && tdrag.task.id === task.id ? tdrag : null);
+
+  // ---- tasks: Enter opens, Space changes status, arrows move (see movedDue) ----
+  let refocusTask: number | null = null;
+  function taskKey(e: KeyboardEvent, task: Task) {
+    if (e.target !== e.currentTarget) return; // keys on the status mark are its own
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      return ontaskopen(task);
+    }
+    if (e.key === ' ') {
+      e.preventDefault();
+      return ontaskstatus(task, nextStatus(task.status));
+    }
+    const due = movedDue(task, e.key);
+    if (!due) return;
+    e.preventDefault();
+    refocusTask = task.id;
+    ontaskmove(task, due);
+  }
+  $effect(() => {
+    void dayTasks;
+    if (refocusTask == null) return;
+    const id = refocusTask;
+    tick().then(() => {
+      const el = gridEl?.querySelector<HTMLElement>(`[data-task="${id}"]`);
+      if (el) {
+        el.focus();
+        refocusTask = null;
+      }
+    });
+  });
+  const taskAria = (x: DayTask<Task>) => {
+    const due = new Date(x.task.due!);
+    const when = x.task.dueHasTime ? `${fmtShortDate(due)}, ${fmtTime(due)}` : fmtShortDate(due);
+    return t('grid.taskAria', {
+      title: x.task.title,
+      when: x.overdue ? `${when} (${t('group.overdue')})` : when,
+      status: STATUS_LABEL[x.task.status],
+    });
+  };
+
   function dblclick(e: MouseEvent, day: Date) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const min = Math.floor((e.clientY - rect.top) / PX_MIN / 30) * 30;
@@ -123,7 +225,7 @@
   const today = new Date();
 </script>
 
-<div class="grid" style="--n:{days.length}">
+<div class="grid" style="--n:{days.length}" bind:this={gridEl}>
   <div class="heads">
     <div class="gutter"></div>
     {#each days as d}
@@ -135,10 +237,32 @@
   </div>
   <div class="allday">
     <div class="gutter small">{t('grid.allDay')}</div>
-    {#each allDay as items}
+    {#each allDay as items, i}
       <div class="adcol">
         {#each items as o (key(o))}
           <button class="chip" style="--c:{o.color}" onclick={() => onselect(o)}>{o.title}</button>
+        {/each}
+        {#each dayTasks[i].allDay as x (x.task.id)}
+          {@const dr = dragging(x.task)}
+          <div
+            class="tchip"
+            class:done={x.task.status === 'done'}
+            class:overdue={x.overdue}
+            class:dragging={!!dr}
+            style="--c:{x.task.color}; transform:translateX({dr ? dr.dDay * dr.colW : 0}px)"
+            role="button"
+            tabindex="0"
+            data-task={x.task.id}
+            aria-label={taskAria(x)}
+            onpointerdown={(e) => beginTask(e, x.task, false)}
+            onpointermove={moveTask}
+            onpointerup={endTask}
+            onkeydown={(e) => taskKey(e, x.task)}
+          >
+            <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
+            <span class="tt">{x.task.title}</span>
+            {#if !sameDay(new Date(x.task.due!), days[i])}<span class="when">{fmtShortDate(new Date(x.task.due!))}</span>{/if}
+          </div>
         {/each}
       </div>
     {/each}
@@ -155,7 +279,34 @@
             {#if sameDay(d, now)}
               <div class="now" style="top:{(now.getHours() * 60 + now.getMinutes()) * PX_MIN}px"></div>
             {/if}
-            {#each timed[i] as { p, o } (p.id)}
+            {#each timed[i] as item (item.p.id)}
+              {#if item.kind === 'task'}
+                {@const x = item.x}
+                {@const p = item.p}
+                {@const dr = dragging(x.task)}
+                <div
+                  class="task"
+                  class:done={x.task.status === 'done'}
+                  class:overdue={x.overdue}
+                  class:dragging={!!dr}
+                  style="--c:{x.task.color}; top:{(p.top + (dr?.dMin ?? 0)) * PX_MIN}px; height:{TASK_SLOT_MIN * PX_MIN - 2}px;
+                         left:calc({(p.col / p.cols) * 100}% + {(dr?.dDay ?? 0) * 100}%); width:calc({100 / p.cols}% - 3px)"
+                  role="button"
+                  tabindex="0"
+                  data-task={x.task.id}
+                  aria-label={taskAria(x)}
+                  onpointerdown={(e) => beginTask(e, x.task, true)}
+                  onpointermove={moveTask}
+                  onpointerup={endTask}
+                  onkeydown={(e) => taskKey(e, x.task)}
+                >
+                  <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
+                  <span class="tt">{x.task.title}</span>
+                  <span class="time">{fmtTime(new Date(x.task.due!))}</span>
+                </div>
+              {:else}
+              {@const o = item.o}
+              {@const p = item.p}
               {@const v = preview(o, p.top, p.height)}
               <div
                 class="ev"
@@ -174,6 +325,7 @@
                 <span class="time">{fmtTime(new Date(o.start))}</span>
                 <div class="resize" role="presentation" onpointerdown={(e) => begin(e, o, 'resize')}></div>
               </div>
+              {/if}
             {/each}
           </div>
         {/each}
@@ -264,4 +416,30 @@
   .ev.compact .time { flex: none; }
   .time { font-size: 11px; }
   .resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+
+  /* Tasks are moments, not blocks: an outlined one-line row with the status mark. */
+  .task, .tchip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    border-radius: 5px;
+    background: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--c) 55%, var(--border));
+    color: var(--text);
+    font-size: 12px;
+    overflow: hidden;
+    touch-action: none;
+  }
+  .task { position: absolute; margin-left: 1px; padding: 0 6px 0 3px; z-index: 2; }
+  .tchip { padding: 1px 6px 1px 3px; }
+  .task:hover, .tchip:hover { background: color-mix(in srgb, var(--c) 8%, var(--bg)); }
+  .task:focus-visible, .tchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
+  .task.dragging, .tchip.dragging { box-shadow: var(--shadow); z-index: 4; position: relative; }
+  .task.dragging { position: absolute; }
+  .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task .time { flex: none; color: var(--muted); font-size: 11px; }
+  .tchip .when { flex: none; font-size: 11px; }
+  .done .tt { color: var(--muted); text-decoration: line-through; }
+  .overdue .time, .overdue .when { color: var(--danger); }
 </style>
