@@ -110,7 +110,6 @@
 <svelte:window onkeydown={record} />
 
 <main>
-  <h1>{t('settings.title')}</h1>
   {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
   <div role="status" aria-live="polite">{#if notice}<div class="notice">{notice}</div>{/if}</div>
 
@@ -201,7 +200,6 @@
      the window's spare height at the bottom instead of between sections. */
   main { height: 100%; overflow-y: auto; padding: 22px 24px 28px; display: grid; align-content: start; gap: 18px;
     max-width: 560px; margin: 0 auto; }
-  h1 { margin: 0; font-size: 20px; font-weight: 700; }
   h2 { margin: 0 0 6px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
   section { display: grid; }
   .group { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 10px; padding: 2px 12px; }
@@ -212,7 +210,10 @@
   .hotkey { font-size: 14px; letter-spacing: 0.08em; }
   .hotkey.rec { border-color: var(--accent); color: var(--accent); letter-spacing: normal; font-size: 12px; }
   .cal { display: grid; grid-template-columns: 28px 1fr 28px; gap: 8px; align-items: center; padding: 6px 0; }
-  .cal input[type='color'] { width: 24px; height: 24px; border: none; padding: 0; background: none; }
+  /* Round swatches, like calendar colours everywhere else in the app. */
+  .cal input[type='color'] { width: 20px; height: 20px; border: none; padding: 0; background: none; border-radius: 50%; overflow: hidden; justify-self: center; }
+  .cal input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+  .cal input[type='color']::-webkit-color-swatch { border: none; border-radius: 50%; }
   .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px dashed var(--muted); justify-self: center; }
   .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; }
   .small { width: auto; }

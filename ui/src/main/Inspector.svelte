@@ -241,7 +241,7 @@
         <datalist id="label-names">{#each labels as l}<option value={l.name}></option>{/each}</datalist>
       </div>
     </div>
-    <label class="row"><span>{t('inspector.list')}</span>
+    <label class="row"><span>{t('inspector.calendar')}</span>
       <select class="field" bind:value={task.calendarId}>{#each calendars as c}<option value={c.id}>{c.name}</option>{/each}</select>
     </label>
     <label class="row"><span>{t('inspector.due')}</span><input class="field" type="date" bind:value={task.dueDate} /></label>

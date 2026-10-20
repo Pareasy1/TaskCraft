@@ -354,7 +354,7 @@
   .hit {
     width: 100%;
     display: grid;
-    grid-template-columns: 50px 1fr auto;
+    grid-template-columns: max-content 1fr auto;
     gap: 10px;
     border: none;
     background: none;
