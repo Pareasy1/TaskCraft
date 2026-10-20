@@ -147,3 +147,43 @@ describe('nudgeEvent', () => {
 
   it('other keys do nothing', () => expect(nudgeEvent(s, e, 'a', false)).toBeNull());
 });
+
+import { monthBars } from './layout';
+
+describe('monthBars', () => {
+  const grid = monthGrid(2026, 9, 1); // Mon 28 Sep … Sun 8 Nov
+  const iso = (m: number, d: number, h = 0) => new Date(2026, m, d, h).toISOString();
+  const ev = (title: string, start: string, end: string, allDay = true) => ({ title, start, end, allDay });
+
+  it('a two-day all-day event is one bar in its week', () => {
+    const [b] = monthBars([ev('Trip to Milan', iso(9, 22), iso(9, 24))], grid);
+    expect({ row: b.row, col: b.col, span: b.span, lane: b.lane, fromPrev: b.fromPrev, toNext: b.toNext })
+      .toEqual({ row: 3, col: 3, span: 2, lane: 0, fromPrev: false, toNext: false });
+  });
+
+  it('an event crossing a week boundary becomes two joined bars', () => {
+    const bars = monthBars([ev('Weekend away', iso(9, 24), iso(9, 27))], grid); // Sat–Mon
+    expect(bars.map((b) => [b.row, b.col, b.span, b.fromPrev, b.toNext])).toEqual([
+      [3, 5, 2, false, true],
+      [4, 0, 1, true, false],
+    ]);
+  });
+
+  it('overlapping bars stack into lanes; timed single-day events are left to the cells', () => {
+    const bars = monthBars([
+      ev('A', iso(9, 20), iso(9, 23)),
+      ev('B', iso(9, 21), iso(9, 22)),
+      ev('C', iso(9, 23), iso(9, 24)),
+      ev('Lunch', iso(9, 21, 13), iso(9, 21, 14), false),
+    ], grid);
+    expect(bars.map((b) => [b.item.title, b.lane])).toEqual([['A', 0], ['B', 1], ['C', 0]]);
+  });
+
+  it('a timed event running past midnight is a bar too', () => {
+    const [b] = monthBars([ev('Night shift', iso(9, 21, 22), iso(9, 22, 6), false)], grid);
+    expect([b.row, b.col, b.span]).toEqual([3, 2, 2]);
+  });
+
+  it('events outside the grid produce nothing', () =>
+    expect(monthBars([ev('Old', iso(7, 1), iso(7, 3))], grid)).toEqual([]));
+});

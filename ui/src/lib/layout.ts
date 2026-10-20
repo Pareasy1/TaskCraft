@@ -118,3 +118,52 @@ export function nudgeEvent(start: Date, end: Date, key: string, shift: boolean):
       return null;
   }
 }
+
+export interface Bar<T> {
+  item: T;
+  /** Week row (0–5) and starting column (0–6) in the 42-day grid. */
+  row: number;
+  col: number;
+  span: number;
+  /** Stacking position within the row; overlapping bars get different lanes. */
+  lane: number;
+  /** The event continues from the previous week / into the next one. */
+  fromPrev: boolean;
+  toNext: boolean;
+}
+
+/**
+ * Month-view bars for all-day and multi-day events: one bar per week row the
+ * event covers, stacked into lanes. Timed events within a single day are not
+ * bars (the day cells list them).
+ */
+export function monthBars<T extends { start: string; end: string; allDay: boolean }>(items: T[], grid: Date[]): Bar<T>[] {
+  const overlaps = (t: T, d: Date) => new Date(t.start) < addDays(d, 1) && new Date(t.end) > d;
+  const bars: Bar<T>[] = [];
+  for (const item of items) {
+    const idx = grid.flatMap((d, i) => (overlaps(item, d) ? [i] : []));
+    if (!idx.length || (!item.allDay && idx.length < 2)) continue;
+    const first = idx[0];
+    const last = idx[idx.length - 1];
+    for (let row = Math.floor(first / 7); row <= Math.floor(last / 7); row++) {
+      const a = Math.max(first, row * 7);
+      const b = Math.min(last, row * 7 + 6);
+      bars.push({ item, row, col: a % 7, span: b - a + 1, lane: 0, fromPrev: a > first, toNext: b < last });
+    }
+  }
+  bars.sort((x, y) => x.row - y.row || x.col - y.col || y.span - x.span);
+  // Greedy lanes per row: the lowest lane whose last bar ends before this one starts.
+  let row = -1;
+  let laneEnd: number[] = [];
+  for (const b of bars) {
+    if (b.row !== row) {
+      row = b.row;
+      laneEnd = [];
+    }
+    let lane = laneEnd.findIndex((end) => end < b.col);
+    if (lane < 0) lane = laneEnd.length;
+    laneEnd[lane] = b.col + b.span - 1;
+    b.lane = lane;
+  }
+  return bars;
+}
