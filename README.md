@@ -22,6 +22,13 @@ All data stays on this Mac.
   task — dates are optional ("buy milk", "pay rent friday 9am"). Filter by
   All / Today / Upcoming / No date / Completed; tasks are grouped by due day,
   overdue first. Click a task to edit it.
+  - **Status:** To do → In progress → Done. Click the round status mark to move a
+    task to the next status, or right-click it to pick one. Done is the same as ticking it off.
+  - **Labels:** type `#home`, `#work`… in a task to label it (created
+    automatically). Click a label to filter by it; the tag icon opens the label
+    manager to rename, recolor, merge or delete labels.
+  - **Board:** switch *List / Board* to see To do · In progress · Done columns.
+    Drag cards between columns, or focus a card and press ← / →.
 
 ## Install / update
 
