@@ -15,6 +15,7 @@
   import Inspector, { type Target } from './Inspector.svelte';
   import TasksView from './TasksView.svelte';
   import Toast from './Toast.svelte';
+  import SettingsDialog from './SettingsDialog.svelte';
   import { notify } from '../lib/toast.svelte';
   import { changeStatus } from '../lib/actions';
   import { sidebarSections } from '../lib/tasks';
@@ -120,6 +121,7 @@
 
   let dialogEl = $state<HTMLDivElement | undefined>();
   let bodyEl = $state<HTMLDivElement | undefined>();
+  let settingsOpen = $state(false);
   function askScope(verb: string, allowThis = true): Promise<'this' | 'all' | null> {
     const back = document.activeElement as HTMLElement | null;
     return new Promise((resolve) => (scopePrompt = { verb, allowThis, resolve: (s) => { scopePrompt = null; back?.focus(); resolve(s); } }));
@@ -241,6 +243,7 @@
       // Land keyboard focus in the view so the next Tab reaches its content.
       tick().then(() => bodyEl?.focus());
     }
+    else if (e.key === ',') settingsOpen = true;
     else if (e.key === 't' && tag !== 'INPUT') goToday();
     else if (e.key === 'n' && view === 'tasks') taskInput?.focus();
     else if (e.key === 'n') {
@@ -255,9 +258,14 @@
   onMount(() => {
     api.localTimeZone().then((z) => (tz = z));
     invoke<ItemRef | null>('take_pending_focus').then((r) => r && reveal(r));
+    // Settings opened from the menu bar or the popover (possibly before this window loaded).
+    invoke<boolean>('take_pending_settings').then((open) => open && (settingsOpen = true));
     const un = [onItemsChanged(refresh), listen<ItemRef>('focus-item', (e) => {
       invoke('take_pending_focus');
       reveal(e.payload);
+    }), listen('open-settings', () => {
+      invoke('take_pending_settings');
+      settingsOpen = true;
     })];
     return () => un.forEach((p) => p.then((f) => f()));
   });
@@ -278,6 +286,7 @@
     tasks={allTasks}
     bind:activeLabels
     onerror={(m) => (error = m)}
+    onopensettings={() => (settingsOpen = true)}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
     onstatus={setStatus}
@@ -321,6 +330,8 @@
 </div>
 
 <Toast />
+
+{#if settingsOpen}<SettingsDialog onclose={() => (settingsOpen = false)} />{/if}
 
 {#if scopePrompt}
   <div class="scrim">

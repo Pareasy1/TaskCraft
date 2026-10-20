@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "TaskCraft windows",
-  "windows": ["quick", "main", "settings"],
+  "windows": ["quick", "main"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

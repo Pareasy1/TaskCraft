@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import type { Calendar, Task, TaskLabel, TaskStatus } from '../lib/types';
-  import { Tags } from 'lucide-svelte';
+  import { Settings as SettingsIcon, Tags } from 'lucide-svelte';
   import LabelManager from './tasks/LabelManager.svelte';
   import MiniMonth from '../quick/MiniMonth.svelte';
   import TaskList from './TaskList.svelte';
@@ -22,6 +22,7 @@
     tasks = [],
     activeLabels = $bindable<number[]>([]),
     onerror = () => {},
+    onopensettings = () => {},
   }: {
     calendars: Calendar[];
     month?: Date;
@@ -39,6 +40,7 @@
     tasks?: Task[];
     activeLabels?: number[];
     onerror?: (m: string) => void;
+    onopensettings?: () => void;
   } = $props();
 
   let managing = $state(false);
@@ -80,6 +82,11 @@
       <TaskList sections={taskSections} {onstatus} onopen={onopentask} />
     </div>
   {/if}
+  <div class="foot">
+    <button class="icon-btn" aria-label={t('settings.title')} title="{t('settings.title')} (⌘,)" onclick={onopensettings}>
+      <SettingsIcon size={16} aria-hidden="true" />
+    </button>
+  </div>
 </aside>
 
 <style>
@@ -94,6 +101,8 @@
     overflow: hidden;
   }
   .traffic { height: 46px; flex: none; }
+  /* Settings sit in the bottom-left corner, under whatever the sidebar lists. */
+  .foot { margin-top: auto; padding-top: 8px; display: flex; flex: none; }
   .label {
     font-size: 12px;
     font-weight: 600;
