@@ -11,7 +11,7 @@ mod tray;
 mod windows;
 
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, RunEvent, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 /// Item the main window should reveal when it next loads or receives focus.
 #[derive(Default)]
@@ -177,13 +177,15 @@ fn main() {
             tracing::error!(error = %e, "tauri build error");
             std::process::exit(1);
         })
-        .run(|app, event| {
-            // Dock click, or a click on one of our notifications.
-            if let RunEvent::Reopen { .. } = event {
-                match scheduler::recent(app) {
-                    Some(item) => reveal_item(app, item),
+        .run(|_app, _event| {
+            // Dock click, or a click on one of our notifications. macOS only:
+            // other systems have no Dock "reopen" event.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                match scheduler::recent(_app) {
+                    Some(item) => reveal_item(_app, item),
                     None => {
-                        let _ = windows::show_main(app);
+                        let _ = windows::show_main(_app);
                     }
                 }
             }
