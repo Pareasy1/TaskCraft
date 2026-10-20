@@ -62,6 +62,7 @@ pub fn from_parsed(
             rrule,
             notes: None,
             alerts,
+            labels: p.tags.clone(),
             ..Default::default()
         }),
         ItemKind::Event => {

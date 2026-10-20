@@ -208,3 +208,15 @@ fn from_parsed_task_and_calendar() {
     assert!(t.due_has_time);
     assert_eq!(t.title, "call mom");
 }
+
+#[test]
+fn from_parsed_copies_tags() {
+    let s = Store::open_in_memory().unwrap();
+    let cals = s.calendars().unwrap();
+    let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
+    let p = parse("todo: pay rent #bills", now, &ParseOptions::default());
+    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+        panic!("expected a task")
+    };
+    assert_eq!(t.labels, ["bills"]);
+}
