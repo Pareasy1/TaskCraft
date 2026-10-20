@@ -13,8 +13,8 @@ echo "ok   app running"
 ls "$LOGS"/taskcraft*.log >/dev/null 2>&1 || fail "no log file in $LOGS"
 echo "ok   log file present"
 
-[ "$(sqlite3 "$DB" 'PRAGMA user_version')" = "1" ] || fail "database schema version is not 1"
-echo "ok   database schema v1"
+[ "$(sqlite3 "$DB" 'PRAGMA user_version')" = "2" ] || fail "database schema version is not 2"
+echo "ok   database schema v2"
 
 OUT=$("$BIN" --smoke "Lunch with Sam tomorrow at 1") || fail "smoke run failed"
 TITLE=$(printf '%s' "$OUT" | /usr/bin/python3 -I -c 'import json,sys; print(json.load(sys.stdin)["title"])')

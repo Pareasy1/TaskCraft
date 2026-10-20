@@ -15,10 +15,23 @@ use token::{TokKind, Token};
 /// Parse a quick-entry sentence. Never panics, never fails: in the worst case
 /// the whole input becomes the title.
 pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem {
+    parse_kind(input, now, opts, false)
+}
+
+/// Like [`parse`], but the result is always a task (no prefix needed).
+pub fn parse_task(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem {
+    parse_kind(input, now, opts, true)
+}
+
+fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: bool) -> ParsedItem {
     let lead_ws = input.len() - input.trim_start().len();
     let body = &input[lead_ws..];
     let mut spans = Vec::new();
-    let mut kind = ItemKind::Event;
+    let mut kind = if force_task {
+        ItemKind::Task
+    } else {
+        ItemKind::Event
+    };
     let mut offset = lead_ws;
     if let Some(len) = rules::prefix::task_prefix_len(body) {
         kind = ItemKind::Task;
@@ -38,6 +51,11 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
             payload: Payload::None,
         })
         .collect();
+    let tags_found = if kind == ItemKind::Task {
+        mark_tags(&toks, &mut tags)
+    } else {
+        Vec::new()
+    };
     let ctx = Ctx { now, opts };
     rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
     let attendees = rules::fields::attendees(&toks, &mut tags);
@@ -59,8 +77,34 @@ pub fn parse(input: &str, now: DateTime<Tz>, opts: &ParseOptions) -> ParsedItem 
         recurrence: r.recurrence,
         alerts: r.alerts,
         url: r.url,
+        tags: tags_found,
         spans,
     }
+}
+
+/// `#` followed by 1–32 letters, digits, `-` or `_`, with at least one letter.
+fn tag_name(t: &Token) -> Option<&str> {
+    let name = t.text.strip_prefix('#')?;
+    let ok = (1..=32).contains(&name.chars().count())
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        && name.chars().any(char::is_alphabetic);
+    ok.then_some(name)
+}
+
+/// Labels `#tag` tokens and returns their names, deduplicated ignoring case.
+fn mark_tags(toks: &[Token], tags: &mut [Tagged]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (t, tag) in toks.iter().zip(tags.iter_mut()) {
+        if let Some(name) = tag_name(t) {
+            tag.label = Some(Label::Tag);
+            if !out.iter().any(|o| o.to_lowercase() == name.to_lowercase()) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// Words dropped from the end of a title ("Lunch at", "Call with").
@@ -102,7 +146,11 @@ fn collect_spans(toks: &[Token], tags: &[Tagged]) -> Vec<Span> {
     for (t, tag) in toks.iter().zip(tags) {
         let Some(label) = tag.label else { continue };
         match spans.last_mut() {
-            Some(last) if last.label == label && label != Label::Separator => last.end = t.end,
+            Some(last)
+                if last.label == label && !matches!(label, Label::Separator | Label::Tag) =>
+            {
+                last.end = t.end
+            }
             _ => spans.push(Span {
                 start: t.start,
                 end: t.end,

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
 
 pub(crate) const TASK_COLS: &str =
-    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color";
+    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status";
 
 pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
     let rrule: Option<String> = r.get(7)?;
@@ -21,6 +21,8 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         notes: r.get(8)?,
         color: r.get(9)?,
         alerts: vec![],
+        status: TaskStatus::from_sql(&r.get::<_, String>(10)?),
+        labels: vec![],
     })
 }
 
@@ -29,27 +31,46 @@ impl Store {
         self.in_tx(|tx| {
         let now = fmt_ts(Utc::now());
         tx.execute(
-            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
-            params![t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes, now],
+            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, status, completed_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+            params![
+                t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
+                t.status.as_sql(), (t.status == TaskStatus::Done).then(|| now.clone()), now
+            ],
         )?;
         let id = tx.last_insert_rowid();
+        crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(id)
         })
     }
 
+    /// Saving a task as Done when it was not done behaves like ticking it:
+    /// a recurring task advances to its next occurrence instead.
     pub fn update_task(&self, id: i64, t: &TaskInput) -> Result<()> {
         self.in_tx(|tx| {
+        let was: Option<String> = tx
+            .query_row("SELECT status FROM tasks WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?;
+        let newly_done = t.status == TaskStatus::Done
+            && was.as_deref().map(TaskStatus::from_sql) != Some(TaskStatus::Done);
         let n = tx.execute(
-            "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7, updated_at=?8
-             WHERE id=?9",
-            params![t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes, fmt_ts(Utc::now()), id],
+            "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7,
+               status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9
+             WHERE id=?10",
+            params![
+                t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
+                t.status.as_sql(), fmt_ts(Utc::now()), id
+            ],
         )?;
         if n == 0 {
             return Err(StoreError::NotFound);
         }
+        crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
+        if newly_done && t.rrule.is_some() && t.due.is_some() {
+            self.set_task_completed(id, true, Utc::now())?;
+        }
         Ok(())
         })
     }
@@ -62,6 +83,7 @@ impl Store {
             .optional()?
             .ok_or(StoreError::NotFound)?;
         t.alerts = self.read_alerts(ItemKindDb::Task, id)?;
+        t.labels = self.task_labels(id)?;
         Ok(t)
     }
 
@@ -75,7 +97,7 @@ impl Store {
                 if let Some(next) = crate::recur::next_after(rule, due, tz, due)? {
                     return self.in_tx(|tx| {
                         tx.execute(
-                            "UPDATE tasks SET due_utc = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
+                            "UPDATE tasks SET due_utc = ?1, completed_at = NULL, status = 'todo', updated_at = ?2 WHERE id = ?3",
                             params![fmt_ts(next), fmt_ts(Utc::now()), id],
                         )?;
                         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)
@@ -84,8 +106,34 @@ impl Store {
             }
         }
         let n = self.conn.execute(
-            "UPDATE tasks SET completed_at = ?1, updated_at = ?2 WHERE id = ?3",
-            params![done.then(|| fmt_ts(now)), fmt_ts(Utc::now()), id],
+            "UPDATE tasks SET completed_at = ?1, status = ?2, updated_at = ?3 WHERE id = ?4",
+            params![
+                done.then(|| fmt_ts(now)),
+                if done {
+                    TaskStatus::Done
+                } else {
+                    TaskStatus::Todo
+                }
+                .as_sql(),
+                fmt_ts(Utc::now()),
+                id
+            ],
+        )?;
+        if n == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
+    }
+
+    /// `Done` behaves like ticking the checkbox (recurring tasks advance);
+    /// other statuses reopen the task.
+    pub fn set_task_status(&self, id: i64, status: TaskStatus, now: DateTime<Utc>) -> Result<()> {
+        if status == TaskStatus::Done {
+            return self.set_task_completed(id, true, now);
+        }
+        let n = self.conn.execute(
+            "UPDATE tasks SET status = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
+            params![status.as_sql(), fmt_ts(Utc::now()), id],
         )?;
         if n == 0 {
             return Err(StoreError::NotFound);

@@ -1,5 +1,6 @@
 //! Menu-bar icon, quick-entry popover and global hotkey.
 
+use crate::i18n::Lang;
 use crate::windows;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -56,11 +57,12 @@ pub fn toggle_quick(app: &AppHandle) {
     let _ = w.set_focus();
 }
 
-pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open TaskCraft", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
-    let quit = MenuItem::with_id(app, "quit", "Quit TaskCraft", true, Some("CmdOrCtrl+Q"))?;
-    let menu = Menu::with_items(
+fn build_menu(app: &AppHandle, lang: Lang) -> tauri::Result<Menu<tauri::Wry>> {
+    let text = crate::i18n::text(lang);
+    let open = MenuItem::with_id(app, "open", text.open, true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", text.settings, true, Some("CmdOrCtrl+,"))?;
+    let quit = MenuItem::with_id(app, "quit", text.quit, true, Some("CmdOrCtrl+Q"))?;
+    Menu::with_items(
         app,
         &[
             &open,
@@ -68,7 +70,19 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
-    )?;
+    )
+}
+
+/// Rebuilds the menu-bar menu in `lang`.
+pub fn set_menu_language(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_menu(Some(build_menu(app, lang)?))?;
+    }
+    Ok(())
+}
+
+pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_menu(app, Lang::default())?;
     let icon = Image::from_bytes(include_bytes!("../icons/tray@2x.png"))?;
 
     TrayIconBuilder::with_id("main-tray")

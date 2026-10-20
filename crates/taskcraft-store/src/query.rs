@@ -117,9 +117,13 @@ impl Store {
     pub fn list_tasks(&self, f: TaskFilter, now: DateTime<Utc>, tz: Tz) -> Result<Vec<Task>> {
         let sql = format!("SELECT {TASK_COLS} FROM tasks t JOIN calendars c ON c.id = t.calendar_id WHERE c.visible = 1");
         let mut st = self.conn.prepare(&sql)?;
-        let all: Vec<Task> = st
+        let mut all: Vec<Task> = st
             .query_map([], task_from_row)?
             .collect::<std::result::Result<_, _>>()?;
+        let mut labels = self.all_task_labels()?;
+        for t in &mut all {
+            t.labels = labels.remove(&t.id).unwrap_or_default();
+        }
 
         let today = now.with_timezone(&tz).date_naive();
         let day_start = crate::local_to_utc(today.and_hms_opt(0, 0, 0).unwrap_or_default(), tz);
@@ -257,6 +261,8 @@ impl Store {
              UNION ALL
              SELECT 'task', id, title, due_utc FROM tasks
                WHERE title LIKE ?1 ESCAPE '\\' OR notes LIKE ?1 ESCAPE '\\'
+                  OR id IN (SELECT tl.task_id FROM task_labels tl JOIN labels l ON l.id = tl.label_id
+                            WHERE l.name LIKE ?1 ESCAPE '\\')
              ORDER BY 4 DESC LIMIT 50",
         )?;
         let rows = st.query_map([like], |r| {

@@ -2,7 +2,7 @@
 
 export type Label =
   | 'title' | 'taskPrefix' | 'date' | 'time' | 'duration' | 'recurrence'
-  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator';
+  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag';
 
 export interface When { date: string; time: string | null }
 export interface Span { start: number; end: number; label: Label }
@@ -21,6 +21,7 @@ export interface ParsedItem {
   recurrence: { rule: { freq: string; interval: number; days?: string[]; monthDay?: number | null }; until: string | null } | null;
   alerts: AlertSpec[];
   url: string | null;
+  tags: string[];
   spans: Span[];
 }
 
@@ -46,6 +47,9 @@ export interface EventInput {
 }
 export interface EventFull extends EventInput { id: number }
 
+export type TaskStatus = 'todo' | 'inProgress' | 'done';
+export interface TaskLabel { id: number; name: string; color: string }
+
 export interface TaskInput {
   calendarId: number;
   title: string;
@@ -55,6 +59,9 @@ export interface TaskInput {
   rrule: string | null;
   notes: string | null;
   alerts: AlertSpecUtc[];
+  status: TaskStatus;
+  /** Label names; missing labels are created on save. */
+  labels: string[];
 }
 
 export interface Task {
@@ -70,6 +77,8 @@ export interface Task {
   notes: string | null;
   color: string;
   alerts: AlertSpecUtc[];
+  status: TaskStatus;
+  labels: TaskLabel[];
 }
 
 export interface Occurrence {

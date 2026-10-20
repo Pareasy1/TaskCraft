@@ -82,7 +82,7 @@ pub struct Event {
     pub input: EventInput,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskInput {
     pub calendar_id: i64,
@@ -93,6 +93,47 @@ pub struct TaskInput {
     pub rrule: Option<String>,
     pub notes: Option<String>,
     pub alerts: Vec<AlertSpecUtc>,
+    #[serde(default)]
+    pub status: TaskStatus,
+    /// Label names; missing labels are created on save.
+    #[serde(default)]
+    pub labels: Vec<String>,
+}
+
+/// Task workflow state. `Done` ⇔ `completed_at` is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskStatus {
+    #[default]
+    Todo,
+    InProgress,
+    Done,
+}
+
+impl TaskStatus {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            TaskStatus::Todo => "todo",
+            TaskStatus::InProgress => "in_progress",
+            TaskStatus::Done => "done",
+        }
+    }
+
+    pub fn from_sql(s: &str) -> TaskStatus {
+        match s {
+            "in_progress" => TaskStatus::InProgress,
+            "done" => TaskStatus::Done,
+            _ => TaskStatus::Todo,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLabel {
+    pub id: i64,
+    pub name: String,
+    pub color: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,6 +151,8 @@ pub struct Task {
     pub notes: Option<String>,
     pub color: String,
     pub alerts: Vec<AlertSpecUtc>,
+    pub status: TaskStatus,
+    pub labels: Vec<TaskLabel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

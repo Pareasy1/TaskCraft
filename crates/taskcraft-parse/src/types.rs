@@ -55,6 +55,8 @@ pub enum Label {
     Calendar,
     Url,
     Separator,
+    /// `#word` on a task.
+    Tag,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,5 +158,7 @@ pub struct ParsedItem {
     pub recurrence: Option<RecurrenceSpec>,
     pub alerts: Vec<AlertSpec>,
     pub url: Option<String>,
+    /// Label names from `#word` tokens (tasks only), without the `#`.
+    pub tags: Vec<String>,
     pub spans: Vec<Span>,
 }

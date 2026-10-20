@@ -1,7 +1,11 @@
 <script lang="ts">
-  import type { Occurrence } from '../lib/types';
-  import { addDays, monthGrid, sameDay } from '../lib/layout';
-  import { fmtTime } from '../lib/format';
+  import { t } from '../lib/i18n';
+  import type { Occurrence, Task, TaskStatus } from '../lib/types';
+  import { tasksForDay } from '../lib/calendarTasks';
+  import { STATUS_LABEL } from '../lib/tasks';
+  import StatusGlyph from './tasks/StatusGlyph.svelte';
+  import { addDays, monthBars, monthGrid, sameDay } from '../lib/layout';
+  import { fmtTime, fmtWeekdayShort } from '../lib/format';
 
   let {
     month,
@@ -9,38 +13,82 @@
     occurrences,
     onselect,
     onday,
+    tasks = [],
+    ontaskopen = () => {},
+    ontaskstatus = () => {},
   }: {
     month: Date;
     weekStart: 0 | 1;
     occurrences: Occurrence[];
     onselect: (o: Occurrence) => void;
     onday: (d: Date) => void;
+    tasks?: Task[];
+    ontaskopen?: (t: Task) => void;
+    ontaskstatus?: (t: Task, s: TaskStatus) => void;
   } = $props();
 
   let days = $derived(monthGrid(month.getFullYear(), month.getMonth(), weekStart));
   const today = new Date();
   const itemsOn = (d: Date) => occurrences.filter((o) => new Date(o.start) < addDays(d, 1) && new Date(o.end) > d);
+  // All-day and multi-day events are drawn as bars across the days they cover.
+  const LANES = 3;
+  let bars = $derived(monthBars(occurrences, days));
+  let barItems = $derived(new Set(bars.map((b) => b.item)));
+  let rowLanes = $derived(
+    Array.from({ length: 6 }, (_, r) => Math.min(LANES, Math.max(0, ...bars.filter((b) => b.row === r).map((b) => b.lane + 1)))),
+  );
+  const timedOn = (d: Date) => itemsOn(d).filter((o) => !barItems.has(o));
+  // Tasks due on the day (date-only first), listed under its events.
+  const tasksOn = (d: Date) => {
+    const r = tasksForDay(tasks, d, today);
+    return [...r.allDay.filter((x) => sameDay(new Date(x.task.due!), d)), ...r.timed];
+  };
+  const hiddenBarsAt = (i: number) =>
+    bars.filter((b) => b.lane >= LANES && b.row === Math.floor(i / 7) && b.col <= i % 7 && i % 7 < b.col + b.span).length;
   const names = $derived(
-    Array.from({ length: 7 }, (_, i) => days[i].toLocaleDateString(undefined, { weekday: 'short' })),
+    Array.from({ length: 7 }, (_, i) => fmtWeekdayShort(days[i])),
   );
 </script>
 
 <div class="month">
   <div class="names">{#each names as n}<span>{n}</span>{/each}</div>
   <div class="cells">
-    {#each days as d (d.getTime())}
-      {@const items = itemsOn(d)}
-      <div class="cell" class:other={d.getMonth() !== month.getMonth()} role="gridcell" tabindex="-1" ondblclick={() => onday(d)}>
+    {#each days as d, i (d.getTime())}
+      {@const items = timedOn(d)}
+      {@const dayTasks = tasksOn(d)}
+      {@const room = LANES - rowLanes[Math.floor(i / 7)]}
+      {@const taskRoom = Math.max(0, room - items.length)}
+      {@const more = Math.max(0, items.length + dayTasks.length - room) + hiddenBarsAt(i)}
+      <div class="cell" class:other={d.getMonth() !== month.getMonth()} role="gridcell" tabindex="-1"
+        style="grid-row:{Math.floor(i / 7) + 1}; grid-column:{(i % 7) + 1}" ondblclick={() => onday(d)}>
         <button class="num" class:today={sameDay(d, today)} onclick={() => onday(d)}>{d.getDate()}</button>
-        {#each items.slice(0, 3) as o (o.eventId + o.start)}
-          <button class="item" style="--c:{o.color}" class:allday={o.allDay} onclick={() => onselect(o)}>
-            {#if !o.allDay}<span class="dot" style="background:{o.color}"></span>{/if}
-            <span class="t">{o.title}</span>
-            {#if !o.allDay}<span class="time">{fmtTime(new Date(o.start))}</span>{/if}
-          </button>
-        {/each}
-        {#if items.length > 3}<button class="more" onclick={() => onday(d)}>+{items.length - 3} more</button>{/if}
+        <div class="items" style="margin-top:{rowLanes[Math.floor(i / 7)] * 20}px">
+          {#each items.slice(0, room) as o (o.eventId + o.start)}
+            <button class="item" style="--c:{o.color}" onclick={() => onselect(o)}>
+              <span class="dot" style="background:{o.color}"></span>
+              <span class="t">{o.title}</span>
+              <span class="time">{fmtTime(new Date(o.start))}</span>
+            </button>
+          {/each}
+          {#each dayTasks.slice(0, taskRoom) as x (x.task.id)}
+            <div class="titem" class:done={x.task.status === 'done'} class:overdue={x.overdue}>
+              <StatusGlyph status={x.task.status} size={12} onchange={(st) => ontaskstatus(x.task, st)} />
+              <button class="t" onclick={() => ontaskopen(x.task)}
+                aria-label="{x.task.title}, {STATUS_LABEL[x.task.status]}">{x.task.title}</button>
+              {#if x.task.dueHasTime}<span class="time">{fmtTime(new Date(x.task.due!))}</span>{/if}
+            </div>
+          {/each}
+          {#if more}<button class="more" onclick={() => onday(d)}>{t('common.more', { n: more })}</button>{/if}
+        </div>
       </div>
+    {/each}
+    {#each bars.filter((b) => b.lane < LANES) as b (b.item.eventId + b.item.start + b.row)}
+      <button class="bar" class:from-prev={b.fromPrev} class:to-next={b.toNext}
+        style="--c:{b.item.color}; grid-row:{b.row + 1}; grid-column:{b.col + 1} / span {b.span}; margin-top:{26 + b.lane * 20}px"
+        onclick={() => onselect(b.item)}>
+        <span class="t">{b.item.title}</span>
+        {#if !b.item.allDay && !b.fromPrev}<span class="time">{fmtTime(new Date(b.item.start))}</span>{/if}
+      </button>
     {/each}
   </div>
 </div>
@@ -72,7 +120,7 @@
     min-width: 22px;
     padding: 1px 5px;
   }
-  .num.today { background: var(--today); color: white; font-weight: 700; }
+  .num.today { background: var(--today); color: var(--on-today); font-weight: 700; }
   .item {
     display: flex;
     align-items: center;
@@ -86,8 +134,35 @@
     min-width: 0;
   }
   .item:hover { background: var(--hover); }
-  .item.allday { background: color-mix(in srgb, var(--c) 20%, var(--bg)); color: color-mix(in srgb, var(--c) 70%, var(--text)); }
+  .items { display: flex; flex-direction: column; gap: 1px; min-height: 0; }
+  .bar {
+    align-self: start;
+    z-index: 1;
+    height: 18px;
+    margin-left: 3px;
+    margin-right: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    border: none;
+    border-radius: 4px;
+    padding: 0 6px;
+    font-size: 11.5px;
+    text-align: left;
+    background: color-mix(in srgb, var(--c) 20%, var(--bg));
+    color: color-mix(in srgb, var(--c) 40%, var(--text));
+  }
+  .bar:hover { background: color-mix(in srgb, var(--c) 28%, var(--bg)); }
+  /* Joined edges where the event continues into the previous/next week. */
+  .bar.from-prev { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .bar.to-next { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .time { color: var(--muted); font-size: 10.5px; }
+  .time { color: var(--muted); font-size: 11px; }
+  .titem { display: flex; align-items: center; gap: 4px; padding: 1px 4px 1px 3px; min-width: 0; border-radius: 4px; }
+  .titem:hover { background: var(--hover); }
+  .titem .t { border: none; background: none; padding: 0; text-align: left; font-size: 11.5px; color: var(--text); }
+  .titem.done .t { color: var(--muted); text-decoration: line-through; }
+  .titem.overdue .time { color: var(--danger); }
   .more { border: none; background: none; font-size: 11px; color: var(--muted); text-align: left; padding: 0 4px; }
 </style>

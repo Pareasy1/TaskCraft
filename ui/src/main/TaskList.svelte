@@ -1,32 +1,42 @@
 <script lang="ts">
-  import type { Task } from '../lib/types';
+  import type { Task, TaskStatus } from '../lib/types';
   import { fmtShortDate, fmtTime } from '../lib/format';
+  import StatusGlyph from './tasks/StatusGlyph.svelte';
+  import LabelChip from './tasks/LabelChip.svelte';
 
   let {
     sections,
-    oncomplete,
+    onstatus,
     onopen,
   }: {
-    sections: { name: string; tasks: Task[]; collapsed?: boolean }[];
-    oncomplete: (t: Task) => void;
+    sections: { key: string; name: string; tasks: Task[] }[];
+    onstatus: (t: Task, s: TaskStatus) => void;
     onopen: (t: Task) => void;
   } = $props();
 
-  let open = $state<Record<string, boolean>>({ Completed: false });
+  let open = $state<Record<string, boolean>>({ completed: false });
   const due = (t: Task) => (t.due ? `${fmtShortDate(new Date(t.due))}${t.dueHasTime ? ` ${fmtTime(new Date(t.due))}` : ''}` : '');
 </script>
 
-{#each sections as s (s.name)}
+{#each sections as s (s.key)}
   {#if s.tasks.length}
-    <button class="sec" onclick={() => (open[s.name] = !(open[s.name] ?? true))}>
+    <button class="sec" aria-expanded={open[s.key] ?? true} onclick={() => (open[s.key] = !(open[s.key] ?? true))}>
       <span>{s.name}</span><span class="count">{s.tasks.length}</span>
     </button>
-    {#if open[s.name] ?? true}
+    {#if open[s.key] ?? true}
       {#each s.tasks as t (t.id)}
-        <div class="task" class:done={!!t.completedAt} class:overdue={s.name === 'Overdue'} role="button" tabindex="-1" onclick={() => onopen(t)} onkeydown={() => {}}>
-          <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" onclick={(e) => e.stopPropagation()} onchange={() => oncomplete(t)} />
-          <span class="name">{t.title}</span>
-          <span class="due">{due(t)}</span>
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
+        <div class="task" class:done={t.status === 'done'} onclick={() => onopen(t)}>
+          <StatusGlyph status={t.status} size={15} onchange={(st) => onstatus(t, st)} />
+          <button class="open-btn body" onclick={(e) => { e.stopPropagation(); onopen(t); }}>
+            <span class="name">{t.title}</span>
+            {#if t.due || t.labels.length}
+              <span class="meta">
+                {#if t.due}<span class="due" class:overdue={s.key === 'overdue'}>{due(t)}</span>{/if}
+                {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
+              </span>
+            {/if}
+          </button>
         </div>
       {/each}
     {/if}
@@ -40,19 +50,28 @@
     justify-content: space-between;
     border: none;
     background: none;
-    padding: 10px 8px 3px;
-    font-size: 11px;
+    padding: 12px 6px 4px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
   }
-  .count { font-variant-numeric: tabular-nums; }
-  .task { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; }
+  .count { font-variant-numeric: tabular-nums; font-weight: 400; }
+  .task { display: flex; align-items: flex-start; gap: 8px; padding: 5px 6px; border-radius: 6px; }
   .task:hover { background: var(--hover); }
-  .task input { margin: 0; }
-  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .due { font-size: 11px; color: var(--muted); white-space: nowrap; }
-  .overdue .due { color: var(--danger); }
-  .done .name { color: var(--faint); text-decoration: line-through; }
+  .task :global(.wrap) { margin-top: 1px; }
+  .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .name {
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 11.5px; }
+  .meta :global(.chip) { font-size: 11.5px; }
+  .due { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .due.overdue { color: var(--danger); }
+  .done .name { color: var(--muted); text-decoration: line-through; }
 </style>

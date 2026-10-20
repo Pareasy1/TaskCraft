@@ -1,5 +1,5 @@
 // Conversions between store records and inspector form fields.
-import type { AlertSpecUtc, EventInput, TaskInput } from './types';
+import type { AlertSpecUtc, EventInput, Task, TaskInput, TaskStatus } from './types';
 import { addDays } from './layout';
 import { ymd } from './format';
 
@@ -83,6 +83,14 @@ export function formToEvent(f: EventForm): EventInput {
   };
 }
 
+/** A stored task as a saveable input (labels by name). */
+export function taskInput(t: Task): TaskInput {
+  return {
+    calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz,
+    rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
+  };
+}
+
 export interface TaskForm {
   title: string;
   calendarId: number;
@@ -92,6 +100,8 @@ export interface TaskForm {
   rrule: string | null;
   alerts: AlertSpecUtc[];
   tz: string;
+  status: TaskStatus;
+  labels: string[];
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
@@ -106,6 +116,8 @@ export function taskToForm(t: TaskInput): TaskForm {
     rrule: t.rrule,
     alerts: t.alerts,
     tz: t.tz,
+    status: t.status,
+    labels: [...t.labels],
   };
 }
 
@@ -121,7 +133,25 @@ export function formToTask(f: TaskForm): TaskInput {
     rrule: f.rrule,
     notes: f.notes.trim() || null,
     alerts: f.alerts,
+    status: f.status,
+    labels: f.labels,
   };
+}
+
+/**
+ * Three-way merge for saving a task the side panel opened as `original`:
+ * fields the user left alone take the `latest` stored value (the task may have
+ * been moved on the board meanwhile); fields the user edited win.
+ */
+export function mergeTaskSave(original: TaskInput, edited: TaskInput, latest: TaskInput): TaskInput {
+  // Compare against the original as it comes back through the form, so
+  // normalisation (trimming, date formatting) doesn't count as an edit.
+  const base = formToTask(taskToForm(original));
+  const out = { ...edited };
+  for (const k of Object.keys(edited) as (keyof TaskInput)[]) {
+    if (JSON.stringify(edited[k]) === JSON.stringify(base[k])) (out as Record<string, unknown>)[k] = latest[k];
+  }
+  return out;
 }
 
 /** RRULE body from a parser recurrence (mirrors Rust `RecurrenceSpec::to_rrule`). */

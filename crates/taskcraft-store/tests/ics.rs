@@ -49,6 +49,7 @@ fn ics_contains_expected_lines() {
             rrule: None,
             notes: None,
             alerts: vec![],
+            ..Default::default()
         })
         .unwrap();
     s.set_task_completed(t, true, utc("2026-10-20T10:00:00Z"))

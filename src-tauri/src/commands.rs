@@ -6,7 +6,7 @@ use crate::state::AppState;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
-use taskcraft_parse::{parse, ParseOptions, ParsedItem};
+use taskcraft_parse::{parse, parse_task, ParseOptions, ParsedItem};
 use taskcraft_store::*;
 use tauri::{AppHandle, Emitter, State};
 
@@ -80,16 +80,30 @@ fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
     })
 }
 
-pub fn parse_preview_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> CmdResult<ParsedItem> {
-    Ok(parse(text, now, &parse_options(st)?))
+pub fn parse_preview_impl(
+    st: &AppState,
+    text: &str,
+    now: DateTime<Tz>,
+    as_task: bool,
+) -> CmdResult<ParsedItem> {
+    let opts = parse_options(st)?;
+    Ok(if as_task {
+        parse_task(text, now, &opts)
+    } else {
+        parse(text, now, &opts)
+    })
 }
 
-pub fn create_from_text_impl(st: &AppState, text: &str, now: DateTime<Tz>) -> CmdResult<ItemRef> {
+pub fn create_from_text_impl(
+    st: &AppState,
+    text: &str,
+    now: DateTime<Tz>,
+    as_task: bool,
+) -> CmdResult<ItemRef> {
     if text.trim().is_empty() {
         return Err(CmdError::new("empty", "Type something to create an item"));
     }
-    let opts = parse_options(st)?;
-    let p = parse(text, now, &opts);
+    let p = parse_preview_impl(st, text, now, as_task)?;
     let settings = st.settings.read().map_err(poisoned)?.clone();
     let store = st.store.lock().map_err(poisoned)?;
     let calendars = store.calendars()?;
@@ -127,13 +141,22 @@ fn changed(app: &AppHandle) {
 // ---------- commands ----------
 
 #[tauri::command]
-pub fn parse_preview(st: State<AppState>, text: String) -> CmdResult<ParsedItem> {
-    parse_preview_impl(&st, &text, local_now())
+pub fn parse_preview(
+    st: State<AppState>,
+    text: String,
+    as_task: Option<bool>,
+) -> CmdResult<ParsedItem> {
+    parse_preview_impl(&st, &text, local_now(), as_task.unwrap_or(false))
 }
 
 #[tauri::command]
-pub fn create_from_text(app: AppHandle, st: State<AppState>, text: String) -> CmdResult<ItemRef> {
-    let r = create_from_text_impl(&st, &text, local_now())?;
+pub fn create_from_text(
+    app: AppHandle,
+    st: State<AppState>,
+    text: String,
+    as_task: Option<bool>,
+) -> CmdResult<ItemRef> {
+    let r = create_from_text_impl(&st, &text, local_now(), as_task.unwrap_or(false))?;
     changed(&app);
     Ok(r)
 }
@@ -235,6 +258,73 @@ pub fn set_task_completed(
         .lock()
         .map_err(poisoned)?
         .set_task_completed(id, done, Utc::now())?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_task_status(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    status: TaskStatus,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .set_task_status(id, status, Utc::now())?;
+    changed(&app);
+    Ok(())
+}
+
+/// The UI reports the language it picked from the Mac's settings; the
+/// menu-bar menu and notifications follow it.
+#[tauri::command]
+pub fn set_ui_language(app: AppHandle, st: State<AppState>, lang: String) -> CmdResult<()> {
+    let lang = crate::i18n::Lang::from_code(&lang);
+    *st.lang.write().map_err(poisoned)? = lang;
+    if let Err(e) = crate::tray::set_menu_language(&app, lang) {
+        tracing::warn!(error = %e, "cannot update tray menu language");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_labels(st: State<AppState>) -> CmdResult<Vec<TaskLabel>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_labels()?)
+}
+
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+pub fn update_label_impl(st: &AppState, id: i64, name: &str, color: &str) -> CmdResult<()> {
+    if !is_hex_color(color) {
+        return Err(CmdError::new("invalid", "Pick a label color"));
+    }
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .update_label(id, name, color)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_label(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    name: String,
+    color: String,
+) -> CmdResult<()> {
+    update_label_impl(&st, id, &name, &color)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_label(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.delete_label(id)?;
     changed(&app);
     Ok(())
 }
@@ -402,7 +492,7 @@ mod tests {
     #[test]
     fn creates_event_in_default_calendar() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "Lunch with Sam tomorrow at 1", now()).unwrap();
+        let r = create_from_text_impl(&st, "Lunch with Sam tomorrow at 1", now(), false).unwrap();
         assert_eq!(r.kind, ItemKindDb::Event);
         let e = st.store.lock().unwrap().get_event(r.id).unwrap().input;
         assert_eq!(e.title, "Lunch");
@@ -414,9 +504,46 @@ mod tests {
     }
 
     #[test]
+    fn update_label_validates() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "pay rent #bills friday", now(), true).unwrap();
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        let names: Vec<&str> = t.labels.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["bills"], "integration: #tags become labels");
+        let id = t.labels[0].id;
+        assert_eq!(
+            update_label_impl(&st, id, "home", "red").unwrap_err().code,
+            "invalid"
+        );
+        assert_eq!(
+            update_label_impl(&st, id, "", "#123456").unwrap_err().code,
+            "invalid"
+        );
+        update_label_impl(&st, id, "home", "#123456").unwrap();
+        let l = st.store.lock().unwrap().list_labels().unwrap();
+        assert_eq!(
+            (l[0].name.as_str(), l[0].color.as_str()),
+            ("home", "#123456")
+        );
+    }
+
+    #[test]
+    fn as_task_creates_task_without_prefix() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "call mom tomorrow 9am", now(), true).unwrap();
+        assert_eq!(r.kind, ItemKindDb::Task);
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        assert_eq!(t.title, "call mom");
+        assert!(t.due_has_time);
+        let p = parse_preview_impl(&st, "buy milk", now(), true).unwrap();
+        assert_eq!(p.kind, taskcraft_parse::ItemKind::Task);
+        assert_eq!(p.start, None);
+    }
+
+    #[test]
     fn creates_task_from_prefix() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "todo buy milk friday", now()).unwrap();
+        let r = create_from_text_impl(&st, "todo buy milk friday", now(), false).unwrap();
         assert_eq!(r.kind, ItemKindDb::Task);
         assert_eq!(
             st.store.lock().unwrap().get_task(r.id).unwrap().title,
@@ -427,7 +554,7 @@ mod tests {
     #[test]
     fn slash_calendar_overrides_default() {
         let st = AppState::in_memory();
-        let r = create_from_text_impl(&st, "Standup tomorrow 9am /work", now()).unwrap();
+        let r = create_from_text_impl(&st, "Standup tomorrow 9am /work", now(), false).unwrap();
         let store = st.store.lock().unwrap();
         let work = store
             .calendars()
@@ -496,7 +623,7 @@ mod tests {
     #[test]
     fn empty_text_is_rejected() {
         let st = AppState::in_memory();
-        let err = create_from_text_impl(&st, "   ", now()).unwrap_err();
+        let err = create_from_text_impl(&st, "   ", now(), false).unwrap_err();
         assert_eq!(err.code, "empty");
     }
 }

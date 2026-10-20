@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-svelte';
 
-  type View = 'day' | 'week' | 'month';
+  type View = 'day' | 'week' | 'month' | 'tasks';
   let {
     view = $bindable<View>('week'),
     title,
@@ -25,21 +26,23 @@
   <div class="left" data-tauri-drag-region>
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
-  <div class="right">
-    <button class="icon-btn" title="New event (⌘N)" onclick={onnew}><Plus size={17} /></button>
-    <div class="nav">
-      <button class="icon-btn" aria-label="Previous" onclick={onprev}><ChevronLeft size={17} /></button>
-      <button class="btn today" onclick={ontoday}>Today</button>
-      <button class="icon-btn" aria-label="Next" onclick={onnext}><ChevronRight size={17} /></button>
-    </div>
-    <div class="seg" role="tablist">
-      {#each [['day', 'Day', '⌘1'], ['week', 'Week', '⌘2'], ['month', 'Month', '⌘3']] as [v, label, key]}
-        <button role="tab" class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
+  <div class="right" data-tauri-drag-region>
+    <button class="icon-btn" title={view === 'tasks' ? t('toolbar.newTaskKey') : t('toolbar.newEventKey')} aria-label={view === 'tasks' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
+    {#if view !== 'tasks'}
+      <div class="nav">
+        <button class="icon-btn" aria-label={t('common.previous')} onclick={onprev}><ChevronLeft size={17} /></button>
+        <button class="btn today" onclick={ontoday}>{t('toolbar.today')}</button>
+        <button class="icon-btn" aria-label={t('common.next')} onclick={onnext}><ChevronRight size={17} /></button>
+      </div>
+    {/if}
+    <div class="seg" role="group" aria-label={t('toolbar.views')}>
+      {#each [['day', t('toolbar.day'), '⌘1'], ['week', t('toolbar.week'), '⌘2'], ['month', t('toolbar.month'), '⌘3'], ['tasks', t('toolbar.tasks'), '⌘4']] as [v, label, key]}
+        <button aria-pressed={view === v} class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
       {/each}
     </div>
     <label class="search">
       <Search size={13} />
-      <input placeholder="Search" bind:value={query} />
+      <input placeholder={t('toolbar.search')} aria-label={t('toolbar.searchLabel')} bind:value={query} />
     </label>
   </div>
 </header>

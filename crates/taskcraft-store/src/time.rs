@@ -62,6 +62,8 @@ pub fn from_parsed(
             rrule,
             notes: None,
             alerts,
+            labels: p.tags.clone(),
+            ..Default::default()
         }),
         ItemKind::Event => {
             let start_w = p.start.unwrap_or(When {

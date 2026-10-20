@@ -1,7 +1,8 @@
-// Display formatting, using the system locale.
+// Display formatting in the app language (see i18n.ts).
 import type { ParsedItem, When } from './types';
+import { dateLocale, t } from './i18n';
 
-const locale: string | undefined = undefined; // system locale everywhere
+const locale = dateLocale;
 
 export const fmtTime = (d: Date) => d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 
@@ -10,10 +11,19 @@ export const fmtDayHeading = (d: Date, today = new Date()) => {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diff = Math.round((x.getTime() - t.getTime()) / 86_400_000);
   const base = d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-  if (Math.abs(diff) > 1) return base;
+  // Headings are sentence case even where day names are lowercase (Italian).
+  if (Math.abs(diff) > 1) return `${base.charAt(0).toUpperCase()}${base.slice(1)}`;
   const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(diff, 'day');
   return `${rel.charAt(0).toUpperCase()}${rel.slice(1)} · ${base}`;
 };
+
+export const fmtWeekdayShort = (d: Date) => d.toLocaleDateString(locale, { weekday: 'short' });
+
+export const fmtLongDate = (d: Date) =>
+  d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+/** Compact hour label for the time gutter ("9 AM", "09"). */
+export const fmtHour = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(locale, { hour: 'numeric' });
 
 export const fmtShortDate = (d: Date) =>
   d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -35,12 +45,13 @@ export function whenToDate(w: When): Date {
 }
 
 export function describeParsed(p: ParsedItem): string {
-  if (!p.start) return p.kind === 'task' ? 'No due date' : '';
+  if (!p.start) return p.kind === 'task' ? t('parsed.noDue') : '';
   const s = whenToDate(p.start);
-  if (p.kind === 'task') return `Due ${fmtShortDate(s)}${p.start.time ? `, ${fmtTime(s)}` : ''}`;
+  if (p.kind === 'task') return t('parsed.due', { when: `${fmtShortDate(s)}${p.start.time ? `, ${fmtTime(s)}` : ''}` });
   if (p.allDay) {
     const e = p.end ? whenToDate(p.end) : s;
-    return e.getTime() === s.getTime() ? `${fmtShortDate(s)} · all day` : `${fmtShortDate(s)} – ${fmtShortDate(e)} · all day`;
+    const allDay = t('common.allDay');
+    return e.getTime() === s.getTime() ? `${fmtShortDate(s)} · ${allDay}` : `${fmtShortDate(s)} – ${fmtShortDate(e)} · ${allDay}`;
   }
   const e = p.end ? whenToDate(p.end) : s;
   const sameDay = e.toDateString() === s.toDateString();
@@ -49,14 +60,22 @@ export function describeParsed(p: ParsedItem): string {
     : `${fmtShortDate(s)}, ${fmtTime(s)} – ${fmtShortDate(e)}, ${fmtTime(e)}`;
 }
 
+/** Weekday name from the parser's three-letter code ("Mon"). */
+function weekdayName(code: string): string {
+  const i = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(code);
+  return i < 0 ? code : new Date(2026, 9, 4 + i).toLocaleDateString(locale, { weekday: 'long' });
+}
+
 export function describeRecurrence(p: ParsedItem): string | null {
   const r = p.recurrence;
   if (!r) return null;
-  const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[r.rule.freq] ?? r.rule.freq;
-  let s = r.rule.interval > 1 ? `Every ${r.rule.interval} ${unit}s` : `Every ${unit}`;
-  if (r.rule.days?.length) s += ` on ${r.rule.days.join(', ')}`;
-  if (r.rule.monthDay) s += ` on day ${r.rule.monthDay}`;
-  if (r.until) s += ` until ${r.until}`;
+  const unit = ({ daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' } as const)[r.rule.freq as 'daily'] ?? 'day';
+  let s = r.rule.interval > 1
+    ? t('repeat.everyN', { n: r.rule.interval, unit: t(`unit.${unit}s`) })
+    : t('repeat.every', { unit: t(`unit.${unit}`) });
+  if (r.rule.days?.length) s = t('repeat.onDays', { rule: s, days: r.rule.days.map(weekdayName).join(', ') });
+  if (r.rule.monthDay) s = t('repeat.onDay', { rule: s, day: r.rule.monthDay });
+  if (r.until) s = t('repeat.until', { rule: s, date: fmtShortDate(new Date(`${r.until}T00:00`)) });
   return s;
 }
 
@@ -74,4 +93,12 @@ export function byteToIndex(text: string, byte: number): number {
     i += ch.length;
   }
   return i;
+}
+
+/** Spoken name of a calendar day: full date, plus "today" and "has events" when they apply. */
+export function dayLabel(d: Date, today: Date, hasEvents: boolean): string {
+  const parts = [d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })];
+  if (d.toDateString() === today.toDateString()) parts.push(t('day.today'));
+  if (hasEvents) parts.push(t('day.hasEvents'));
+  return parts.join(', ');
 }

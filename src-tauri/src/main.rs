@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod i18n;
 mod logging;
 mod scheduler;
 mod settings;
@@ -31,6 +32,11 @@ pub fn reveal_item(app: &tauri::AppHandle, item: commands::ItemRef) {
 #[tauri::command]
 fn open_item(app: tauri::AppHandle, item: commands::ItemRef) {
     reveal_item(&app, item);
+}
+
+#[tauri::command]
+fn take_pending_settings(p: tauri::State<windows::PendingSettings>) -> bool {
+    p.take()
 }
 
 #[tauri::command]
@@ -94,6 +100,7 @@ fn main() {
         ))
         .manage(state)
         .manage(PendingFocus::default())
+        .manage(windows::PendingSettings::default())
         .manage(scheduler::LastFired::default())
         .invoke_handler(tauri::generate_handler![
             commands::parse_preview,
@@ -108,6 +115,11 @@ fn main() {
             commands::update_task,
             commands::set_task_completed,
             commands::delete_task,
+            commands::set_task_status,
+            commands::list_labels,
+            commands::update_label,
+            commands::delete_label,
+            commands::set_ui_language,
             commands::list_range,
             commands::list_tasks,
             commands::search,
@@ -122,6 +134,7 @@ fn main() {
             open_settings,
             open_item,
             take_pending_focus,
+            take_pending_settings,
             quit_app,
         ])
         .setup(|app| {

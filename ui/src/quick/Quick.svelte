@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
-  import { Settings as Gear, AppWindow, Power } from 'lucide-svelte';
+  import { Settings as Gear, AppWindow, Power, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task } from '../lib/types';
+  import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task, TaskStatus } from '../lib/types';
+  import { STATUS_LABEL } from '../lib/tasks';
   import { monthGrid, addDays, startOfDay } from '../lib/layout';
   import { ymd } from '../lib/format';
   import HighlightInput from './HighlightInput.svelte';
@@ -17,6 +19,12 @@
   let parsed = $state<ParsedItem | null>(null);
   let error = $state('');
   let flash = $state('');
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+  function showFlash(m: string) {
+    clearTimeout(flashTimer);
+    flash = m;
+    flashTimer = setTimeout(() => (flash = ''), 2200);
+  }
   let input = $state<HTMLInputElement | undefined>();
   let month = $state(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   let selected = $state<Date | null>(null);
@@ -80,8 +88,7 @@
     if (!text.trim()) return;
     try {
       const ref: ItemRef = await api.createFromText(text);
-      flash = `Added ${parsed?.kind === 'task' ? 'task' : 'event'} “${parsed?.title || text}”`;
-      setTimeout(() => (flash = ''), 2200);
+      showFlash(t(parsed?.kind === 'task' ? 'msg.addedTask' : 'msg.addedEvent', { title: parsed?.title || text }));
       text = '';
       parsed = null;
       error = '';
@@ -105,9 +112,10 @@
     }
   }
 
-  async function complete(t: Task) {
+  async function setStatus(task: Task, s: TaskStatus) {
     try {
-      await api.setTaskCompleted(t.id, !t.completedAt);
+      await api.setTaskStatus(task.id, s);
+      showFlash(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -137,28 +145,29 @@
 
 <main class="pop">
   <HighlightInput
+    label={t('quick.inputLabel')}
     bind:value={text}
     bind:input
     spans={parsed?.spans ?? []}
-    placeholder="Lunch with Sam tomorrow at 1 · todo buy milk friday"
+    placeholder={t('quick.placeholder')}
     {onkeydown}
   />
   {#if parsed}
     <PreviewCard item={parsed} calendarColor={previewColor} />
-    <div class="hint">↩ Add · ⌘↩ Add &amp; open · esc Clear</div>
+    <div class="hint">{t('quick.hint')}</div>
   {/if}
-  {#if flash}<div class="flash">{flash}</div>{/if}
-  {#if error}<div class="banner"><span>{error}</span><button class="icon-btn" onclick={() => (error = '')}>✕</button></div>{/if}
+  <div role="status" aria-live="polite">{#if flash}<div class="flash">{flash}</div>{/if}</div>
+  {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
 
   <MiniMonth bind:month {selected} {marked} {weekStart} onselect={(d) => (selected = d)} />
   <div class="scroll">
-    <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} oncomplete={complete} onopen={openItem} />
+    <Upcoming {occurrences} pinned={selected ? [] : tasks} dated={selected ? [...tasks, ...upcomingTasks] : upcomingTasks} from={listFrom} days={listDays} onstatus={setStatus} onopen={openItem} />
   </div>
   <footer>
-    <button class="icon-btn" title="Open TaskCraft" onclick={() => api.openMain()}><AppWindow size={16} /></button>
-    <button class="icon-btn" title="Settings" onclick={() => api.openSettings()}><Gear size={16} /></button>
+    <button class="icon-btn" title={t('quick.open')} aria-label={t('quick.openLabel')} onclick={() => api.openMain()}><AppWindow size={16} /></button>
+    <button class="icon-btn" title={t('quick.settings')} aria-label={t('quick.settings')} onclick={() => api.openSettings()}><Gear size={16} /></button>
     <span class="spacer"></span>
-    <button class="icon-btn" title="Quit TaskCraft" onclick={() => invoke('quit_app')}><Power size={16} /></button>
+    <button class="icon-btn" title={t('quick.quit')} aria-label={t('quick.quit')} onclick={() => invoke('quit_app')}><Power size={16} /></button>
   </footer>
 </main>
 
@@ -172,7 +181,7 @@
     background: var(--surface);
     border-radius: 12px;
   }
-  .hint { font-size: 11px; color: var(--faint); text-align: right; margin-top: -4px; }
+  .hint { font-size: 12px; color: var(--faint); text-align: right; margin-top: -4px; }
   .flash {
     font-size: 12px;
     color: var(--label-time);

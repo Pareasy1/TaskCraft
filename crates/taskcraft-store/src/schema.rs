@@ -3,7 +3,7 @@
 use crate::model::Result;
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 1;
+pub const CURRENT_VERSION: i64 = 2;
 
 const V1: &str = "
 CREATE TABLE calendars(
@@ -51,6 +51,23 @@ CREATE INDEX alerts_due ON alerts(fired_at, fire_at_utc);
 INSERT INTO calendars(name, color, sort) VALUES ('Personal', '#3b82f6', 0), ('Work', '#f97316', 1);
 ";
 
+/// Task status, labels and task↔label links.
+const V2: &str = "
+ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'todo'
+  CHECK(status IN ('todo','in_progress','done'));
+UPDATE tasks SET status = 'done' WHERE completed_at IS NOT NULL;
+CREATE TABLE labels(
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  color TEXT NOT NULL
+);
+CREATE TABLE task_labels(
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+  PRIMARY KEY(task_id, label_id)
+);
+";
+
 pub fn version(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
 }
@@ -64,6 +81,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction()?;
     if v < 1 {
         tx.execute_batch(V1)?;
+    }
+    if v < 2 {
+        tx.execute_batch(V2)?;
     }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;

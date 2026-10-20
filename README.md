@@ -18,6 +18,17 @@ All data stays on this Mac.
 - **Main window:** ⌘1 Day · ⌘2 Week · ⌘3 Month · ⌘N new event · ⌘T today.
   Drag events to move them, drag the bottom edge to resize, double-click empty
   space to create. Closing the window keeps TaskCraft in the menu bar.
+- **Tasks page:** ⌘4 (or *Tasks* in the toolbar). Everything typed there becomes a
+  task — dates are optional ("buy milk", "pay rent friday 9am"). Filter by
+  All / Today / Upcoming / No date / Completed; tasks are grouped by due day,
+  overdue first. Click a task to edit it.
+  - **Status:** To do → In progress → Done. Click the round status mark to move a
+    task to the next status, or right-click it to pick one. Done is the same as ticking it off.
+  - **Labels:** type `#home`, `#work`… in a task to label it (created
+    automatically). Click a label to filter by it; the tag icon opens the label
+    manager to rename, recolor, merge or delete labels.
+  - **Board:** switch *List / Board* to see To do · In progress · Done columns.
+    Drag cards between columns, or focus a card and press ← / →.
 
 ## Install / update
 
@@ -32,6 +43,7 @@ Requires Rust (rustup), Node, and the Tauri CLI (`cargo install tauri-cli --vers
 
 - Data: `~/Library/Application Support/TaskCraft/taskcraft.db` (+ `settings.json`)
 - Logs: `~/Library/Logs/TaskCraft/`
+- **Settings:** the gear in the main window's bottom-left corner, ⌘, or *Settings…* in the menu-bar menu. It opens as a dialog over the main window.
 - Backup / move to another calendar app: Settings → Export .ics…
 
 ## Uninstall
@@ -46,5 +58,5 @@ rm -rf /Applications/TaskCraft.app ~/Library/Application\ Support/TaskCraft ~/Li
 cargo test --workspace          # parser, store, app
 npm --prefix ui run test        # UI layout helpers
 cd src-tauri && cargo tauri dev # run with hot reload
-npm --prefix ui run dev         # browser preview with a mock backend: http://localhost:5173/?window=main|quick|settings
+npm --prefix ui run dev         # browser preview with a mock backend: http://localhost:5173/?window=main|quick (add &lang=it for Italian)
 ```

@@ -8,6 +8,8 @@ pub struct AppState {
     pub settings: RwLock<Settings>,
     /// None in tests (settings are not persisted).
     pub settings_path: Option<PathBuf>,
+    /// UI language, reported by the webview at startup.
+    pub lang: RwLock<crate::i18n::Lang>,
 }
 
 impl AppState {
@@ -19,6 +21,7 @@ impl AppState {
             store: Mutex::new(store),
             settings: RwLock::new(settings),
             settings_path: Some(settings_path),
+            lang: RwLock::default(),
         })
     }
 
@@ -29,6 +32,7 @@ impl AppState {
             store: Mutex::new(store),
             settings: RwLock::new(Settings::default()),
             settings_path: None,
+            lang: RwLock::default(),
         }
     }
 }

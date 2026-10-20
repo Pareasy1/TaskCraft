@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
   import type { ParsedItem } from '../lib/types';
   import { describeParsed, describeRecurrence } from '../lib/format';
   import { Calendar, CircleCheck, MapPin, Users, Repeat, Bell, Link, Tag } from 'lucide-svelte';
@@ -6,7 +7,13 @@
   let { item, calendarColor }: { item: ParsedItem; calendarColor: string } = $props();
 
   let alerts = $derived(
-    item.alerts.map((a) => (a.type === 'before' ? `${a.value >= 60 && a.value % 60 === 0 ? `${a.value / 60} h` : `${a.value} min`} before` : `at ${a.value.time?.slice(0, 5)}`)),
+    item.alerts.map((a) =>
+      a.type === 'before'
+        ? a.value >= 60 && a.value % 60 === 0
+          ? t('alert.hoursBefore', { n: a.value / 60 })
+          : t('alert.minBefore', { n: a.value })
+        : t('alert.at', { time: a.value.time?.slice(0, 5) ?? '' }),
+    ),
   );
 </script>
 
@@ -14,7 +21,7 @@
   <div class="title">
     <span class="bar" style="background:{calendarColor}"></span>
     {#if item.kind === 'task'}<CircleCheck size={15} />{:else}<Calendar size={15} />{/if}
-    <strong>{item.title || (item.kind === 'task' ? 'New task' : 'New event')}</strong>
+    <strong>{item.title || (item.kind === 'task' ? t('common.newTask') : t('common.newEvent'))}</strong>
   </div>
   <div class="row"><span class="when">{describeParsed(item)}</span></div>
   {#if item.location}<div class="row"><MapPin size={13} />{item.location}</div>{/if}

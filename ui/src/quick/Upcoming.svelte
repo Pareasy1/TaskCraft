@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { Occurrence, Task } from '../lib/types';
+  import { t as tr } from '../lib/i18n';
+  import type { Occurrence, Task, TaskStatus } from '../lib/types';
+  import StatusGlyph from '../main/tasks/StatusGlyph.svelte';
+  import LabelChip from '../main/tasks/LabelChip.svelte';
   import { fmtDayHeading, fmtTime, ymd } from '../lib/format';
   import { dayGroups } from '../lib/layout';
 
@@ -9,7 +12,7 @@
     dated,
     from,
     days,
-    oncomplete,
+    onstatus,
     onopen,
   }: {
     occurrences: Occurrence[];
@@ -19,7 +22,7 @@
     dated: Task[];
     from: Date;
     days: number;
-    oncomplete: (t: Task) => void;
+    onstatus: (t: Task, s: TaskStatus) => void;
     onopen: (kind: 'event' | 'task', id: number) => void;
   } = $props();
 
@@ -28,18 +31,22 @@
 </script>
 
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
-  <div class="item task" role="button" tabindex="-1" ondblclick={() => onopen('task', t.id)}>
-    <input type="checkbox" checked={!!t.completedAt} style="accent-color:{t.color}" onchange={() => oncomplete(t)} />
-    <span class="name">{t.title}</span>
-    <span class="meta" class:late>{meta}</span>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
+  <div class="item task" onclick={() => onopen('task', t.id)}>
+    <StatusGlyph status={t.status} size={15} onchange={(s) => onstatus(t, s)} />
+    <button class="open-btn opener" title={tr('quick.openTask', { title: t.title })} onclick={(e) => { e.stopPropagation(); onopen('task', t.id); }}>
+      <span class="name">{t.title}</span>
+      {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
+      <span class="meta" class:late>{meta}</span>
+    </button>
   </div>
 {/snippet}
 
 <div class="list">
   {#if pinned.length}
-    <div class="heading">Tasks</div>
+    <div class="heading">{tr('group.tasks')}</div>
     {#each pinned as t (t.id)}
-      {@render taskRow(t, overdue(t) ? 'Overdue' : t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', overdue(t))}
+      {@render taskRow(t, overdue(t) ? tr('group.overdue') : t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', overdue(t))}
     {/each}
   {/if}
   {#each groups as g (g.day.getTime())}
@@ -48,26 +55,25 @@
       {@render taskRow(t, t.dueHasTime && t.due ? fmtTime(new Date(t.due)) : '', false)}
     {/each}
     {#each g.events as o (o.eventId + o.start)}
-      <div class="item" role="button" tabindex="-1" ondblclick={() => onopen('event', o.eventId)}>
+      <div class="item" role="button" tabindex="0" aria-label={tr('quick.openEvent', { title: o.title })}
+        onclick={() => onopen('event', o.eventId)} onkeydown={(e) => e.key === 'Enter' && onopen('event', o.eventId)}>
         <span class="dot" style="background:{o.color}"></span>
         <span class="name">{o.title}</span>
-        <span class="meta">{o.allDay ? 'all-day' : fmtTime(new Date(o.start))}</span>
+        <span class="meta">{o.allDay ? tr('grid.allDay') : fmtTime(new Date(o.start))}</span>
       </div>
     {/each}
   {:else}
-    {#if !pinned.length}<div class="empty">Nothing scheduled</div>{/if}
+    {#if !pinned.length}<div class="empty">{tr('quick.nothing')}</div>{/if}
   {/each}
 </div>
 
 <style>
   .list { display: grid; gap: 1px; }
   .heading {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 8px 6px 3px;
+    padding: 10px 6px 3px;
   }
   .item {
     display: flex;
@@ -76,10 +82,11 @@
     padding: 5px 6px;
     border-radius: 6px;
   }
+  .item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .opener { flex: 1; display: flex; align-items: center; gap: 8px; }
   .item:hover { background: var(--hover); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .late { color: var(--danger); }
-  .task input { margin: 0; }
   .empty { color: var(--faint); text-align: center; padding: 18px 0; }
 </style>

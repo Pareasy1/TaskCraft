@@ -1,6 +1,7 @@
 //! Window creation helpers. Windows are created on demand and reused.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 fn existing(app: &AppHandle, label: &str) -> Option<WebviewWindow> {
     app.get_webview_window(label)
@@ -23,16 +24,71 @@ pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(w)
 }
 
+/// A request to open Settings, kept until the main window takes it (it may
+/// still be loading when the request arrives).
+#[derive(Default)]
+pub struct PendingSettings(AtomicBool);
+
+impl PendingSettings {
+    pub fn request(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn take(&self) -> bool {
+        self.0.swap(false, Ordering::SeqCst)
+    }
+}
+
+/// Settings live in a dialog inside the main window: bring the window up and
+/// ask it to open the dialog.
 pub fn show_settings(app: &AppHandle) -> tauri::Result<()> {
-    let w = match existing(app, "settings") {
-        Some(w) => w,
-        None => WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
-            .title("TaskCraft Settings")
-            .inner_size(560.0, 620.0)
-            .resizable(false)
-            .build()?,
-    };
-    w.show()?;
-    w.set_focus()?;
+    if let Some(p) = app.try_state::<PendingSettings>() {
+        p.request();
+    }
+    show_main(app)?;
+    app.emit_to("main", "open-settings", ())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PendingSettings;
+
+    /// A request made before the main window is listening is kept until it asks, then cleared.
+    #[test]
+    fn pending_settings_is_taken_once() {
+        let p = PendingSettings::default();
+        assert!(!p.take());
+        p.request();
+        assert!(p.take());
+        assert!(!p.take());
+    }
+
+    /// The main window hides the system title bar and uses
+    /// `data-tauri-drag-region` instead; Tauri only honours it when the
+    /// window may start dragging (and toggle zoom on double-click).
+    #[test]
+    fn main_window_can_be_dragged_by_its_toolbar() {
+        let caps: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let windows: Vec<&str> = caps["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|w| w.as_str())
+            .collect();
+        let perms: Vec<&str> = caps["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p.as_str())
+            .collect();
+        assert!(windows.contains(&"main"));
+        for p in [
+            "core:window:allow-start-dragging",
+            "core:window:allow-internal-toggle-maximize",
+        ] {
+            assert!(perms.contains(&p), "missing permission {p}");
+        }
+    }
 }

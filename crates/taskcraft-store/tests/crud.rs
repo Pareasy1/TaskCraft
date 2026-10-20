@@ -49,7 +49,7 @@ fn open_seeds_calendars() {
     let s = Store::open_in_memory().unwrap();
     let names: Vec<String> = s.calendars().unwrap().into_iter().map(|c| c.name).collect();
     assert_eq!(names, ["Personal", "Work"]);
-    assert_eq!(s.schema_version().unwrap(), 1);
+    assert_eq!(s.schema_version().unwrap(), 2);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn migration_backs_up() {
         .execute_batch("CREATE TABLE junk(x); INSERT INTO junk VALUES (1);")
         .unwrap();
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 1);
+    assert_eq!(s.schema_version().unwrap(), 2);
     assert!(dir.path().join("taskcraft.db.bak-v0").exists());
 }
 
@@ -72,7 +72,7 @@ fn reopen_does_not_reseed_or_backup() {
     drop(Store::open(&path).unwrap());
     let s = Store::open(&path).unwrap();
     assert_eq!(s.calendars().unwrap().len(), 2);
-    assert!(!dir.path().join("taskcraft.db.bak-v1").exists());
+    assert!(!dir.path().join("taskcraft.db.bak-v2").exists());
 }
 
 #[test]
@@ -115,6 +115,7 @@ fn task_complete_toggle() {
             rrule: None,
             notes: None,
             alerts: vec![],
+            ..Default::default()
         })
         .unwrap();
     let now = utc("2026-10-20T08:00:00Z");
@@ -206,4 +207,16 @@ fn from_parsed_task_and_calendar() {
     assert_eq!(t.due, Some(utc("2026-10-20T16:00:00Z")));
     assert!(t.due_has_time);
     assert_eq!(t.title, "call mom");
+}
+
+#[test]
+fn from_parsed_copies_tags() {
+    let s = Store::open_in_memory().unwrap();
+    let cals = s.calendars().unwrap();
+    let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
+    let p = parse("todo: pay rent #bills", now, &ParseOptions::default());
+    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+        panic!("expected a task")
+    };
+    assert_eq!(t.labels, ["bills"]);
 }
