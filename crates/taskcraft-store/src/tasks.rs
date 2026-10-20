@@ -39,6 +39,7 @@ impl Store {
             ],
         )?;
         let id = tx.last_insert_rowid();
+        crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(id)
         })
@@ -58,6 +59,7 @@ impl Store {
         if n == 0 {
             return Err(StoreError::NotFound);
         }
+        crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(())
         })
@@ -71,6 +73,7 @@ impl Store {
             .optional()?
             .ok_or(StoreError::NotFound)?;
         t.alerts = self.read_alerts(ItemKindDb::Task, id)?;
+        t.labels = self.task_labels(id)?;
         Ok(t)
     }
 

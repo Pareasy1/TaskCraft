@@ -4,6 +4,7 @@ mod alerts;
 mod calendars;
 mod events;
 mod ics;
+mod labels;
 mod model;
 mod query;
 mod recur;
