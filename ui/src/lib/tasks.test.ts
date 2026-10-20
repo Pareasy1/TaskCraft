@@ -63,3 +63,47 @@ describe('taskCounts', () => {
   it('counts each filter', () =>
     expect(taskCounts(tasks, now)).toEqual({ all: 7, today: 4, upcoming: 2, nodate: 1, completed: 2 }));
 });
+
+import { applyFilters, boardColumns, nextStatus } from './tasks';
+
+type S = 'todo' | 'inProgress' | 'done';
+type B = T & { status: S; labels: { id: number }[] };
+const b = (id: number, status: S, labels: number[], due: string | null = null, completedAt: string | null = null): B =>
+  ({ id, due, dueHasTime: false, completedAt: status === 'done' ? completedAt ?? at(1) : null, status, labels: labels.map((l) => ({ id: l })) });
+
+describe('applyFilters', () => {
+  const xs = [b(1, 'todo', [1]), b(2, 'inProgress', [2]), b(3, 'inProgress', [1, 3]), b(4, 'todo', [])];
+  it('status only', () => expect(ids(applyFilters(xs, { status: 'inProgress', labels: [] }))).toEqual([2, 3]));
+  it('labels any-of', () => expect(ids(applyFilters(xs, { status: 'any', labels: [1, 2] }))).toEqual([1, 2, 3]));
+  it('both', () => expect(ids(applyFilters(xs, { status: 'inProgress', labels: [1] }))).toEqual([3]));
+  it('no filters keeps all', () => expect(ids(applyFilters(xs, { status: 'any', labels: [] }))).toEqual([1, 2, 3, 4]));
+});
+
+describe('boardColumns', () => {
+  it('three columns in order, open ones sorted by due (none last) then id', () => {
+    const cols = boardColumns([b(5, 'todo', [], null), b(2, 'todo', [], at(22)), b(1, 'todo', [], at(21)), b(3, 'inProgress', [])], { showAllDone: false });
+    expect(cols.map((c) => c.status)).toEqual(['todo', 'inProgress', 'done']);
+    expect(ids(cols[0].tasks)).toEqual([1, 2, 5]);
+    expect(ids(cols[1].tasks)).toEqual([3]);
+    expect(cols[2].tasks).toEqual([]);
+  });
+
+  it('done shows the 30 most recent unless showAllDone', () => {
+    const done = Array.from({ length: 35 }, (_, i) => b(i + 1, 'done', [], null, new Date(2026, 9, 1, i).toISOString()));
+    const cut = boardColumns(done, { showAllDone: false })[2];
+    expect(cut.tasks).toHaveLength(30);
+    expect(cut.tasks[0].id).toBe(35);
+    expect(cut.hidden).toBe(5);
+    const full = boardColumns(done, { showAllDone: true })[2];
+    expect(full.tasks).toHaveLength(35);
+    expect(full.hidden).toBe(0);
+  });
+});
+
+describe('nextStatus', () => {
+  it('cycles', () => {
+    expect(nextStatus('todo')).toBe('inProgress');
+    expect(nextStatus('inProgress')).toBe('done');
+    expect(nextStatus('done')).toBe('todo');
+  });
+});

@@ -1,5 +1,6 @@
 // Filtering and grouping for the Tasks view.
 import { sameDay, startOfDay } from './layout';
+import type { TaskStatus } from './types';
 
 export type TaskView = 'all' | 'today' | 'upcoming' | 'nodate' | 'completed';
 export const TASK_VIEWS: TaskView[] = ['all', 'today', 'upcoming', 'nodate', 'completed'];
@@ -70,4 +71,40 @@ export function groupTasks<T extends TaskLike>(tasks: T[], view: TaskView, now: 
 
 export function taskCounts(tasks: TaskLike[], now: Date): Record<TaskView, number> {
   return Object.fromEntries(TASK_VIEWS.map((v) => [v, filterTasks(tasks, v, now).length])) as Record<TaskView, number>;
+}
+
+// ── Status and labels ────────────────────────────────────────────────
+
+export type StatusFilter = 'any' | 'todo' | 'inProgress';
+type WithStatus = TaskLike & { status: TaskStatus; labels: { id: number }[] };
+
+export const STATUSES: TaskStatus[] = ['todo', 'inProgress', 'done'];
+export const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'To do', inProgress: 'In progress', done: 'Done' };
+const DONE_LIMIT = 30;
+
+/** Status filter, then labels: a task matches if it has any of `labels` (empty = no label filter). */
+export function applyFilters<T extends WithStatus>(tasks: T[], f: { status: StatusFilter; labels: number[] }): T[] {
+  return tasks.filter(
+    (t) =>
+      (f.status === 'any' || t.status === f.status) &&
+      (!f.labels.length || t.labels.some((l) => f.labels.includes(l.id))),
+  );
+}
+
+/** Board columns To do · In progress · Done. Done is newest first and capped unless `showAllDone`. */
+export function boardColumns<T extends WithStatus>(
+  tasks: T[],
+  opts: { showAllDone: boolean },
+): { status: TaskStatus; tasks: T[]; hidden: number }[] {
+  return STATUSES.map((status) => {
+    const col = tasks.filter((t) => t.status === status);
+    if (status !== 'done') return { status, tasks: col.sort(byDue), hidden: 0 };
+    col.sort((a, b) => new Date(b.completedAt ?? 0).getTime() - new Date(a.completedAt ?? 0).getTime());
+    const shown = opts.showAllDone ? col : col.slice(0, DONE_LIMIT);
+    return { status, tasks: shown, hidden: col.length - shown.length };
+  });
+}
+
+export function nextStatus(s: TaskStatus): TaskStatus {
+  return STATUSES[(STATUSES.indexOf(s) + 1) % STATUSES.length];
 }

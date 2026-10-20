@@ -1,5 +1,5 @@
 // Conversions between store records and inspector form fields.
-import type { AlertSpecUtc, EventInput, TaskInput } from './types';
+import type { AlertSpecUtc, EventInput, TaskInput, TaskStatus } from './types';
 import { addDays } from './layout';
 import { ymd } from './format';
 
@@ -92,6 +92,8 @@ export interface TaskForm {
   rrule: string | null;
   alerts: AlertSpecUtc[];
   tz: string;
+  status: TaskStatus;
+  labels: string[];
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
@@ -106,6 +108,8 @@ export function taskToForm(t: TaskInput): TaskForm {
     rrule: t.rrule,
     alerts: t.alerts,
     tz: t.tz,
+    status: t.status,
+    labels: [...t.labels],
   };
 }
 
@@ -121,6 +125,8 @@ export function formToTask(f: TaskForm): TaskInput {
     rrule: f.rrule,
     notes: f.notes.trim() || null,
     alerts: f.alerts,
+    status: f.status,
+    labels: f.labels,
   };
 }
 
