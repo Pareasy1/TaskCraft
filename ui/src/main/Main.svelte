@@ -115,8 +115,27 @@
     anchor = startOfDay(new Date());
   }
 
+  let dialogEl = $state<HTMLDivElement | undefined>();
   function askScope(verb: string, allowThis = true): Promise<'this' | 'all' | null> {
-    return new Promise((resolve) => (scopePrompt = { verb, allowThis, resolve: (s) => { scopePrompt = null; resolve(s); } }));
+    const back = document.activeElement as HTMLElement | null;
+    return new Promise((resolve) => (scopePrompt = { verb, allowThis, resolve: (s) => { scopePrompt = null; back?.focus(); resolve(s); } }));
+  }
+  // Move keyboard focus into the dialog's default button when it opens.
+  $effect(() => {
+    if (scopePrompt && dialogEl) dialogEl.querySelector<HTMLButtonElement>('.primary, .btn:last-child')?.focus();
+  });
+  function dialogKeys(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      scopePrompt?.resolve(null);
+    } else if (e.key === 'Tab' && dialogEl) {
+      // Keep Tab inside the dialog.
+      const b = [...dialogEl.querySelectorAll<HTMLButtonElement>('button')];
+      const i = b.indexOf(document.activeElement as HTMLButtonElement);
+      e.preventDefault();
+      b[(i + (e.shiftKey ? b.length - 1 : 1)) % b.length]?.focus();
+    }
+    e.stopPropagation();
   }
 
   async function openEvent(id: number, occurrence: string | null) {
@@ -280,8 +299,8 @@
 
 {#if scopePrompt}
   <div class="scrim">
-    <div class="dialog" role="dialog" aria-label="Repeating event">
-      <strong>{scopePrompt.verb} a repeating event</strong>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="scope-title" tabindex="-1" bind:this={dialogEl} onkeydown={dialogKeys}>
+      <strong id="scope-title">{scopePrompt.verb} a repeating event</strong>
       <p class="muted">
         {scopePrompt.allowThis
           ? 'Apply the change to this occurrence only, or to every event in the series?'
