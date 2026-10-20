@@ -45,8 +45,15 @@ impl Store {
         })
     }
 
+    /// Saving a task as Done when it was not done behaves like ticking it:
+    /// a recurring task advances to its next occurrence instead.
     pub fn update_task(&self, id: i64, t: &TaskInput) -> Result<()> {
         self.in_tx(|tx| {
+        let was: Option<String> = tx
+            .query_row("SELECT status FROM tasks WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?;
+        let newly_done = t.status == TaskStatus::Done
+            && was.as_deref().map(TaskStatus::from_sql) != Some(TaskStatus::Done);
         let n = tx.execute(
             "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7,
                status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9
@@ -61,6 +68,9 @@ impl Store {
         }
         crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
+        if newly_done && t.rrule.is_some() && t.due.is_some() {
+            self.set_task_completed(id, true, Utc::now())?;
+        }
         Ok(())
         })
     }

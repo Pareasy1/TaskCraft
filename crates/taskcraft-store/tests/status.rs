@@ -104,3 +104,33 @@ fn insert_with_done_status_sets_completed_at() {
     .unwrap();
     assert_eq!(s.get_task(id).unwrap().completed_at, None);
 }
+
+#[test]
+fn update_to_done_advances_recurring_task() {
+    let s = Store::open_in_memory().unwrap();
+    let base = TaskInput {
+        due: Some(utc("2026-10-20T07:00:00Z")),
+        due_has_time: true,
+        rrule: Some("FREQ=WEEKLY;INTERVAL=1".into()),
+        ..input("standup notes")
+    };
+    let id = s.insert_task(&base).unwrap();
+    s.update_task(
+        id,
+        &TaskInput {
+            status: TaskStatus::Done,
+            notes: Some("x".into()),
+            ..base.clone()
+        },
+    )
+    .unwrap();
+    let t = s.get_task(id).unwrap();
+    assert_eq!(
+        t.due,
+        Some(utc("2026-10-27T08:00:00Z")),
+        "series continues like the checkbox"
+    );
+    assert_eq!(t.status, TaskStatus::Todo);
+    assert_eq!(t.completed_at, None);
+    assert_eq!(t.notes.as_deref(), Some("x"), "other edits are kept");
+}
