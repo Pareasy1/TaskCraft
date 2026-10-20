@@ -7,7 +7,7 @@
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { addDays, monthGrid, startOfDay, weekDays } from '../lib/layout';
-  import { fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
+  import { fmtLongDate, fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
   import Toolbar from './Toolbar.svelte';
   import Sidebar from './Sidebar.svelte';
   import DayWeekGrid from './DayWeekGrid.svelte';
@@ -50,7 +50,7 @@
   let title = $derived.by(() => {
     if (view === 'tasks') return t('toolbar.tasks');
     if (view === 'month') return monthTitle(anchor);
-    if (view === 'day') return anchor.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (view === 'day') return fmtLongDate(anchor);
     const a = days[0], b = days[6];
     return a.getMonth() === b.getMonth() ? monthTitle(a) : `${fmtShortDate(a)} – ${fmtShortDate(b)} ${b.getFullYear()}`;
   });

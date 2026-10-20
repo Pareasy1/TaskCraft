@@ -417,7 +417,9 @@ export function format(s: string, vars: Record<string, string | number> = {}): s
   return s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 }
 
-const preferred = typeof navigator === 'undefined' ? [] : navigator.languages ?? [navigator.language];
+// In development, `?lang=it` previews another language in a normal browser.
+const devLang = import.meta.env?.DEV && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('lang') : null;
+const preferred = devLang ? [devLang] : typeof navigator === 'undefined' ? [] : navigator.languages ?? [navigator.language];
 export const lang: Lang = pickLang(preferred);
 
 /**

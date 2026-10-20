@@ -3,7 +3,7 @@
   import { onMount, tick } from 'svelte';
   import type { Occurrence } from '../lib/types';
   import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
-  import { fmtTime } from '../lib/format';
+  import { fmtHour, fmtTime, fmtWeekdayShort } from '../lib/format';
 
   const HOUR = 48; // px per hour
   const PX_MIN = HOUR / 60;
@@ -119,7 +119,7 @@
   });
 
   const hours = Array.from({ length: 24 }, (_, h) => h);
-  const hourLabel = (h: number) => (h === 0 ? '' : fmtTime(new Date(2026, 0, 1, h)));
+  const hourLabel = (h: number) => (h === 0 ? '' : fmtHour(h));
   const today = new Date();
 </script>
 
@@ -128,7 +128,7 @@
     <div class="gutter"></div>
     {#each days as d}
       <div class="head" class:today={sameDay(d, today)}>
-        <span class="wd">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+        <span class="wd">{fmtWeekdayShort(d)}</span>
         <span class="num">{d.getDate()}</span>
       </div>
     {/each}

@@ -11,10 +11,19 @@ export const fmtDayHeading = (d: Date, today = new Date()) => {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diff = Math.round((x.getTime() - t.getTime()) / 86_400_000);
   const base = d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-  if (Math.abs(diff) > 1) return base;
+  // Headings are sentence case even where day names are lowercase (Italian).
+  if (Math.abs(diff) > 1) return `${base.charAt(0).toUpperCase()}${base.slice(1)}`;
   const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(diff, 'day');
   return `${rel.charAt(0).toUpperCase()}${rel.slice(1)} · ${base}`;
 };
+
+export const fmtWeekdayShort = (d: Date) => d.toLocaleDateString(locale, { weekday: 'short' });
+
+export const fmtLongDate = (d: Date) =>
+  d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+/** Compact hour label for the time gutter ("9 AM", "09"). */
+export const fmtHour = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(locale, { hour: 'numeric' });
 
 export const fmtShortDate = (d: Date) =>
   d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });

@@ -2,7 +2,7 @@
   import { t } from '../lib/i18n';
   import type { Occurrence } from '../lib/types';
   import { addDays, monthBars, monthGrid, sameDay } from '../lib/layout';
-  import { fmtTime } from '../lib/format';
+  import { fmtTime, fmtWeekdayShort } from '../lib/format';
 
   let {
     month,
@@ -32,7 +32,7 @@
   const hiddenBarsAt = (i: number) =>
     bars.filter((b) => b.lane >= LANES && b.row === Math.floor(i / 7) && b.col <= i % 7 && i % 7 < b.col + b.span).length;
   const names = $derived(
-    Array.from({ length: 7 }, (_, i) => days[i].toLocaleDateString(undefined, { weekday: 'short' })),
+    Array.from({ length: 7 }, (_, i) => fmtWeekdayShort(days[i])),
   );
 </script>
 
