@@ -159,7 +159,7 @@
   .num { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .head.today .num {
     background: var(--today);
-    color: white;
+    color: var(--on-today);
     border-radius: 13px;
     min-width: 26px;
     text-align: center;

@@ -66,7 +66,7 @@
   .day:hover { background: var(--hover); }
   .other { color: var(--faint); }
   .today { color: var(--today); font-weight: 700; }
-  .sel { background: var(--accent) !important; color: white; }
+  .sel { background: var(--accent) !important; color: var(--on-accent); }
   .mark {
     position: absolute;
     bottom: 2px;

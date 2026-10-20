@@ -72,7 +72,7 @@
     min-width: 22px;
     padding: 1px 5px;
   }
-  .num.today { background: var(--today); color: white; font-weight: 700; }
+  .num.today { background: var(--today); color: var(--on-today); font-weight: 700; }
   .item {
     display: flex;
     align-items: center;
