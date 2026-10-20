@@ -82,7 +82,7 @@ pub struct Event {
     pub input: EventInput,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskInput {
     pub calendar_id: i64,
@@ -93,6 +93,11 @@ pub struct TaskInput {
     pub rrule: Option<String>,
     pub notes: Option<String>,
     pub alerts: Vec<AlertSpecUtc>,
+    #[serde(default)]
+    pub status: TaskStatus,
+    /// Label names; missing labels are created on save.
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 /// Task workflow state. `Done` ⇔ `completed_at` is set.

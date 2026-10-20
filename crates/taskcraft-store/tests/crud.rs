@@ -115,6 +115,7 @@ fn task_complete_toggle() {
             rrule: None,
             notes: None,
             alerts: vec![],
+            ..Default::default()
         })
         .unwrap();
     let now = utc("2026-10-20T08:00:00Z");

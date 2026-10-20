@@ -192,6 +192,7 @@ fn completing_recurring_task_advances_due() {
             rrule: Some("FREQ=WEEKLY;INTERVAL=1".into()),
             notes: None,
             alerts: vec![],
+            ..Default::default()
         })
         .unwrap();
     s.set_task_completed(id, true, utc("2026-10-20T19:00:00Z"))
@@ -233,6 +234,7 @@ fn task_input(s: &Store, id: i64) -> TaskInput {
         rrule: t.rrule,
         notes: t.notes,
         alerts: t.alerts,
+        ..Default::default()
     }
 }
 

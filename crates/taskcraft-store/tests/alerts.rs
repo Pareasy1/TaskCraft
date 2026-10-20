@@ -141,6 +141,7 @@ fn task(s: &Store, title: &str, due: &str, has_time: bool) -> i64 {
         rrule: None,
         notes: None,
         alerts: vec![],
+        ..Default::default()
     })
     .unwrap()
 }

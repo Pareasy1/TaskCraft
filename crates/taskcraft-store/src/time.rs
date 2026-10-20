@@ -62,6 +62,7 @@ pub fn from_parsed(
             rrule,
             notes: None,
             alerts,
+            ..Default::default()
         }),
         ItemKind::Event => {
             let start_w = p.start.unwrap_or(When {
