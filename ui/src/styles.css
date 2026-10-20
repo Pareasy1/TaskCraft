@@ -81,7 +81,8 @@ body {
   -webkit-user-select: none;
   cursor: default;
 }
-html[data-window="quick"] body { background: transparent; }
+/* macOS draws the popover's translucent material; elsewhere the page paints it. */
+html[data-window="quick"][data-platform="mac"] body { background: transparent; }
 #app { height: 100%; }
 input, textarea, select, button { font: inherit; color: inherit; }
 input, textarea { user-select: text; -webkit-user-select: text; }

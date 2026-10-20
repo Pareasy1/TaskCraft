@@ -5,6 +5,7 @@ use crate::windows;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+#[cfg(target_os = "macos")]
 use tauri::window::{Effect, EffectState, EffectsBuilder};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -16,24 +17,26 @@ fn quick_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = app.get_webview_window(QUICK) {
         return Ok(w);
     }
-    let w = WebviewWindowBuilder::new(app, QUICK, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(app, QUICK, WebviewUrl::App("index.html".into()))
         .title("TaskCraft")
         .inner_size(360.0, 520.0)
         .resizable(false)
         .decorations(false)
-        .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(false)
-        .shadow(true)
-        .effects(
-            EffectsBuilder::new()
-                .effect(Effect::Popover)
-                .state(EffectState::Active)
-                .radius(12.0)
-                .build(),
-        )
-        .build()?;
+        .shadow(true);
+    // macOS draws the popover with the system's translucent material; other
+    // systems get an opaque window (the UI paints its own background there).
+    #[cfg(target_os = "macos")]
+    let builder = builder.transparent(true).effects(
+        EffectsBuilder::new()
+            .effect(Effect::Popover)
+            .state(EffectState::Active)
+            .radius(12.0)
+            .build(),
+    );
+    let w = builder.build()?;
     let handle = w.clone();
     w.on_window_event(move |e| {
         if let WindowEvent::Focused(false) = e {
@@ -43,6 +46,18 @@ fn quick_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     Ok(w)
 }
 
+/// Where the popover appears: under the menu-bar icon on macOS, by the clock
+/// on Windows, centred on Linux (its tray icons don't report a position).
+fn popover_position() -> Position {
+    if cfg!(target_os = "macos") {
+        Position::TrayBottomCenter
+    } else if cfg!(target_os = "windows") {
+        Position::BottomRight
+    } else {
+        Position::Center
+    }
+}
+
 /// Shows the popover under the menu-bar icon, or hides it if visible.
 pub fn toggle_quick(app: &AppHandle) {
     let Ok(w) = quick_window(app) else { return };
@@ -50,21 +65,21 @@ pub fn toggle_quick(app: &AppHandle) {
         let _ = w.hide();
         return;
     }
-    if w.move_window(Position::TrayBottomCenter).is_err() {
-        let _ = w.move_window(Position::TopRight);
-    }
+    let _ = w.move_window(popover_position());
     let _ = w.show();
     let _ = w.set_focus();
 }
 
 fn build_menu(app: &AppHandle, lang: Lang) -> tauri::Result<Menu<tauri::Wry>> {
     let text = crate::i18n::text(lang);
+    let quick = MenuItem::with_id(app, "quick", text.quick_entry, true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", text.open, true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", text.settings, true, Some("CmdOrCtrl+,"))?;
     let quit = MenuItem::with_id(app, "quit", text.quit, true, Some("CmdOrCtrl+Q"))?;
     Menu::with_items(
         app,
         &[
+            &quick,
             &open,
             &settings,
             &PredefinedMenuItem::separator(app)?,
@@ -92,6 +107,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id().as_ref() {
+            "quick" => toggle_quick(app),
             "open" => {
                 let _ = windows::show_main(app);
             }

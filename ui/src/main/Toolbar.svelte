@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modLabel } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-svelte';
 
@@ -27,7 +28,7 @@
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
   <div class="right" data-tauri-drag-region>
-    <button class="icon-btn" title={view === 'tasks' ? t('toolbar.newTaskKey') : t('toolbar.newEventKey')} aria-label={view === 'tasks' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
+    <button class="icon-btn" title={view === 'tasks' ? t('toolbar.newTaskKey', { key: modLabel('N') }) : t('toolbar.newEventKey', { key: modLabel('N') })} aria-label={view === 'tasks' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
     {#if view !== 'tasks'}
       <div class="nav">
         <button class="icon-btn" aria-label={t('common.previous')} onclick={onprev}><ChevronLeft size={17} /></button>
@@ -36,7 +37,7 @@
       </div>
     {/if}
     <div class="seg" role="group" aria-label={t('toolbar.views')}>
-      {#each [['day', t('toolbar.day'), '⌘1'], ['week', t('toolbar.week'), '⌘2'], ['month', t('toolbar.month'), '⌘3'], ['tasks', t('toolbar.tasks'), '⌘4']] as [v, label, key]}
+      {#each [['day', t('toolbar.day'), modLabel('1')], ['week', t('toolbar.week'), modLabel('2')], ['month', t('toolbar.month'), modLabel('3')], ['tasks', t('toolbar.tasks'), modLabel('4')]] as [v, label, key]}
         <button aria-pressed={view === v} class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
       {/each}
     </div>

@@ -1,0 +1,81 @@
+# Builds the installers on each system and attaches them to a GitHub Release
+# when a version tag is pushed (git tag v0.2.0 && git push origin v0.2.0).
+#   macOS:   TaskCraft_<version>_universal.dmg  (Apple Silicon + Intel)
+#   Windows: TaskCraft_<version>_x64-setup.exe  (per-user, no admin needed)
+#   Linux:   TaskCraft_<version>_amd64.deb and .AppImage
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg
+          - name: Windows
+            os: windows-latest
+            rust-targets: ''
+            args: --bundles nsis
+          - name: Linux
+            os: ubuntu-22.04
+            rust-targets: ''
+            args: --bundles deb,appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Tauri CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli@2
+
+      - name: Build and upload installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: cargo tauri
+          projectPath: src-tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: TaskCraft ${{ github.ref_name }}
+          releaseBody: |
+            **Download the installer for your computer** from the list below:
+            - **Mac:** the file ending in `universal.dmg`
+            - **Windows:** the file ending in `setup.exe`
+            - **Linux (Ubuntu and similar):** the file ending in `.deb` (or `.AppImage`)
+
+            Step-by-step help, including the one-time security prompt: [install guide](https://github.com/Pareasy1/TaskCraft/blob/main/docs/INSTALL.md).
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

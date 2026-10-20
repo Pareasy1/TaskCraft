@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isMod, modLabel } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -104,7 +105,7 @@
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
-      submit(e.metaKey);
+      submit(isMod(e));
     } else if (e.key === 'Escape') {
       e.preventDefault();
       if (text) text = '';
@@ -154,7 +155,7 @@
   />
   {#if parsed}
     <PreviewCard item={parsed} calendarColor={previewColor} />
-    <div class="hint">{t('quick.hint')}</div>
+    <div class="hint">{t('quick.hint', { mod: modLabel('') })}</div>
   {/if}
   <div role="status" aria-live="polite">{#if flash}<div class="flash">{flash}</div>{/if}</div>
   {#if error}<div class="banner" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}

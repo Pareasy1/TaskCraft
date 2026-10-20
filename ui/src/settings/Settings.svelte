@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hotkeyLabel, isMac } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -40,9 +41,7 @@
   }
 
   // ---- hotkey recorder ----
-  const SYMBOL: Record<string, string> = { Control: '⌃', Alt: '⌥', Shift: '⇧', Super: '⌘' };
-  const pretty = (hk: string) =>
-    hk.split('+').map((p) => SYMBOL[p] ?? (p.startsWith('Key') ? p.slice(3) : p.startsWith('Digit') ? p.slice(5) : p)).join('');
+  const pretty = (hk: string) => hotkeyLabel(hk);
 
   // Keys go to the shortcut button while it records, so Esc cancels the
   // recording instead of closing the Settings dialog around it.
@@ -53,7 +52,7 @@
     if (e.key === 'Escape') return void (recording = false);
     if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return;
     const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
-    if (!mods.length) return void (error = t('settings.needModifier'));
+    if (!mods.length) return void (error = t('settings.needModifier', { keys: isMac ? '⌘ ⌥ ⌃ ⇧' : 'Ctrl, Alt, Shift, Win' }));
     const key = e.code.startsWith('Key') ? e.code.slice(3) : e.code.startsWith('Digit') ? e.code.slice(5) : e.code;
     recording = false;
     update({ hotkey: [...mods, key].join('+') });

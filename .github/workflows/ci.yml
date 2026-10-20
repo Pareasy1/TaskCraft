@@ -1,0 +1,53 @@
+# Tests and builds TaskCraft on macOS, Windows and Linux for every pull request
+# and every push to main, so a change that breaks one system shows up here.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  # The test suites use the developer's time zone for local-date assertions.
+  TZ: Europe/Rome
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-and-build:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: UI install, type-check, tests, build
+        working-directory: ui
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: App build (no installer)
+        run: cargo build -p taskcraft-app --release

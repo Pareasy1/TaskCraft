@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isMod } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onMount, tick } from 'svelte';
   import { X } from 'lucide-svelte';
@@ -239,7 +240,7 @@
 
   function keys(e: KeyboardEvent) {
     if (e.key === 'Escape' && !target && !settingsOpen && !scopePrompt) return clearSelection();
-    if (!e.metaKey) return;
+    if (!isMod(e)) return;
     const tag = (e.target as HTMLElement)?.tagName;
     const views: Record<string, View> = { '1': 'day', '2': 'week', '3': 'month', '4': 'tasks' };
     if (views[e.key]) {
@@ -363,7 +364,7 @@
   .app { display: flex; height: 100%; }
   .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .body { flex: 1; min-height: 0; }
-  /* Focus lands here from ⌘1–4; the region itself needs no ring. */
+  /* Focus lands here from ⌘1–4 (Ctrl+1–4); the region itself needs no ring. */
   .body:focus { outline: none; }
   .err { margin: 8px 12px 0; }
   .results { padding: 10px 16px; overflow-y: auto; height: 100%; }
