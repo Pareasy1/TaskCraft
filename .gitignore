@@ -4,3 +4,4 @@ ui/dist/
 .superpowers/
 .DS_Store
 src-tauri/gen/
+/dist/
