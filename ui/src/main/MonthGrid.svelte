@@ -4,6 +4,7 @@
   import { tasksForDay } from '../lib/calendarTasks';
   import { STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
+  import { activate, isSelected, select } from '../lib/selection.svelte';
   import { addDays, monthBars, monthGrid, sameDay } from '../lib/layout';
   import { fmtTime, fmtWeekdayShort } from '../lib/format';
 
@@ -64,16 +65,19 @@
         <button class="num" class:today={sameDay(d, today)} onclick={() => onday(d)}>{d.getDate()}</button>
         <div class="items" style="margin-top:{rowLanes[Math.floor(i / 7)] * 20}px">
           {#each items.slice(0, room) as o (o.eventId + o.start)}
-            <button class="item" style="--c:{o.color}" onclick={() => onselect(o)}>
+            <button class="item" class:is-selected={isSelected('event', o.eventId, o.start)} style="--c:{o.color}"
+              onclick={(e) => activate(e, () => onselect(o), () => select({ kind: 'event', id: o.eventId, occurrence: o.start }))}
+              ondblclick={() => onselect(o)}>
               <span class="dot" style="background:{o.color}"></span>
               <span class="t">{o.title}</span>
               <span class="time">{fmtTime(new Date(o.start))}</span>
             </button>
           {/each}
           {#each dayTasks.slice(0, taskRoom) as x (x.task.id)}
-            <div class="titem" class:done={x.task.status === 'done'} class:overdue={x.overdue}>
+            <div class="titem" class:is-selected={isSelected('task', x.task.id)} class:done={x.task.status === 'done'} class:overdue={x.overdue}>
               <StatusGlyph status={x.task.status} size={12} onchange={(st) => ontaskstatus(x.task, st)} />
-              <button class="t" onclick={() => ontaskopen(x.task)}
+              <button class="t" onclick={(e) => activate(e, () => ontaskopen(x.task), () => select({ kind: 'task', id: x.task.id }))}
+                ondblclick={() => ontaskopen(x.task)}
                 aria-label="{x.task.title}, {STATUS_LABEL[x.task.status]}">{x.task.title}</button>
               {#if x.task.dueHasTime}<span class="time">{fmtTime(new Date(x.task.due!))}</span>{/if}
             </div>
@@ -85,7 +89,9 @@
     {#each bars.filter((b) => b.lane < LANES) as b (b.item.eventId + b.item.start + b.row)}
       <button class="bar" class:from-prev={b.fromPrev} class:to-next={b.toNext}
         style="--c:{b.item.color}; grid-row:{b.row + 1}; grid-column:{b.col + 1} / span {b.span}; margin-top:{26 + b.lane * 20}px"
-        onclick={() => onselect(b.item)}>
+        class:is-selected={isSelected('event', b.item.eventId, b.item.start)}
+        onclick={(e) => activate(e, () => onselect(b.item), () => select({ kind: 'event', id: b.item.eventId, occurrence: b.item.start }))}
+        ondblclick={() => onselect(b.item)}>
         <span class="t">{b.item.title}</span>
         {#if !b.item.allDay && !b.fromPrev}<span class="time">{fmtTime(new Date(b.item.start))}</span>{/if}
       </button>

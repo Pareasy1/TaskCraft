@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { activate, isSelected, select } from '../../lib/selection.svelte';
   import { t } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
   import type { Task, TaskStatus } from '../../lib/types';
@@ -25,9 +26,10 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
-<div class="row" class:done={task.status === 'done'} onclick={onopen}>
+<div class="row" class:done={task.status === 'done'} class:is-selected={isSelected('task', task.id)}
+  onclick={() => select({ kind: 'task', id: task.id })} ondblclick={onopen}>
   <StatusGlyph status={task.status} onchange={onstatus} />
-  <button class="open-btn title" onclick={(e) => { e.stopPropagation(); onopen(); }}>{task.title}</button>
+  <button class="open-btn title" onclick={(e) => { e.stopPropagation(); activate(e, onopen, () => select({ kind: 'task', id: task.id })); }}>{task.title}</button>
   {#if task.labels.length}
     <span class="labels">
       {#each task.labels as l (l.id)}
