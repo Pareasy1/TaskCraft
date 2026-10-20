@@ -167,3 +167,30 @@ export function monthBars<T extends { start: string; end: string; allDay: boolea
   }
   return bars;
 }
+
+/**
+ * Keyboard movement inside a calendar grid (WAI-ARIA grid pattern):
+ * arrows move a day or a week, Home/End go to the week's first/last day,
+ * PageUp/PageDown change month (clamped to its length). Null for other keys.
+ */
+export function gridKeyMove(d: Date, key: string, weekStart: 0 | 1): Date | null {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const day = d.getDate();
+  const offset = (d.getDay() - weekStart + 7) % 7;
+  const monthShift = (n: number) => {
+    const last = new Date(y, m + n + 1, 0).getDate();
+    return new Date(y, m + n, Math.min(day, last));
+  };
+  switch (key) {
+    case 'ArrowLeft': return new Date(y, m, day - 1);
+    case 'ArrowRight': return new Date(y, m, day + 1);
+    case 'ArrowUp': return new Date(y, m, day - 7);
+    case 'ArrowDown': return new Date(y, m, day + 7);
+    case 'Home': return new Date(y, m, day - offset);
+    case 'End': return new Date(y, m, day - offset + 6);
+    case 'PageUp': return monthShift(-1);
+    case 'PageDown': return monthShift(1);
+    default: return null;
+  }
+}

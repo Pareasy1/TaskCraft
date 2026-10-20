@@ -35,9 +35,9 @@
         <button class="icon-btn" aria-label={t('common.next')} onclick={onnext}><ChevronRight size={17} /></button>
       </div>
     {/if}
-    <div class="seg" role="tablist">
+    <div class="seg" role="group" aria-label={t('toolbar.views')}>
       {#each [['day', t('toolbar.day'), '⌘1'], ['week', t('toolbar.week'), '⌘2'], ['month', t('toolbar.month'), '⌘3'], ['tasks', t('toolbar.tasks'), '⌘4']] as [v, label, key]}
-        <button role="tab" class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
+        <button aria-pressed={view === v} class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
       {/each}
     </div>
     <label class="search">

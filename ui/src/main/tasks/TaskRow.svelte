@@ -24,9 +24,10 @@
   } = $props();
 </script>
 
-<div class="row" class:done={task.status === 'done'} role="button" tabindex="0" onclick={onopen} onkeydown={(e) => e.key === 'Enter' && onopen()}>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
+<div class="row" class:done={task.status === 'done'} onclick={onopen}>
   <StatusGlyph status={task.status} onchange={onstatus} />
-  <span class="title">{task.title}</span>
+  <button class="open-btn title" onclick={(e) => { e.stopPropagation(); onopen(); }}>{task.title}</button>
   {#if task.labels.length}
     <span class="labels">
       {#each task.labels as l (l.id)}
@@ -50,7 +51,6 @@
     min-height: 36px;
   }
   .row:hover { background: var(--hover); }
-  .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
   .done .title { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--faint); }
   .labels { display: flex; gap: 6px; flex: none; max-width: 40%; overflow: hidden; }

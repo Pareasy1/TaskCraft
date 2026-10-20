@@ -25,10 +25,10 @@
     </button>
     {#if open[s.key] ?? true}
       {#each s.tasks as t (t.id)}
-        <div class="task" class:done={t.status === 'done'} role="button" tabindex="0"
-          onclick={() => onopen(t)} onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onopen(t)}>
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
+        <div class="task" class:done={t.status === 'done'} onclick={() => onopen(t)}>
           <StatusGlyph status={t.status} size={15} onchange={(st) => onstatus(t, st)} />
-          <div class="body">
+          <button class="open-btn body" onclick={(e) => { e.stopPropagation(); onopen(t); }}>
             <span class="name">{t.title}</span>
             {#if t.due || t.labels.length}
               <span class="meta">
@@ -36,7 +36,7 @@
                 {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
               </span>
             {/if}
-          </div>
+          </button>
         </div>
       {/each}
     {/if}

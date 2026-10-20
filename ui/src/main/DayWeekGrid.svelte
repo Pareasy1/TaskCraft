@@ -166,6 +166,8 @@
     const due = new Date(d.task.due!);
     ontaskmove(d.task, addDays(new Date(due.getTime() + d.dMin * 60_000), d.dDay).toISOString());
   }
+  /** The system interrupted the gesture (app switch, trackpad gesture): drop the preview, move nothing. */
+  const cancelTask = () => (tdrag = null);
   const dragging = (task: Task) => (tdrag && tdrag.moved && tdrag.task.id === task.id ? tdrag : null);
 
   // ---- tasks: Enter opens, Space changes status, arrows move (see movedDue) ----
@@ -244,24 +246,24 @@
         {/each}
         {#each dayTasks[i].allDay as x (x.task.id)}
           {@const dr = dragging(x.task)}
+          <!-- svelte-ignore a11y_no_static_element_interactions (drag surface; the open button is the keyboard path) -->
           <div
             class="tchip"
             class:done={x.task.status === 'done'}
             class:overdue={x.overdue}
             class:dragging={!!dr}
             style="--c:{x.task.color}; transform:translateX({dr ? dr.dDay * dr.colW : 0}px)"
-            role="button"
-            tabindex="0"
-            data-task={x.task.id}
-            aria-label={taskAria(x)}
             onpointerdown={(e) => beginTask(e, x.task, false)}
             onpointermove={moveTask}
             onpointerup={endTask}
-            onkeydown={(e) => taskKey(e, x.task)}
+            onpointercancel={cancelTask}
           >
             <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
-            <span class="tt">{x.task.title}</span>
-            {#if !sameDay(new Date(x.task.due!), days[i])}<span class="when">{fmtShortDate(new Date(x.task.due!))}</span>{/if}
+            <button class="open-btn opener" data-task={x.task.id} aria-label={taskAria(x)}
+              onclick={(e) => e.detail === 0 && ontaskopen(x.task)} onkeydown={(e) => taskKey(e, x.task)}>
+              <span class="tt">{x.task.title}</span>
+              {#if !sameDay(new Date(x.task.due!), days[i])}<span class="when">{fmtShortDate(new Date(x.task.due!))}</span>{/if}
+            </button>
           </div>
         {/each}
       </div>
@@ -272,7 +274,7 @@
       <div class="hours">
         {#each hours as h}<div class="hour"><span>{hourLabel(h)}</span></div>{/each}
       </div>
-      <div class="cols" role="grid" tabindex="-1" bind:this={colsEl} onpointermove={moveDrag} onpointerup={endDrag}>
+      <div class="cols" role="grid" tabindex="-1" bind:this={colsEl} onpointermove={moveDrag} onpointerup={endDrag} onpointercancel={() => (drag = null)}>
         {#each days as d, i}
           <div class="col" role="gridcell" tabindex="-1" ondblclick={(e) => dblclick(e, d)}>
             {#each hours as _}<div class="slot"></div>{/each}
@@ -284,6 +286,7 @@
                 {@const x = item.x}
                 {@const p = item.p}
                 {@const dr = dragging(x.task)}
+                <!-- svelte-ignore a11y_no_static_element_interactions (drag surface; the open button is the keyboard path) -->
                 <div
                   class="task"
                   class:done={x.task.status === 'done'}
@@ -291,18 +294,17 @@
                   class:dragging={!!dr}
                   style="--c:{x.task.color}; top:{(p.top + (dr?.dMin ?? 0)) * PX_MIN}px; height:{TASK_SLOT_MIN * PX_MIN - 2}px;
                          left:calc({(p.col / p.cols) * 100}% + {(dr?.dDay ?? 0) * 100}%); width:calc({100 / p.cols}% - 3px)"
-                  role="button"
-                  tabindex="0"
-                  data-task={x.task.id}
-                  aria-label={taskAria(x)}
                   onpointerdown={(e) => beginTask(e, x.task, true)}
                   onpointermove={moveTask}
                   onpointerup={endTask}
-                  onkeydown={(e) => taskKey(e, x.task)}
+                  onpointercancel={cancelTask}
                 >
                   <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
-                  <span class="tt">{x.task.title}</span>
-                  <span class="time">{fmtTime(new Date(x.task.due!))}</span>
+                  <button class="open-btn opener" data-task={x.task.id} aria-label={taskAria(x)}
+                    onclick={(e) => e.detail === 0 && ontaskopen(x.task)} onkeydown={(e) => taskKey(e, x.task)}>
+                    <span class="tt">{x.task.title}</span>
+                    <span class="time">{fmtTime(new Date(x.task.due!))}</span>
+                  </button>
                 </div>
               {:else}
               {@const o = item.o}
@@ -434,7 +436,9 @@
   .task { position: absolute; margin-left: 1px; padding: 0 6px 0 3px; z-index: 2; }
   .tchip { padding: 1px 6px 1px 3px; }
   .task:hover, .tchip:hover { background: color-mix(in srgb, var(--c) 8%, var(--bg)); }
-  .task:focus-visible, .tchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
+  .task:has(:focus-visible), .tchip:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
+  .task .opener, .tchip .opener { flex: 1; display: flex; align-items: center; gap: 5px; height: 100%; }
+  .opener:focus-visible { outline: none; }
   .task.dragging, .tchip.dragging { box-shadow: var(--shadow); z-index: 4; position: relative; }
   .task.dragging { position: absolute; }
   .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

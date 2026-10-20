@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n';
   import { Trash2 } from 'lucide-svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { TaskLabel } from '../../lib/types';
   import { api, errorMessage } from '../../lib/api';
 
@@ -8,6 +9,14 @@
 
   const PALETTE = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ef4444', '#eab308', '#06b6d4', '#ec4899'];
   let picking = $state<number | null>(null);
+
+  // Focus moves into the popover when it opens and back to its button when it closes.
+  const opener = document.activeElement as HTMLElement | null;
+  let popEl = $state<HTMLDivElement | undefined>();
+  onMount(() => popEl?.querySelector<HTMLElement>('input, button')?.focus());
+  onDestroy(() => {
+    if (opener?.isConnected) opener.focus();
+  });
 
   async function save(l: TaskLabel, name: string, color: string) {
     if (name.trim() === l.name && color === l.color) return;
@@ -29,7 +38,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
-<div class="pop" role="dialog" aria-label={t('labels.title')}>
+<div class="pop" role="dialog" aria-label={t('labels.title')} bind:this={popEl}>
   <p class="intro">{t('labels.intro')}</p>
   {#each labels as l (l.id)}
     <div class="item">

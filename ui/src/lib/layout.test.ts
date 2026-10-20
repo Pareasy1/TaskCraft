@@ -187,3 +187,26 @@ describe('monthBars', () => {
   it('events outside the grid produce nothing', () =>
     expect(monthBars([ev('Old', iso(7, 1), iso(7, 3))], grid)).toEqual([]));
 });
+
+import { gridKeyMove } from './layout';
+
+describe('gridKeyMove (calendar grid keyboard)', () => {
+  const d = new Date(2026, 9, 21); // Wed 21 Oct
+  const ymd = (x: Date | null) => (x ? `${x.getMonth() + 1}-${x.getDate()}` : null);
+  it('arrows move a day or a week', () => {
+    expect(ymd(gridKeyMove(d, 'ArrowLeft', 1))).toBe('10-20');
+    expect(ymd(gridKeyMove(d, 'ArrowRight', 1))).toBe('10-22');
+    expect(ymd(gridKeyMove(d, 'ArrowUp', 1))).toBe('10-14');
+    expect(ymd(gridKeyMove(d, 'ArrowDown', 1))).toBe('10-28');
+  });
+  it('Home/End go to the start/end of the week, honouring the week start', () => {
+    expect(ymd(gridKeyMove(d, 'Home', 1))).toBe('10-19');
+    expect(ymd(gridKeyMove(d, 'End', 1))).toBe('10-25');
+    expect(ymd(gridKeyMove(d, 'Home', 0))).toBe('10-18');
+  });
+  it('PageUp/PageDown change month, clamping to its length', () => {
+    expect(ymd(gridKeyMove(new Date(2026, 0, 31), 'PageDown', 1))).toBe('2-28');
+    expect(ymd(gridKeyMove(d, 'PageUp', 1))).toBe('9-21');
+  });
+  it('other keys do nothing', () => expect(gridKeyMove(d, 'a', 1)).toBeNull());
+});

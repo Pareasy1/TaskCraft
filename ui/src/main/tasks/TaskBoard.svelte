@@ -3,6 +3,7 @@
   import { t as tr } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
   import { flip } from 'svelte/animate';
+  import { tick } from 'svelte';
   import type { Task, TaskStatus } from '../../lib/types';
   import { boardColumns, isOverdue, STATUSES, STATUS_LABEL } from '../../lib/tasks';
   import { fmtShortDate, fmtTime } from '../../lib/format';
@@ -42,14 +43,28 @@
     if (t && t.status !== status) onstatus(t, status);
   }
 
+  let refocus: number | null = null;
   function keys(e: KeyboardEvent, t: Task) {
     const i = STATUSES.indexOf(t.status);
     if (e.key === 'ArrowRight' && i < STATUSES.length - 1) onstatus(t, STATUSES[i + 1]);
     else if (e.key === 'ArrowLeft' && i > 0) onstatus(t, STATUSES[i - 1]);
-    else if (e.key === 'Enter') onopen(t);
     else return;
     e.preventDefault();
+    refocus = t.id;
   }
+  // The card is re-created in its new column; keep keyboard focus on it.
+  $effect(() => {
+    void columns;
+    if (refocus == null) return;
+    const id = refocus;
+    tick().then(() => {
+      const el = document.querySelector<HTMLElement>(`[data-card="${id}"]`);
+      if (el && el !== document.activeElement) {
+        el.focus();
+        refocus = null;
+      }
+    });
+  });
 </script>
 
 <div class="board">
@@ -64,27 +79,26 @@
     >
       <header>
         <StatusGlyph status={col.status} size={15} />
-        <h3>{STATUS_LABEL[col.status]}</h3>
+        <h2>{STATUS_LABEL[col.status]}</h2>
         <span class="n">{col.tasks.length + col.hidden}</span>
       </header>
       <div class="cards">
         {#each col.tasks as t (t.id)}
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the card's open button is the keyboard path) -->
           <div
             class="card"
             class:dragging={dragging === t.id}
-            role="button"
-            tabindex="0"
             draggable="true"
-            aria-label={tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] })}
             animate:flip={{ duration: reduce ? 0 : 180 }}
             ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
             ondragend={() => { dragging = null; over = null; }}
             onclick={() => onopen(t)}
-            onkeydown={(e) => keys(e, t)}
           >
             <div class="top">
               <StatusGlyph status={t.status} size={16} onchange={(s) => onstatus(t, s)} />
-              <span class="title">{t.title}</span>
+              <button class="open-btn title" data-card={t.id}
+                aria-label={tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] })}
+                onclick={(e) => { e.stopPropagation(); onopen(t); }} onkeydown={(e) => keys(e, t)}>{t.title}</button>
             </div>
             {#if t.labels.length || t.due || t.recurring}
               <div class="meta">
@@ -124,7 +138,7 @@
   }
   .col.over { box-shadow: inset 0 0 0 2px var(--accent); }
   header { display: flex; align-items: center; gap: 7px; padding: 11px 12px 6px; }
-  h3 { margin: 0; font-size: 13px; font-weight: 600; }
+  h2 { margin: 0; font-size: 13px; font-weight: 600; }
   .n { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .cards { flex: 1; overflow-y: auto; padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 6px; }
   .card {
@@ -134,7 +148,8 @@
     box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, 0.05);
   }
   .card:hover { box-shadow: 0 0 0 1px var(--border), 0 3px 10px rgba(0, 0, 0, 0.08); }
-  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .card:has(.title:focus-visible) { box-shadow: 0 0 0 2px var(--accent); }
+  .card .title:focus-visible { outline: none; }
   .card.dragging { opacity: 0.45; }
   @media (prefers-reduced-motion: no-preference) {
     .card { transition: box-shadow 0.15s, transform 0.15s, opacity 0.15s; }

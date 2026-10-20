@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
+  import { onDestroy, tick } from 'svelte';
   import { X, Trash2 } from 'lucide-svelte';
   import type { Calendar, EventInput, TaskInput, TaskLabel } from '../lib/types';
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
@@ -33,6 +34,17 @@
   let task = $state<TaskForm | null>(null);
   let error = $state('');
   let confirmDelete = $state(false);
+
+  // Focus moves into the panel when it opens and back to where it came from when it closes.
+  const opener = document.activeElement as HTMLElement | null;
+  let panelEl = $state<HTMLDivElement | undefined>();
+  $effect(() => {
+    void target;
+    tick().then(() => panelEl?.querySelector<HTMLInputElement>('.field.title')?.focus());
+  });
+  onDestroy(() => {
+    if (opener?.isConnected) opener.focus();
+  });
 
   $effect(() => {
     ev = target.kind === 'event' ? eventToForm(target.input) : null;
@@ -158,7 +170,7 @@
 
 <svelte:window onkeydown={keys} />
 
-<div class="panel" role="dialog" aria-label={t('inspector.label')}>
+<div class="panel" role="dialog" aria-label={t('inspector.label')} bind:this={panelEl}>
   <div class="top" data-tauri-drag-region>
     <span class="kind" data-tauri-drag-region>{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
     <button class="icon-btn" aria-label={t('common.close')} onclick={onclose}><X size={16} /></button>

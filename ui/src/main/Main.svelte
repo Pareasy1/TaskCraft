@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { X } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
@@ -118,6 +118,7 @@
   }
 
   let dialogEl = $state<HTMLDivElement | undefined>();
+  let bodyEl = $state<HTMLDivElement | undefined>();
   function askScope(verb: string, allowThis = true): Promise<'this' | 'all' | null> {
     const back = document.activeElement as HTMLElement | null;
     return new Promise((resolve) => (scopePrompt = { verb, allowThis, resolve: (s) => { scopePrompt = null; back?.focus(); resolve(s); } }));
@@ -233,10 +234,12 @@
   function keys(e: KeyboardEvent) {
     if (!e.metaKey) return;
     const tag = (e.target as HTMLElement)?.tagName;
-    if (e.key === '1') view = 'day';
-    else if (e.key === '2') view = 'week';
-    else if (e.key === '3') view = 'month';
-    else if (e.key === '4') view = 'tasks';
+    const views: Record<string, View> = { '1': 'day', '2': 'week', '3': 'month', '4': 'tasks' };
+    if (views[e.key]) {
+      view = views[e.key];
+      // Land keyboard focus in the view so the next Tab reaches its content.
+      tick().then(() => bodyEl?.focus());
+    }
     else if (e.key === 't' && tag !== 'INPUT') goToday();
     else if (e.key === 'n' && view === 'tasks') taskInput?.focus();
     else if (e.key === 'n') {
@@ -274,11 +277,11 @@
     onstatus={setStatus}
     onopentask={(t) => openTask(t.id)}
   />
-  <section class="content">
+  <main class="content">
     <Toolbar bind:view {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
       onnew={() => { if (view === 'tasks') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
     {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
-    <div class="body">
+    <div class="body" tabindex="-1" aria-label={title} bind:this={bodyEl}>
       {#if hits.length || query.trim()}
         <div class="results">
           <div class="rhead">{hits.length === 1 ? t('main.result', { q: query }) : t('main.results', { n: hits.length, q: query })}</div>
@@ -305,7 +308,7 @@
           onmove={move} />
       {/if}
     </div>
-  </section>
+  </main>
   {#if target}
     <Inspector {target} {calendars} {labels} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
   {/if}
@@ -337,6 +340,8 @@
   .app { display: flex; height: 100%; }
   .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .body { flex: 1; min-height: 0; }
+  /* Focus lands here from ⌘1–4; the region itself needs no ring. */
+  .body:focus { outline: none; }
   .err { margin: 8px 12px 0; }
   .results { padding: 10px 16px; overflow-y: auto; height: 100%; }
   .rhead { color: var(--muted); margin-bottom: 6px; }

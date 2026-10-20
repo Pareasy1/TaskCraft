@@ -84,6 +84,8 @@ html[data-window="quick"] body { background: transparent; }
 #app { height: 100%; }
 input, textarea, select, button { font: inherit; color: inherit; }
 input, textarea { user-select: text; -webkit-user-select: text; }
+/* One readable placeholder colour (WebKit and Chromium defaults are too faint). */
+::placeholder { color: var(--muted); opacity: 1; }
 button { cursor: default; }
 
 /* One visible keyboard focus ring everywhere; :where() keeps specificity at 0
@@ -131,6 +133,18 @@ button { cursor: default; }
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+/* The "open" button inside a row that also holds other controls (status mark,
+   label chips): a plain text button, so controls are siblings, never nested. */
+.open-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
 .muted { color: var(--muted); }

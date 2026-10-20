@@ -31,12 +31,14 @@
 </script>
 
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
-  <div class="item task" role="button" tabindex="0" aria-label={tr('quick.openTask', { title: t.title })}
-    onclick={() => onopen('task', t.id)} onkeydown={(e) => e.target === e.currentTarget && e.key === 'Enter' && onopen('task', t.id)}>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
+  <div class="item task" onclick={() => onopen('task', t.id)}>
     <StatusGlyph status={t.status} size={15} onchange={(s) => onstatus(t, s)} />
-    <span class="name">{t.title}</span>
-    {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
-    <span class="meta" class:late>{meta}</span>
+    <button class="open-btn opener" title={tr('quick.openTask', { title: t.title })} onclick={(e) => { e.stopPropagation(); onopen('task', t.id); }}>
+      <span class="name">{t.title}</span>
+      {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
+      <span class="meta" class:late>{meta}</span>
+    </button>
   </div>
 {/snippet}
 
@@ -81,6 +83,7 @@
     border-radius: 6px;
   }
   .item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .opener { flex: 1; display: flex; align-items: center; gap: 8px; }
   .item:hover { background: var(--hover); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

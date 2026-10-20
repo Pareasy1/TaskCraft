@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '../../lib/i18n';
+  import { tick } from 'svelte';
   import type { TaskStatus } from '../../lib/types';
   import { nextStatus, STATUSES, STATUS_LABEL } from '../../lib/tasks';
 
@@ -10,10 +11,52 @@
   }: { status: TaskStatus; size?: number; onchange?: (s: TaskStatus) => void } = $props();
 
   let menu = $state(false);
-  const pick = (s: TaskStatus) => {
+  let trigger: HTMLButtonElement | undefined = $state();
+  let menuEl: HTMLDivElement | undefined = $state();
+
+  const items = () => [...(menuEl?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])];
+  async function openMenu() {
+    menu = true;
+    await tick();
+    (items().find((b) => b.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
+  }
+  function closeMenu(refocus = true) {
     menu = false;
+    if (refocus) trigger?.focus();
+  }
+  const pick = (s: TaskStatus) => {
+    closeMenu();
     if (s !== status) onchange?.(s);
   };
+  function triggerKeys(e: KeyboardEvent) {
+    // Shift+F10 and the menu key open the chooser, like a right-click.
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      openMenu();
+    }
+  }
+  function menuKeys(e: KeyboardEvent) {
+    e.stopPropagation(); // the row's own arrow-key moves must not fire inside the menu
+    const list = items();
+    const i = list.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (n: number) => list[(n + list.length) % list.length]?.focus();
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(list.length - 1);
+    else if (e.key === 'Escape') closeMenu();
+    else if (e.key === 'Tab') return closeMenu(false);
+    else return;
+    e.preventDefault();
+  }
+  // Close when clicking anywhere else.
+  $effect(() => {
+    if (!menu) return;
+    const away = (e: PointerEvent) => !menuEl?.contains(e.target as Node) && !trigger?.contains(e.target as Node) && closeMenu(false);
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
+  });
 </script>
 
 {#snippet glyph(s: TaskStatus, px: number)}
@@ -28,14 +71,18 @@
 {#if onchange}
   <span class="wrap">
     <button
+      bind:this={trigger}
+      aria-haspopup="menu"
+      aria-expanded={menu}
+      onkeydown={triggerKeys}
       class="btn-glyph"
       title={t('status.title', { status: STATUS_LABEL[status], next: STATUS_LABEL[nextStatus(status)] })}
       aria-label={t('status.aria', { status: STATUS_LABEL[status], next: STATUS_LABEL[nextStatus(status)] })}
       onclick={(e) => { e.stopPropagation(); onchange(nextStatus(status)); }}
-      oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menu = !menu; }}
+      oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); if (menu) closeMenu(); else openMenu(); }}
     >{@render glyph(status, size)}</button>
     {#if menu}
-      <div class="menu" role="menu" tabindex="-1" onmouseleave={() => (menu = false)}>
+      <div class="menu" role="menu" tabindex="-1" aria-label={t('inspector.status')} bind:this={menuEl} onkeydown={menuKeys}>
         {#each STATUSES as s}
           <button role="menuitemradio" aria-checked={s === status} onclick={(e) => { e.stopPropagation(); pick(s); }}>
             {@render glyph(s, 14)}<span>{STATUS_LABEL[s]}</span>

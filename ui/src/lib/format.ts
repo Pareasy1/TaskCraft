@@ -94,3 +94,11 @@ export function byteToIndex(text: string, byte: number): number {
   }
   return i;
 }
+
+/** Spoken name of a calendar day: full date, plus "today" and "has events" when they apply. */
+export function dayLabel(d: Date, today: Date, hasEvents: boolean): string {
+  const parts = [d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })];
+  if (d.toDateString() === today.toDateString()) parts.push(t('day.today'));
+  if (hasEvents) parts.push(t('day.hasEvents'));
+  return parts.join(', ');
+}
