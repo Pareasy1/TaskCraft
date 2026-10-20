@@ -1,0 +1,12 @@
+[package]
+name = "taskcraft-parse"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+chrono-tz.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+proptest = "1"
