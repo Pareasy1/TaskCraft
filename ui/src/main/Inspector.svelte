@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isMod } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onDestroy, tick } from 'svelte';
   import { X, Trash2 } from 'lucide-svelte';
@@ -176,7 +177,7 @@
 
   function keys(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
-    if (e.key === 'Enter' && e.metaKey) save();
+    if (e.key === 'Enter' && isMod(e)) save();
   }
 </script>
 
