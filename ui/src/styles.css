@@ -86,6 +86,14 @@ input, textarea, select, button { font: inherit; color: inherit; }
 input, textarea { user-select: text; -webkit-user-select: text; }
 button { cursor: default; }
 
+/* One visible keyboard focus ring everywhere; :where() keeps specificity at 0
+   so components can still tune it. Mouse clicks don't show it (:focus-visible). */
+:where(button, a, select, summary, input[type='checkbox'], input[type='color'],
+  [role='button'], [role='tab'], [role='radio'], [role='menuitemradio'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn {
   border: 1px solid var(--border);
   background: var(--surface-strong);
