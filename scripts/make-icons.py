@@ -4,7 +4,7 @@
 The source artwork is a full-bleed rounded square. macOS app icons place that
 shape at 824×824 inside a transparent 1024×1024 canvas (Apple's icon grid), so
 the artwork is trimmed to its visible pixels, fitted into 824×824 and centred.
-Then every PNG size and icon.icns (via the system's iconutil) are written.
+Then every PNG size, icon.ico (Windows) and icon.icns (macOS, via iconutil) are written.
 
 Usage: python3 scripts/make-icons.py   (needs Pillow)
 """
@@ -41,6 +41,9 @@ def main() -> None:
     for name, size in [("32x32.png", 32), ("64x64.png", 64), ("128x128.png", 128),
                        ("128x128@2x.png", 256), ("icon.png", 512)]:
         save(img, size, OUT / name)
+
+    # Windows: one .ico holding every size Explorer and the taskbar use.
+    img.save(OUT / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
     with tempfile.TemporaryDirectory() as tmp:
         iconset = Path(tmp) / "icon.iconset"

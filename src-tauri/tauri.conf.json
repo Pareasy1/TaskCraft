@@ -6,20 +6,44 @@
   "build": {
     "devUrl": "http://localhost:5173",
     "frontendDist": "../ui/dist",
-    "beforeDevCommand": { "script": "npm run dev", "cwd": "../ui" },
-    "beforeBuildCommand": { "script": "npm run build", "cwd": "../ui" }
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": "../ui"
+    },
+    "beforeBuildCommand": {
+      "script": "npm run build",
+      "cwd": "../ui"
+    }
   },
   "app": {
     "macOSPrivateApi": true,
     "windows": [],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": "all",
     "category": "Productivity",
     "copyright": "Personal use",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"],
-    "macOS": { "minimumSystemVersion": "14.0" }
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    },
+    "shortDescription": "Calendar and tasks with natural-language quick entry",
+    "longDescription": "TaskCraft is a personal calendar and task app. Type one sentence to add an event or a task; plan in Day, Week, Month and Tasks views; get reminders. All data stays on this computer.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
