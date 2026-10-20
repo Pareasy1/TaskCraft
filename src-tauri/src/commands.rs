@@ -604,7 +604,10 @@ mod tests {
         assert_eq!(saved, new);
         assert_eq!(
             registered,
-            Some(("Control+Alt+K".into(), "Alt+Super+Space".into()))
+            Some((
+                "Control+Alt+K".into(),
+                crate::settings::default_hotkey_for(std::env::consts::OS).into()
+            ))
         );
         assert_eq!(st.settings.read().unwrap().default_event_minutes, 45);
     }
