@@ -263,6 +263,61 @@ pub fn set_task_completed(
 }
 
 #[tauri::command]
+pub fn set_task_status(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    status: TaskStatus,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .set_task_status(id, status, Utc::now())?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_labels(st: State<AppState>) -> CmdResult<Vec<TaskLabel>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_labels()?)
+}
+
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+pub fn update_label_impl(st: &AppState, id: i64, name: &str, color: &str) -> CmdResult<()> {
+    if !is_hex_color(color) {
+        return Err(CmdError::new("invalid", "Pick a label color"));
+    }
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .update_label(id, name, color)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_label(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    name: String,
+    color: String,
+) -> CmdResult<()> {
+    update_label_impl(&st, id, &name, &color)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_label(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.delete_label(id)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn delete_task(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
     st.store.lock().map_err(poisoned)?.delete_task(id)?;
     changed(&app);
@@ -434,6 +489,30 @@ mod tests {
             st.settings.read().unwrap().default_calendar_id
         );
         assert_eq!(e.attendees, vec!["Sam"]);
+    }
+
+    #[test]
+    fn update_label_validates() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "pay rent #bills friday", now(), true).unwrap();
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        let names: Vec<&str> = t.labels.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["bills"], "integration: #tags become labels");
+        let id = t.labels[0].id;
+        assert_eq!(
+            update_label_impl(&st, id, "home", "red").unwrap_err().code,
+            "invalid"
+        );
+        assert_eq!(
+            update_label_impl(&st, id, "", "#123456").unwrap_err().code,
+            "invalid"
+        );
+        update_label_impl(&st, id, "home", "#123456").unwrap();
+        let l = st.store.lock().unwrap().list_labels().unwrap();
+        assert_eq!(
+            (l[0].name.as_str(), l[0].color.as_str()),
+            ("home", "#123456")
+        );
     }
 
     #[test]

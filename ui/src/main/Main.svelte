@@ -135,7 +135,7 @@
         kind: 'task',
         id,
         completed: !!t.completedAt,
-        input: { calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz, rrule: t.rrule, notes: t.notes, alerts: t.alerts },
+        input: { calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz, rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name) },
       };
     } catch (e) {
       error = errorMessage(e);

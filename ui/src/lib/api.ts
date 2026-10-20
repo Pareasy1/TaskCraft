@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   Calendar, CalendarInput, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem,
-  Scope, Settings, Task, TaskFilter, TaskInput,
+  Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus,
 } from './types';
 
 export const api = {
@@ -21,6 +21,10 @@ export const api = {
   updateTask: (id: number, input: TaskInput) => invoke<void>('update_task', { id, input }),
   setTaskCompleted: (id: number, done: boolean) => invoke<void>('set_task_completed', { id, done }),
   deleteTask: (id: number) => invoke<void>('delete_task', { id }),
+  setTaskStatus: (id: number, status: TaskStatus) => invoke<void>('set_task_status', { id, status }),
+  listLabels: () => invoke<TaskLabel[]>('list_labels'),
+  updateLabel: (id: number, name: string, color: string) => invoke<void>('update_label', { id, name, color }),
+  deleteLabel: (id: number) => invoke<void>('delete_label', { id }),
   listRange: (start: Date, end: Date) =>
     invoke<Occurrence[]>('list_range', { start: start.toISOString(), end: end.toISOString() }),
   listTasks: (filter: TaskFilter) => invoke<Task[]>('list_tasks', { filter }),
