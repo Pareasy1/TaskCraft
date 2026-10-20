@@ -4,6 +4,9 @@ A personal macOS calendar and task app with Fantastical-style natural-language
 quick entry. Rust core (parser, SQLite store, alerts) with a Tauri 2 + Svelte UI.
 All data stays on this Mac.
 
+**Installing on another Mac** (family, friends, a second computer): see [docs/INSTALL.md](docs/INSTALL.md).
+To make a shareable copy, run `./scripts/package.sh` (creates `dist/TaskCraft-<version>-macos-universal.zip`).
+
 ## Using it
 
 - **Quick entry:** press **⌥⌘Space** (changeable in Settings) or click the
