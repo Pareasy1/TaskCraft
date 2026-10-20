@@ -9,6 +9,7 @@
   import { fmtShortDate, fmtTime } from '../../lib/format';
   import StatusGlyph from './StatusGlyph.svelte';
   import LabelChip from './LabelChip.svelte';
+  import Doodle from './Doodle.svelte';
 
   let {
     tasks,
@@ -113,7 +114,7 @@
             {/if}
           </div>
         {:else}
-          <p class="empty">{col.status === 'inProgress' ? tr('board.emptyProgress') : col.status === 'done' ? tr('board.emptyDone') : tr('board.emptyTodo')}</p>
+          <div class="empty"><Doodle size={34} /><p>{col.status === 'inProgress' ? tr('board.emptyProgress') : col.status === 'done' ? tr('board.emptyDone') : tr('board.emptyTodo')}</p></div>
         {/each}
         {#if col.status === 'done' && (col.hidden || showAllDone)}
           <button class="more" onclick={() => (showAllDone = !showAllDone)}>
@@ -164,7 +165,8 @@
   .due { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .due.late { color: var(--danger); }
   .cal { width: 6px; height: 6px; border-radius: 50%; opacity: 0.8; }
-  .empty { color: var(--faint); font-size: 12px; text-align: center; margin: 18px 8px; }
+  .empty { color: var(--muted); font-size: 12px; text-align: center; margin: 18px 8px; }
+  .empty p { margin: 0; }
   .more { border: none; background: none; color: var(--accent); font-size: 12px; padding: 6px; border-radius: 6px; }
   .more:hover { background: var(--hover); }
   @media (max-width: 720px) { .board { grid-template-columns: 1fr; height: auto; } }

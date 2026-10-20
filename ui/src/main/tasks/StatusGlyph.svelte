@@ -64,7 +64,7 @@
     <circle class="ring" cx="10" cy="10" r="8.25" />
     <path class="half" d="M10 1.75 A8.25 8.25 0 0 1 10 18.25 Z" />
     <circle class="fill" cx="10" cy="10" r="8.25" />
-    <path class="tick" d="M6.2 10.4 L8.8 13 L13.9 7.6" />
+    <path class="tick" d="M5.7 10.5 C6.6 11.2 7.5 12.2 8.5 13.4 C9.9 10.9 11.8 8.7 14.4 6.6" />
   </svg>
 {/snippet}
 
@@ -104,7 +104,7 @@
   .half, .fill { fill: var(--st, transparent); }
   .half { opacity: 0; }
   .fill { opacity: 0; transform-origin: 10px 10px; transform: scale(0.4); }
-  .tick { fill: none; stroke: var(--bg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 12; stroke-dashoffset: 12; }
+  .tick { fill: none; stroke: var(--bg); stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 15; stroke-dashoffset: 15; }
   .inProgress { --st: var(--status-progress); }
   .inProgress .ring { stroke: var(--status-progress); }
   .inProgress .half { opacity: 1; }

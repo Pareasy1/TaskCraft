@@ -12,6 +12,7 @@
   import { changeStatus } from '../lib/actions';
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard from './tasks/TaskBoard.svelte';
+  import Doodle from './tasks/Doodle.svelte';
   import LabelChip from './tasks/LabelChip.svelte';
 
   let {
@@ -187,7 +188,7 @@
           {/each}
         </section>
       {:else}
-        <p class="empty">{emptyText()}</p>
+        <div class="empty"><Doodle /><p>{emptyText()}</p></div>
       {/each}
     {/if}
   </div>
@@ -222,6 +223,7 @@
   h2 { font-size: 13px; font-weight: 600; margin: 20px 0 4px; display: flex; gap: 8px; align-items: baseline; }
   h2.danger { color: var(--danger); }
   .empty { color: var(--muted); text-align: center; margin-top: 48px; }
+  .empty p { margin: 0; }
 
   @media (max-width: 640px) {
     .page { padding: 12px 16px 0; }
