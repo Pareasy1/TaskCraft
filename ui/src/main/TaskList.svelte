@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { activate, isSelected, select } from '../lib/selection.svelte';
   import type { Task, TaskStatus } from '../lib/types';
   import { fmtShortDate, fmtTime } from '../lib/format';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
@@ -26,9 +27,10 @@
     {#if open[s.key] ?? true}
       {#each s.tasks as t (t.id)}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
-        <div class="task" class:done={t.status === 'done'} onclick={() => onopen(t)}>
+        <div class="task" class:done={t.status === 'done'} class:is-selected={isSelected('task', t.id)}
+          onclick={() => select({ kind: 'task', id: t.id })} ondblclick={() => onopen(t)}>
           <StatusGlyph status={t.status} size={15} onchange={(st) => onstatus(t, st)} />
-          <button class="open-btn body" onclick={(e) => { e.stopPropagation(); onopen(t); }}>
+          <button class="open-btn body" onclick={(e) => { e.stopPropagation(); activate(e, () => onopen(t), () => select({ kind: 'task', id: t.id })); }}>
             <span class="name">{t.title}</span>
             {#if t.due || t.labels.length}
               <span class="meta">

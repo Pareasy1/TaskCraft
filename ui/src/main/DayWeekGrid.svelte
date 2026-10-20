@@ -7,6 +7,7 @@
   import { movedDue, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
   import { nextStatus, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
+  import { activate, isSelected, select } from '../lib/selection.svelte';
 
   const HOUR = 48; // px per hour
   const PX_MIN = HOUR / 60;
@@ -94,7 +95,7 @@
     if (!drag) return;
     const d = drag;
     drag = null;
-    if (!d.moved) return onselect(d.o);
+    if (!d.moved) return select({ kind: 'event', id: d.o.eventId, occurrence: d.o.start });
     const s = new Date(d.o.start);
     const en = new Date(d.o.end);
     if (d.mode === 'move') {
@@ -161,7 +162,7 @@
     const d = tdrag;
     tdrag = null;
     if (!d) return;
-    if (!d.moved) return ontaskopen(d.task);
+    if (!d.moved) return select({ kind: 'task', id: d.task.id });
     if (!d.dMin && !d.dDay) return;
     const due = new Date(d.task.due!);
     ontaskmove(d.task, addDays(new Date(due.getTime() + d.dMin * 60_000), d.dDay).toISOString());
@@ -242,13 +243,17 @@
     {#each allDay as items, i}
       <div class="adcol">
         {#each items as o (key(o))}
-          <button class="chip" style="--c:{o.color}" onclick={() => onselect(o)}>{o.title}</button>
+          <button class="chip" class:is-selected={isSelected('event', o.eventId, o.start)} style="--c:{o.color}"
+            onclick={(e) => activate(e, () => onselect(o), () => select({ kind: 'event', id: o.eventId, occurrence: o.start }))}
+            ondblclick={() => onselect(o)}>{o.title}</button>
         {/each}
         {#each dayTasks[i].allDay as x (x.task.id)}
           {@const dr = dragging(x.task)}
           <!-- svelte-ignore a11y_no_static_element_interactions (drag surface; the open button is the keyboard path) -->
           <div
             class="tchip"
+            class:is-selected={isSelected('task', x.task.id)}
+            ondblclick={() => ontaskopen(x.task)}
             class:done={x.task.status === 'done'}
             class:overdue={x.overdue}
             class:dragging={!!dr}
@@ -289,6 +294,8 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions (drag surface; the open button is the keyboard path) -->
                 <div
                   class="task"
+                  class:is-selected={isSelected('task', x.task.id)}
+                  ondblclick={() => ontaskopen(x.task)}
                   class:done={x.task.status === 'done'}
                   class:overdue={x.overdue}
                   class:dragging={!!dr}
@@ -312,6 +319,8 @@
               {@const v = preview(o, p.top, p.height)}
               <div
                 class="ev"
+                class:is-selected={isSelected('event', o.eventId, o.start)}
+                ondblclick={() => onselect(o)}
                 class:compact={v.height * PX_MIN < 40}
                 class:dragging={drag && key(drag.o) === p.id}
                 style="--c:{o.color}; top:{v.top * PX_MIN}px; height:{v.height * PX_MIN - 2}px;

@@ -147,5 +147,7 @@ button { cursor: default; }
   text-align: left;
   min-width: 0;
 }
+/* The selected task or event: a single click selects, a double click opens. */
+.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
 .muted { color: var(--muted); }

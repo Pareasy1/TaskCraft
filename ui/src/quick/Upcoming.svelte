@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { activate, isSelected, select } from '../lib/selection.svelte';
   import { t as tr } from '../lib/i18n';
   import type { Occurrence, Task, TaskStatus } from '../lib/types';
   import StatusGlyph from '../main/tasks/StatusGlyph.svelte';
@@ -32,9 +33,9 @@
 
 {#snippet taskRow(t: Task, meta: string, late: boolean)}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the row's open button is the keyboard path) -->
-  <div class="item task" onclick={() => onopen('task', t.id)}>
+  <div class="item task" class:is-selected={isSelected('task', t.id)} onclick={() => select({ kind: 'task', id: t.id })} ondblclick={() => onopen('task', t.id)}>
     <StatusGlyph status={t.status} size={15} onchange={(s) => onstatus(t, s)} />
-    <button class="open-btn opener" title={tr('quick.openTask', { title: t.title })} onclick={(e) => { e.stopPropagation(); onopen('task', t.id); }}>
+    <button class="open-btn opener" title={tr('quick.openTask', { title: t.title })} onclick={(e) => { e.stopPropagation(); activate(e, () => onopen('task', t.id), () => select({ kind: 'task', id: t.id })); }}>
       <span class="name">{t.title}</span>
       {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
       <span class="meta" class:late>{meta}</span>
@@ -56,7 +57,9 @@
     {/each}
     {#each g.events as o (o.eventId + o.start)}
       <div class="item" role="button" tabindex="0" aria-label={tr('quick.openEvent', { title: o.title })}
-        onclick={() => onopen('event', o.eventId)} onkeydown={(e) => e.key === 'Enter' && onopen('event', o.eventId)}>
+        class:is-selected={isSelected('event', o.eventId, o.start)}
+        onclick={() => select({ kind: 'event', id: o.eventId, occurrence: o.start })} ondblclick={() => onopen('event', o.eventId)}
+        onkeydown={(e) => e.key === 'Enter' && onopen('event', o.eventId)}>
         <span class="dot" style="background:{o.color}"></span>
         <span class="name">{o.title}</span>
         <span class="meta">{o.allDay ? tr('grid.allDay') : fmtTime(new Date(o.start))}</span>
