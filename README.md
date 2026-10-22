@@ -34,6 +34,9 @@ Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
     manager to rename, recolor, merge or delete labels.
   - **Board:** switch *List / Board* to see To do · In progress · Done columns.
     Drag cards between columns, or focus a card and press ← / →.
+  - **Plans:** group tasks into plans (listed in the sidebar), each with buckets shown as
+    draggable columns. Type `/planname` in quick entry to file a task in a plan, e.g.
+    `todo ship Rafael friday /3dprint`.
 
 ## Install / update
 
