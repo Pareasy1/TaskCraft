@@ -241,27 +241,29 @@ impl Store {
     }
 
     /// Renames the untouched seed plan/bucket to localized names, once.
-    pub fn localize_seed(&self, plan_name: &str, bucket_name: &str) -> Result<()> {
+    /// Returns whether anything was renamed.
+    pub fn localize_seed(&self, plan_name: &str, bucket_name: &str) -> Result<bool> {
         self.in_tx(|tx| {
             if pref(tx, "seed_names_pending")?.as_deref() != Some("1") {
-                return Ok(());
+                return Ok(false);
             }
             let plan_name = clean_name(plan_name)?;
             let bucket_name = clean_name(bucket_name)?;
+            let mut renamed = 0;
             // Skip the plan rename if it would collide with another plan.
             if !plan_name_taken(tx, plan_name, Some(1))? {
-                tx.execute(
-                    "UPDATE plans SET name = ?1 WHERE id = 1 AND name = 'My tasks'",
+                renamed += tx.execute(
+                    "UPDATE plans SET name = ?1 WHERE id = 1 AND name = 'My tasks' AND name <> ?1",
                     [plan_name],
                 )?;
             }
-            tx.execute(
-                "UPDATE buckets SET name = ?1 WHERE id = 1 AND name = 'To do'",
+            renamed += tx.execute(
+                "UPDATE buckets SET name = ?1 WHERE id = 1 AND name = 'To do' AND name <> ?1",
                 [bucket_name],
             )?;
             set_pref(tx, "new_bucket_name", bucket_name)?;
             set_pref(tx, "seed_names_pending", "0")?;
-            Ok(())
+            Ok(renamed > 0)
         })
     }
 

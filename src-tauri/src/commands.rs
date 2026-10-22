@@ -291,18 +291,28 @@ pub fn set_task_status(
     Ok(())
 }
 
+/// Renames the untouched seed plan/bucket to the language's names (once).
+/// Returns whether anything was renamed.
+pub fn set_ui_language_impl(st: &AppState, lang: crate::i18n::Lang) -> CmdResult<bool> {
+    *st.lang.write().map_err(poisoned)? = lang;
+    let text = crate::i18n::text(lang);
+    Ok(st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .localize_seed(text.seed_plan, text.seed_bucket)?)
+}
+
 /// The UI reports the language it picked from the Mac's settings; the
 /// menu-bar menu and notifications follow it.
 #[tauri::command]
 pub fn set_ui_language(app: AppHandle, st: State<AppState>, lang: String) -> CmdResult<()> {
     let lang = crate::i18n::Lang::from_code(&lang);
-    *st.lang.write().map_err(poisoned)? = lang;
-    let text = crate::i18n::text(lang);
-    st.store
-        .lock()
-        .map_err(poisoned)?
-        .localize_seed(text.seed_plan, text.seed_bucket)?;
-    changed(&app);
+    match set_ui_language_impl(&st, lang) {
+        Ok(true) => changed(&app),
+        Ok(false) => {}
+        Err(e) => tracing::warn!(error = %e.message, "cannot localize seed plan"),
+    }
     if let Err(e) = crate::tray::set_menu_language(&app, lang) {
         tracing::warn!(error = %e, "cannot update tray menu language");
     }
@@ -714,6 +724,22 @@ mod tests {
         assert_eq!(CmdError::from(StoreError::Duplicate).code, "duplicate");
         assert_eq!(CmdError::from(StoreError::LastPlan).code, "last_plan");
         assert_eq!(CmdError::from(StoreError::LastBucket).code, "last_bucket");
+    }
+
+    #[test]
+    fn ui_language_localizes_seed_once() {
+        use crate::i18n::Lang;
+        let st = AppState::in_memory();
+        assert!(set_ui_language_impl(&st, Lang::It).unwrap());
+        {
+            let s = st.store.lock().unwrap();
+            let plan = s.list_plans().unwrap().remove(0);
+            assert_eq!(plan.name, "Le mie attività");
+            assert_eq!(s.list_buckets(plan.id).unwrap()[0].name, "Da fare");
+        }
+        assert!(!set_ui_language_impl(&st, Lang::En).unwrap());
+        let plan = st.store.lock().unwrap().list_plans().unwrap().remove(0);
+        assert_eq!(plan.name, "Le mie attività");
     }
 
     #[test]
