@@ -265,7 +265,7 @@ impl Store {
         })
     }
 
-    fn default_plan_id_in(&self, conn: &Connection) -> Result<i64> {
+    pub(crate) fn default_plan_id_in(&self, conn: &Connection) -> Result<i64> {
         Ok(pref(conn, "default_plan_id")?
             .and_then(|v| v.parse().ok())
             .unwrap_or(-1))
@@ -275,7 +275,7 @@ impl Store {
 /// Next `sort_order` that places a task after all others in the bucket.
 pub(crate) fn next_sort(conn: &Connection, bucket_id: i64) -> Result<f64> {
     Ok(conn.query_row(
-        "SELECT coalesce(max(sort_order), -1.0) + 1.0 FROM tasks WHERE bucket_id = ?1",
+        "SELECT coalesce(max(sort_order), 0.0) + 1.0 FROM tasks WHERE bucket_id = ?1",
         [bucket_id],
         |r| r.get(0),
     )?)
@@ -362,4 +362,15 @@ fn reorder<P: rusqlite::Params>(
         )?;
     }
     Ok(())
+}
+
+/// First bucket of a plan by sort order.
+pub(crate) fn first_bucket(conn: &Connection, plan_id: i64) -> Result<i64> {
+    conn.query_row(
+        "SELECT id FROM buckets WHERE plan_id = ?1 ORDER BY sort, id LIMIT 1",
+        [plan_id],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or(StoreError::NotFound)
 }
