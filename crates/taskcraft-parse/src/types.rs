@@ -14,6 +14,8 @@ pub struct ParseOptions {
     pub default_event_minutes: u32,
     pub calendars: Vec<String>,
     pub date_order: DateOrder,
+    /// Plan names that `/plan` quick-entry hints can route a task to.
+    pub plans: Vec<String>,
 }
 
 impl Default for ParseOptions {
@@ -22,6 +24,7 @@ impl Default for ParseOptions {
             default_event_minutes: 60,
             calendars: vec!["Personal".into(), "Work".into()],
             date_order: DateOrder::DayMonth,
+            plans: vec![],
         }
     }
 }
@@ -57,6 +60,7 @@ pub enum Label {
     Separator,
     /// `#word` on a task.
     Tag,
+    Plan,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,5 +164,6 @@ pub struct ParsedItem {
     pub url: Option<String>,
     /// Label names from `#word` tokens (tasks only), without the `#`.
     pub tags: Vec<String>,
+    pub plan: Option<String>,
     pub spans: Vec<Span>,
 }

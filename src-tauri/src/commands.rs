@@ -80,6 +80,7 @@ fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
         default_event_minutes: settings.default_event_minutes,
         calendars,
         date_order: settings.date_order,
+        plans: vec![],
     })
 }
 
