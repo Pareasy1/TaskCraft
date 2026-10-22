@@ -6,7 +6,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Hit, ItemRef, Occurrence, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
+  import type { Calendar, Hit, ItemRef, Occurrence, Plan, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { addDays, monthGrid, startOfDay, weekDays } from '../lib/layout';
   import { fmtLongDate, fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
   import Toolbar from './Toolbar.svelte';
@@ -32,6 +32,11 @@
   let occurrences = $state<Occurrence[]>([]);
   let sideOcc = $state<Occurrence[]>([]);
   let allTasks = $state<Task[]>([]);
+  let plans = $state<Plan[]>([]);
+  /** Which plan the Tasks view shows; 'all' is every plan. */
+  let scope = $state<number | 'all'>('all');
+  let scopePlan = $derived(scope === 'all' ? null : plans.find((p) => p.id === scope) ?? null);
+  let scoped = $derived(scopePlan ? allTasks.filter((x) => x.planId === scopePlan.id) : allTasks);
   // Sidebar groups use the same rules as the Tasks page (see sidebarSections).
   const SECTION_NAMES = {
     overdue: t('group.overdue'), today: t('view.today'), upcoming: t('view.upcoming'), nodate: t('view.nodate'), completed: t('view.completed'),
@@ -60,6 +65,7 @@
   let title = $derived.by(() => {
     if (view === 'tasks') {
       // The view switcher already says "Tasks"; the title says how many are open.
+      if (scopePlan) return scopePlan.name;
       const n = allTasks.filter((x) => !x.completedAt).length;
       return n === 0 ? t('tasks.openNone') : n === 1 ? t('tasks.openOne') : t('tasks.openMany', { n });
     }
@@ -73,14 +79,18 @@
   async function refresh() {
     try {
       const sg = monthGrid(sideMonth.getFullYear(), sideMonth.getMonth(), weekStart);
-      const [occ, side, cals, s, all, lbls] = await Promise.all([
+      const [occ, side, cals, s, all, lbls, pls] = await Promise.all([
         api.listRange(range[0], range[1]),
         api.listRange(sg[0], addDays(sg[41], 1)),
         api.listCalendars(),
         api.getSettings(),
         api.listTasks('all'),
         api.listLabels(),
+        api.listPlans(),
       ]);
+      plans = pls;
+      // A deleted plan drops the view back to every plan.
+      if (scope !== 'all' && !pls.some((p) => p.id === scope)) scope = 'all';
       allTasks = all;
       labels = lbls;
       occurrences = occ;
@@ -292,6 +302,9 @@
     bind:activeLabels
     onerror={(m) => (error = m)}
     onopensettings={() => (settingsOpen = true)}
+    {plans}
+    {scope}
+    onselectscope={(s) => { scope = s; view = 'tasks'; }}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
     onstatus={setStatus}
@@ -316,7 +329,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={allTasks} {labels} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={scoped} {labels} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}

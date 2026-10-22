@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketColumns, dropNeighbours, dueColumns, labelColumns, nextPlanColor } from './plans';
+import { bucketColumns, dropNeighbours, dueColumns, labelColumns, nextPlanColor, uniqueName } from './plans';
 import { errorMessage } from './api';
 import { t } from './i18n';
 import type { Bucket, Plan } from './types';
@@ -72,5 +72,14 @@ describe('errorMessage', () => {
     expect(errorMessage({ code: 'duplicate', message: 'x' })).toBe(t('error.duplicate'));
     expect(errorMessage({ code: 'last_plan', message: 'x' })).toBe(t('del.lastPlan'));
     expect(errorMessage({ code: 'last_bucket', message: 'x' })).toBe(t('del.lastBucket'));
+  });
+});
+
+describe('uniqueName', () => {
+  it('keeps a free name and numbers taken ones, ignoring case', () => {
+    expect(uniqueName('New plan', ['Other'])).toBe('New plan');
+    expect(uniqueName('New plan', ['New plan'])).toBe('New plan 2');
+    expect(uniqueName('New plan', ['New plan', 'new plan 2'])).toBe('New plan 3');
+    expect(uniqueName('New plan', ['new plan'])).toBe('New plan 2');
   });
 });

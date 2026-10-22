@@ -72,3 +72,11 @@ export function nextPlanColor(plans: Plan[]): string {
   const used = new Set(plans.map((p) => p.color.toLowerCase()));
   return PLAN_COLORS.find((c) => !used.has(c)) ?? PLAN_COLORS[plans.length % PLAN_COLORS.length];
 }
+
+/** `base`, or `base 2`, `base 3`… — the first one not in `taken` (case-insensitive). */
+export function uniqueName(base: string, taken: string[]): string {
+  const used = new Set(taken.map((n) => n.trim().toLowerCase()));
+  let name = base;
+  for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} ${i}`;
+  return name;
+}
