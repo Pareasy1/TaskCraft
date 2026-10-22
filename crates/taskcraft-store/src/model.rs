@@ -9,6 +9,12 @@ pub enum StoreError {
     NotFound,
     #[error("invalid: {0}")]
     Invalid(String),
+    #[error("already exists")]
+    Duplicate,
+    #[error("cannot delete the last plan")]
+    LastPlan,
+    #[error("cannot delete the last bucket")]
+    LastBucket,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -98,6 +104,10 @@ pub struct TaskInput {
     /// Label names; missing labels are created on save.
     #[serde(default)]
     pub labels: Vec<String>,
+    #[serde(default)]
+    pub plan_id: Option<i64>,
+    #[serde(default)]
+    pub bucket_id: Option<i64>,
 }
 
 /// Task workflow state. `Done` ⇔ `completed_at` is set.
@@ -136,7 +146,7 @@ pub struct TaskLabel {
     pub color: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: i64,
@@ -153,6 +163,35 @@ pub struct Task {
     pub alerts: Vec<AlertSpecUtc>,
     pub status: TaskStatus,
     pub labels: Vec<TaskLabel>,
+    pub plan_id: i64,
+    pub bucket_id: i64,
+    pub sort_order: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Plan {
+    pub id: i64,
+    pub name: String,
+    pub color: String,
+    pub sort: i64,
+    pub open_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bucket {
+    pub id: i64,
+    pub plan_id: i64,
+    pub name: String,
+    pub sort: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DeleteMode {
+    MoveTo(i64),
+    DeleteTasks,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

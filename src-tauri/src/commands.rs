@@ -33,6 +33,9 @@ impl From<StoreError> for CmdError {
             StoreError::Invalid(_) => "invalid",
             StoreError::Db(_) => "db",
             StoreError::Io(_) => "io",
+            StoreError::Duplicate => "duplicate",
+            StoreError::LastPlan => "last_plan",
+            StoreError::LastBucket => "last_bucket",
         };
         CmdError::new(code, e.to_string())
     }

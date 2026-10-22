@@ -6,6 +6,7 @@ mod events;
 mod ics;
 mod labels;
 mod model;
+mod plans;
 mod query;
 mod recur;
 mod schema;

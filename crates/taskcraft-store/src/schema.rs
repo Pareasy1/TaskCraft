@@ -3,7 +3,7 @@
 use crate::model::Result;
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 2;
+pub const CURRENT_VERSION: i64 = 3;
 
 const V1: &str = "
 CREATE TABLE calendars(
@@ -68,6 +68,20 @@ CREATE TABLE task_labels(
 );
 ";
 
+/// Plans, buckets, prefs and task ordering.
+const V3: &str = "
+CREATE TABLE plans(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, color TEXT NOT NULL, sort INTEGER NOT NULL);
+CREATE TABLE buckets(id INTEGER PRIMARY KEY, plan_id INTEGER NOT NULL REFERENCES plans(id) ON DELETE CASCADE, name TEXT NOT NULL, sort INTEGER NOT NULL);
+CREATE TABLE prefs(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO plans(id, name, color, sort) VALUES (1, 'My tasks', '#3b82f6', 0);
+INSERT INTO buckets(id, plan_id, name, sort) VALUES (1, 1, 'To do', 0);
+INSERT INTO prefs VALUES ('default_plan_id', '1'), ('seed_names_pending', '1');
+ALTER TABLE tasks ADD COLUMN plan_id INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE tasks ADD COLUMN bucket_id INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE tasks ADD COLUMN sort_order REAL NOT NULL DEFAULT 0;
+CREATE INDEX tasks_bucket ON tasks(bucket_id, sort_order);
+";
+
 pub fn version(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
 }
@@ -84,6 +98,22 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if v < 2 {
         tx.execute_batch(V2)?;
+    }
+    if v < 3 {
+        tx.execute_batch(V3)?;
+        let ids: Vec<i64> = {
+            let mut st = tx.prepare(
+                "SELECT id FROM tasks ORDER BY (completed_at IS NOT NULL), (due_utc IS NULL), due_utc, id",
+            )?;
+            let rows = st.query_map([], |r| r.get(0))?;
+            rows.collect::<std::result::Result<_, _>>()?
+        };
+        for (i, id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE tasks SET sort_order = ?1 WHERE id = ?2",
+                rusqlite::params![(i + 1) as f64, id],
+            )?;
+        }
     }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;

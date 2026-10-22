@@ -49,7 +49,7 @@ fn open_seeds_calendars() {
     let s = Store::open_in_memory().unwrap();
     let names: Vec<String> = s.calendars().unwrap().into_iter().map(|c| c.name).collect();
     assert_eq!(names, ["Personal", "Work"]);
-    assert_eq!(s.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 3);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn migration_backs_up() {
         .execute_batch("CREATE TABLE junk(x); INSERT INTO junk VALUES (1);")
         .unwrap();
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 2);
+    assert_eq!(s.schema_version().unwrap(), 3);
     assert!(dir.path().join("taskcraft.db.bak-v0").exists());
 }
 
