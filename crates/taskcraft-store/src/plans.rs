@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::tasks::delete_task_row;
-use crate::Store;
+use crate::{name_key, Store};
 use rusqlite::{params, Connection, OptionalExtension};
 
 impl Store {
@@ -303,11 +303,17 @@ fn clean_name(name: &str) -> Result<&str> {
 }
 
 fn plan_name_taken(conn: &Connection, name: &str, except: Option<i64>) -> Result<bool> {
-    Ok(conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM plans WHERE name = ?1 COLLATE NOCASE AND id != ?2)",
-        params![name, except.unwrap_or(-1)],
-        |r| r.get(0),
-    )?)
+    let key = name_key(name);
+    let except = except.unwrap_or(-1);
+    let mut st = conn.prepare("SELECT id, name FROM plans")?;
+    let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+    for row in rows {
+        let (id, n) = row?;
+        if id != except && name_key(&n) == key {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn exists(conn: &Connection, table: &str, id: i64) -> Result<bool> {

@@ -26,6 +26,12 @@ pub struct Store {
     pub(crate) conn: Connection,
 }
 
+/// Case-insensitive (full Unicode) comparison key for plan and label names;
+/// SQLite's NOCASE only folds ASCII.
+pub(crate) fn name_key(s: &str) -> String {
+    s.to_lowercase()
+}
+
 pub(crate) fn fmt_ts(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
 }

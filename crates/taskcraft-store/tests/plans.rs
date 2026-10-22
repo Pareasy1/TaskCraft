@@ -301,3 +301,19 @@ fn localize_seed_keeps_user_renamed() {
     assert_eq!(s.list_plans().unwrap()[0].name, "Lavoro");
     assert_eq!(s.list_buckets(1).unwrap()[0].name, "Mio");
 }
+
+#[test]
+fn duplicate_plan_name_unicode_case() {
+    let f = fx();
+    let citta = f.s.create_plan("Città", "#fff").unwrap();
+    assert!(matches!(
+        f.s.create_plan("CITTÀ", "#fff"),
+        Err(StoreError::Duplicate)
+    ));
+    let att = f.s.create_plan("Attività", "#fff").unwrap();
+    assert!(matches!(
+        f.s.update_plan(att, Some("città"), None),
+        Err(StoreError::Duplicate)
+    ));
+    f.s.update_plan(citta, Some("CITTÀ"), None).unwrap();
+}
