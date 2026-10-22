@@ -27,6 +27,27 @@ export function dropNeighbours(ids: number[], movingId: number, index: number): 
   return { before: index > 0 ? rest[index - 1] ?? null : null, after: rest[index] ?? null };
 }
 
+/** Insertion index for a pointer at `y`, given the card midpoints in column order. */
+export function dropIndex(midpoints: number[], y: number): number {
+  const i = midpoints.findIndex((m) => y < m);
+  return i < 0 ? midpoints.length : i;
+}
+
+/** `ids` with `id` moved to insertion index `index` (0…ids.length, counted in the original list). */
+export function insertAt(ids: number[], id: number, index: number): number[] {
+  const from = ids.indexOf(id);
+  const out = ids.filter((x) => x !== id);
+  out.splice(from >= 0 && index > from ? index - 1 : index, 0, id);
+  return out;
+}
+
+/** Board reading order inside a plan: bucket position, then the card's place in it. */
+export function planOrder(buckets: Bucket[]) {
+  const pos = new Map(buckets.map((b) => [b.id, b.sort]));
+  return (a: { bucketId: number; sortOrder: number; id: number }, b: { bucketId: number; sortOrder: number; id: number }) =>
+    (pos.get(a.bucketId) ?? Infinity) - (pos.get(b.bucketId) ?? Infinity) || a.sortOrder - b.sortOrder || a.id - b.id;
+}
+
 export type DueKey = 'overdue' | 'today' | 'thisWeek' | 'later' | 'nodate';
 const DUE_KEYS: DueKey[] = ['overdue', 'today', 'thisWeek', 'later', 'nodate'];
 

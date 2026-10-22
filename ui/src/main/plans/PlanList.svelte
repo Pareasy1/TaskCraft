@@ -6,6 +6,8 @@
   import { nextPlanColor, PLAN_COLORS, uniqueName } from '../../lib/plans';
   import type { DeleteMode, Plan } from '../../lib/types';
   import DeleteDialog from './DeleteDialog.svelte';
+  import Menu from '../Menu.svelte';
+  import { PopupMenu } from '../../lib/menu.svelte';
 
   let {
     plans,
@@ -107,70 +109,12 @@
   }
 
   // ── Menu ("…" button, right-click, Shift+F10) ──
-  let menu = $state<{ plan: Plan; x: number; y: number } | null>(null);
-  let menuEl = $state<HTMLDivElement | undefined>();
-  let menuOpener: HTMLElement | null = null;
+  const menu = new PopupMenu<Plan>();
   const rowButton = (id: number) => listEl?.querySelector<HTMLButtonElement>(`[data-plan="${id}"]`);
   let listEl = $state<HTMLDivElement | undefined>();
-
-  async function openMenu(p: Plan, x: number, y: number, opener: HTMLElement) {
-    menuOpener = opener;
-    menu = { plan: p, x, y };
-    await tick();
-    if (!menuEl) return;
-    // Keep the menu inside the window; it may extend over the content area.
-    const r = menuEl.getBoundingClientRect();
-    menu = {
-      plan: p,
-      x: Math.max(8, Math.min(x, innerWidth - r.width - 8)),
-      y: y + r.height > innerHeight - 8 ? Math.max(8, innerHeight - r.height - 8) : y,
-    };
-    menuItems()[0]?.focus();
-  }
-  function openFromButton(p: Plan, el: HTMLElement) {
-    if (menu?.plan.id === p.id) return closeMenu();
-    const r = el.getBoundingClientRect();
-    openMenu(p, r.left, r.bottom + 4, el);
-  }
-  function closeMenu(refocus = true) {
-    menu = null;
-    if (refocus && menuOpener?.isConnected) menuOpener.focus();
-  }
-  const menuItems = () => [...(menuEl?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? [])];
-  function menuKeys(e: KeyboardEvent) {
-    e.stopPropagation();
-    const list = menuItems();
-    const i = list.indexOf(document.activeElement as HTMLButtonElement);
-    const go = (n: number) => list[(n + list.length) % list.length]?.focus();
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') go(i + 1);
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') go(i - 1);
-    else if (e.key === 'Home') go(0);
-    else if (e.key === 'End') go(list.length - 1);
-    else if (e.key === 'Escape') closeMenu();
-    else if (e.key === 'Tab') return closeMenu(false);
-    else return;
-    e.preventDefault();
-  }
-  function rowKeys(e: KeyboardEvent, p: Plan) {
-    // Shift+F10 and the menu key open the plan menu, like a right-click.
-    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
-      e.preventDefault();
-      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      openMenu(p, r.left + 16, r.bottom, e.currentTarget as HTMLElement);
-    }
-  }
-  $effect(() => {
-    if (!menu) return;
-    const away = (e: PointerEvent) => !menuEl?.contains(e.target as Node) && !menuOpener?.contains(e.target as Node) && closeMenu(false);
-    window.addEventListener('pointerdown', away, true);
-    return () => window.removeEventListener('pointerdown', away, true);
-  });
+  const closeMenu = (refocus = true) => menu.close(refocus);
   /** Runs a menu command on the menu's plan once the menu has closed. */
-  function act(fn: (p: Plan) => void, refocus = true) {
-    const p = menu?.plan;
-    closeMenu(refocus);
-    if (p) fn(p);
-  }
+  const act = (fn: (p: Plan) => void, refocus = true) => menu.act(fn, refocus);
 
   async function recolor(p: Plan, color: string) {
     closeMenu();
@@ -231,17 +175,17 @@
         ondragover={(e) => dragOver(e, i)}
         ondrop={drop}
         ondragend={endDrag}
-        oncontextmenu={(e) => { e.preventDefault(); openMenu(p, e.clientX, e.clientY, rowButton(p.id) ?? (e.currentTarget as HTMLElement)); }}
+        oncontextmenu={(e) => { e.preventDefault(); menu.open(p, e.clientX, e.clientY, rowButton(p.id) ?? (e.currentTarget as HTMLElement)); }}
       >
         <button class="main" data-plan={p.id} aria-current={scope === p.id ? 'page' : undefined} class:on={scope === p.id}
-          onclick={() => onselect(p.id)} ondblclick={() => startRename(p)} onkeydown={(e) => rowKeys(e, p)}>
+          onclick={() => onselect(p.id)} ondblclick={() => startRename(p)} onkeydown={(e) => menu.openFromKey(e, p)}>
           <span class="dot" style="background:{p.color}" aria-hidden="true"></span>
           <span class="nm">{p.name}</span>
           <span class="n">{p.openCount}</span>
         </button>
-        <button class="icon-btn more" class:open={menu?.plan.id === p.id} aria-label={t('plans.options', { name: p.name })} title={t('plans.options', { name: p.name })}
-          aria-haspopup="menu" aria-expanded={menu?.plan.id === p.id}
-          onclick={(e) => openFromButton(p, e.currentTarget)}><Ellipsis size={14} aria-hidden="true" /></button>
+        <button class="icon-btn more" class:open={menu.current?.target.id === p.id} aria-label={t('plans.options', { name: p.name })} title={t('plans.options', { name: p.name })}
+          aria-haspopup="menu" aria-expanded={menu.current?.target.id === p.id}
+          onclick={(e) => menu.openBelow(p, e.currentTarget, (x) => x.id === p.id)}><Ellipsis size={14} aria-hidden="true" /></button>
       </div>
     {/if}
   {/each}
@@ -254,10 +198,10 @@
   </div>
 </div>
 
-{#if menu}
-  {@const p = menu.plan}
+{#if menu.current}
+  {@const p = menu.current.target}
   {@const index = plans.findIndex((x) => x.id === p.id)}
-  <div class="menu" role="menu" tabindex="-1" aria-label={p.name} style="left:{menu.x}px; top:{menu.y}px" bind:this={menuEl} onkeydown={menuKeys}>
+  <Menu {menu} label={p.name}>
     <button role="menuitem" onclick={() => act(startRename, false)}>{t('plans.rename')}</button>
     <div class="sub" id="plan-color-label">{t('plans.color')}</div>
     <div class="swatches" role="group" aria-labelledby="plan-color-label">
@@ -271,7 +215,7 @@
     <button role="menuitem" disabled={index >= plans.length - 1} onclick={() => act((x) => shift(x, 1))}>{t('plans.moveDown')}</button>
     <div class="sep" role="separator"></div>
     <button role="menuitem" class="danger" onclick={() => askDelete(p)}>{t('plans.delete')}</button>
-  </div>
+  </Menu>
 {/if}
 
 {#if deleting}
@@ -337,26 +281,9 @@
     outline: none;
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
-  /* Fixed so the sidebar's clipping never cuts it off; it may extend over the content. */
-  .menu {
-    position: fixed;
-    z-index: 30;
-    min-width: 180px;
-    background: var(--surface-strong);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    padding: 4px;
-  }
-  .menu:focus { outline: none; }
-  .menu > button { display: block; width: 100%; border: none; background: none; padding: 5px 8px; border-radius: 5px; text-align: left; color: var(--text); }
-  .menu > button:hover:not(:disabled), .menu > button:focus-visible { background: var(--hover); outline: none; }
-  .menu > button:disabled { color: var(--faint); }
-  .menu > button.danger { color: var(--danger); }
   .sub { font-size: 12px; color: var(--muted); padding: 6px 8px 2px; }
   .swatches { display: flex; gap: 7px; padding: 4px 8px 6px; }
   .sw { width: 16px; height: 16px; border-radius: 50%; border: none; padding: 0; flex: none; }
   .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .sw[aria-checked='true'] { box-shadow: 0 0 0 2px var(--surface-strong), 0 0 0 3.5px var(--text); }
-  .sep { height: 1px; background: var(--border); margin: 4px 2px; }
 </style>

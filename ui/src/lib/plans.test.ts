@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketColumns, dropNeighbours, dueColumns, labelColumns, nextPlanColor, uniqueName } from './plans';
+import { bucketColumns, dropIndex, dropNeighbours, insertAt, planOrder, dueColumns, labelColumns, nextPlanColor, uniqueName } from './plans';
 import { errorMessage } from './api';
 import { t } from './i18n';
 import type { Bucket, Plan } from './types';
@@ -23,6 +23,33 @@ describe('dropNeighbours', () => {
     expect(dropNeighbours([1, 2, 3], 1, 1)).toEqual({ before: 2, after: 3 });
     expect(dropNeighbours([1, 2, 3], 9, 3)).toEqual({ before: 3, after: null });
     expect(dropNeighbours([], 9, 0)).toEqual({ before: null, after: null });
+  });
+});
+
+describe('dropIndex', () => {
+  it('counts the card midpoints above the pointer', () => {
+    expect(dropIndex([10, 30, 50], 5)).toBe(0);
+    expect(dropIndex([10, 30, 50], 20)).toBe(1);
+    expect(dropIndex([10, 30, 50], 60)).toBe(3);
+    expect(dropIndex([], 60)).toBe(0);
+  });
+});
+
+describe('insertAt', () => {
+  it('moves an id to an insertion index of the original list', () => {
+    expect(insertAt([1, 2, 3], 1, 3)).toEqual([2, 3, 1]);
+    expect(insertAt([1, 2, 3], 3, 0)).toEqual([3, 1, 2]);
+    expect(insertAt([1, 2, 3], 2, 1)).toEqual([1, 2, 3]);
+    expect(insertAt([1, 2, 3], 2, 2)).toEqual([1, 2, 3]);
+    expect(insertAt([1, 2, 3], 1, 2)).toEqual([2, 1, 3]);
+  });
+});
+
+describe('planOrder', () => {
+  it('reads like the board: bucket order, then card order', () => {
+    const cmp = planOrder([b(1, 1), b(2, 0)]);
+    const cards = [card(1, 1, 0), card(2, 2, 20), card(3, 2, 10), card(4, 1, 0)];
+    expect([...cards].sort(cmp).map((c) => c.id)).toEqual([3, 2, 1, 4]);
   });
 });
 
