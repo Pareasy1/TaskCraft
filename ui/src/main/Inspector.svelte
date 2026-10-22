@@ -3,7 +3,7 @@
   import { t } from '../lib/i18n';
   import { onDestroy, tick } from 'svelte';
   import { X, Trash2 } from 'lucide-svelte';
-  import type { Calendar, EventInput, TaskInput, TaskLabel } from '../lib/types';
+  import type { Bucket, Calendar, EventInput, Plan, TaskInput, TaskLabel } from '../lib/types';
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { api, errorMessage } from '../lib/api';
@@ -19,6 +19,7 @@
     target,
     calendars,
     labels = [],
+    plans = [],
     onclose,
     onsaved,
     askScope,
@@ -26,6 +27,7 @@
     target: Target;
     calendars: Calendar[];
     labels?: TaskLabel[];
+    plans?: Plan[];
     onclose: () => void;
     onsaved: () => void;
     askScope: (verb: string, allowThis: boolean) => Promise<'this' | 'all' | null>;
@@ -53,6 +55,27 @@
     confirmDelete = false;
     error = '';
   });
+
+  // Plan and bucket: the bucket list follows the chosen plan.
+  let planBuckets = $state<Bucket[]>([]);
+  $effect(() => {
+    const id = task?.planId;
+    if (id == null) return void (planBuckets = []);
+    api.listBuckets(id).then(
+      (list) => {
+        if (task?.planId !== id) return;
+        planBuckets = list;
+        // A new task (or one whose bucket vanished) takes the plan's first bucket.
+        if (!list.some((b) => b.id === task?.bucketId) && task) task.bucketId = list[0]?.id ?? null;
+      },
+      (e) => (error = errorMessage(e)),
+    );
+  });
+  function pickPlan(id: number) {
+    if (!task || id === task.planId) return;
+    task.planId = id;
+    task.bucketId = null; // set to the plan's first bucket once its buckets load
+  }
 
   let labelText = $state('');
   const labelColor = (name: string) => labels.find((l) => l.name.toLowerCase() === name.toLowerCase())?.color ?? 'var(--faint)';
@@ -256,6 +279,19 @@
         <datalist id="label-names">{#each labels as l}<option value={l.name}></option>{/each}</datalist>
       </div>
     </div>
+    {#if plans.length}
+      <label class="row"><span>{t('details.plan')}</span>
+        <select class="field" value={task.planId ?? ''} onchange={(e) => pickPlan(Number(e.currentTarget.value))}>
+          {#if task.planId == null}<option value="" disabled></option>{/if}
+          {#each plans as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        </select>
+      </label>
+      <label class="row"><span>{t('details.bucket')}</span>
+        <select class="field" bind:value={task.bucketId} disabled={!planBuckets.length}>
+          {#each planBuckets as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+        </select>
+      </label>
+    {/if}
     <label class="row"><span>{t('inspector.calendar')}</span>
       <select class="field" bind:value={task.calendarId}>{#each calendars as c}<option value={c.id}>{c.name}</option>{/each}</select>
     </label>

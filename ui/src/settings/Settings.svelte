@@ -5,10 +5,12 @@
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { Plus, Trash2, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Settings } from '../lib/types';
+  import type { Calendar, Plan, Settings } from '../lib/types';
 
   let settings = $state<Settings | null>(null);
   let calendars = $state<Calendar[]>([]);
+  let plans = $state<Plan[]>([]);
+  let defaultPlan = $state<number | null>(null);
   let error = $state('');
   let notice = $state('');
   let recording = $state(false);
@@ -17,7 +19,7 @@
 
   async function load() {
     try {
-      [settings, calendars] = await Promise.all([api.getSettings(), api.listCalendars()]);
+      [settings, calendars, plans, defaultPlan] = await Promise.all([api.getSettings(), api.listCalendars(), api.listPlans(), api.getDefaultPlan()]);
     } catch (e) {
       error = errorMessage(e);
     }
@@ -27,6 +29,18 @@
     if (!settings) return;
     try {
       settings = await api.setSettings({ ...settings, ...patch });
+      error = '';
+      flash(t('settings.saved'));
+    } catch (e) {
+      error = errorMessage(e);
+      await load();
+    }
+  }
+
+  async function setDefaultPlan(id: number) {
+    try {
+      await api.setDefaultPlan(id);
+      defaultPlan = id;
       error = '';
       flash(t('settings.saved'));
     } catch (e) {
@@ -132,6 +146,12 @@
         <span>{t('settings.defaultCalendar')}</span>
         <select class="field" value={settings.defaultCalendarId} onchange={(e) => update({ defaultCalendarId: Number(e.currentTarget.value) })}>
           {#each calendars as c}<option value={c.id}>{c.name}</option>{/each}
+        </select>
+      </label>
+      <label class="row">
+        <span>{t('settings.defaultPlan')}</span>
+        <select class="field" value={defaultPlan} onchange={(e) => setDefaultPlan(Number(e.currentTarget.value))}>
+          {#each plans as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </select>
       </label>
       <label class="row">

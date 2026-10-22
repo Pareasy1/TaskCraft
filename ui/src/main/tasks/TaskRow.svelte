@@ -2,7 +2,7 @@
   import { activate, isSelected, select } from '../../lib/selection.svelte';
   import { t } from '../../lib/i18n';
   import { Repeat } from 'lucide-svelte';
-  import type { Task, TaskStatus } from '../../lib/types';
+  import type { Plan, Task, TaskStatus } from '../../lib/types';
   import StatusGlyph from './StatusGlyph.svelte';
   import LabelChip from './LabelChip.svelte';
 
@@ -11,6 +11,7 @@
     due,
     late,
     activeLabels,
+    plan,
     onstatus,
     onopen,
     onlabel,
@@ -19,6 +20,8 @@
     due: string;
     late: boolean;
     activeLabels: number[];
+    /** Shown as a dot before the title (All tasks). */
+    plan?: Plan;
     onstatus: (s: TaskStatus) => void;
     onopen: () => void;
     onlabel: (id: number) => void;
@@ -29,6 +32,7 @@
 <div class="row" class:done={task.status === 'done'} class:is-selected={isSelected('task', task.id)}
   onclick={() => select({ kind: 'task', id: task.id })} ondblclick={onopen}>
   <StatusGlyph status={task.status} onchange={onstatus} />
+  {#if plan}<span class="plan" style="background:{plan.color}" title={plan.name} aria-hidden="true"></span>{/if}
   <button class="open-btn title" onclick={(e) => { e.stopPropagation(); activate(e, onopen, () => select({ kind: 'task', id: task.id })); }}>{task.title}</button>
   {#if task.labels.length}
     <span class="labels">
@@ -59,5 +63,6 @@
   .row :global(.rep) { color: var(--faint); flex: none; }
   .due { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .due.late { color: var(--danger); }
+  .plan { width: 7px; height: 7px; border-radius: 50%; flex: none; margin: 0 -3px 0 -2px; }
   .cal { width: 6px; height: 6px; border-radius: 50%; flex: none; opacity: 0.8; }
 </style>

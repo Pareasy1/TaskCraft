@@ -88,6 +88,7 @@ export function taskInput(t: Task): TaskInput {
   return {
     calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz,
     rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
+    planId: t.planId, bucketId: t.bucketId,
   };
 }
 
@@ -102,6 +103,9 @@ export interface TaskForm {
   tz: string;
   status: TaskStatus;
   labels: string[];
+  /** Null for a new task: the store picks the default plan / the plan's first bucket. */
+  planId: number | null;
+  bucketId: number | null;
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
@@ -118,6 +122,8 @@ export function taskToForm(t: TaskInput): TaskForm {
     tz: t.tz,
     status: t.status,
     labels: [...t.labels],
+    planId: t.planId ?? null,
+    bucketId: t.bucketId ?? null,
   };
 }
 
@@ -135,6 +141,8 @@ export function formToTask(f: TaskForm): TaskInput {
     alerts: f.alerts,
     status: f.status,
     labels: f.labels,
+    planId: f.planId,
+    bucketId: f.bucketId,
   };
 }
 
@@ -149,7 +157,13 @@ export function mergeTaskSave(original: TaskInput, edited: TaskInput, latest: Ta
   const base = formToTask(taskToForm(original));
   const out = { ...edited };
   for (const k of Object.keys(edited) as (keyof TaskInput)[]) {
+    if (k === 'planId' || k === 'bucketId') continue;
     if (JSON.stringify(edited[k]) === JSON.stringify(base[k])) (out as Record<string, unknown>)[k] = latest[k];
+  }
+  // A bucket belongs to one plan, so the placement is kept or replaced as a pair.
+  if ((edited.planId ?? null) === (base.planId ?? null) && (edited.bucketId ?? null) === (base.bucketId ?? null)) {
+    out.planId = latest.planId;
+    out.bucketId = latest.bucketId;
   }
   return out;
 }

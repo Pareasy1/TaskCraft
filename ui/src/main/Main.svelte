@@ -6,7 +6,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Hit, ItemRef, Occurrence, Plan, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
+  import type { Bucket, Calendar, Hit, ItemRef, Occurrence, Plan, Settings, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { addDays, monthGrid, startOfDay, weekDays } from '../lib/layout';
   import { fmtLongDate, fmtShortDate, fmtTime, monthTitle, ymd } from '../lib/format';
   import Toolbar from './Toolbar.svelte';
@@ -36,6 +36,8 @@
   /** Which plan the Tasks view shows; 'all' is every plan. */
   let scope = $state<number | 'all'>('all');
   let scopePlan = $derived(scope === 'all' ? null : plans.find((p) => p.id === scope) ?? null);
+  /** The scoped plan's buckets. Main owns them like every other store list: loaded in refresh(). */
+  let buckets = $state<Bucket[]>([]);
   let scoped = $derived(scopePlan ? allTasks.filter((x) => x.planId === scopePlan.id) : allTasks);
   // Sidebar groups use the same rules as the Tasks page (see sidebarSections).
   const SECTION_NAMES = {
@@ -91,6 +93,7 @@
       plans = pls;
       // A deleted plan drops the view back to every plan.
       if (scope !== 'all' && !pls.some((p) => p.id === scope)) scope = 'all';
+      await loadBuckets();
       allTasks = all;
       labels = lbls;
       occurrences = occ;
@@ -106,6 +109,17 @@
     void range;
     void sideMonth;
     refresh();
+  });
+
+  async function loadBuckets() {
+    const id = scope;
+    const list = id === 'all' ? [] : await api.listBuckets(id);
+    if (scope === id) buckets = list; // ignore a reply for a plan we already left
+  }
+  // Switching plans needs only that plan's buckets.
+  $effect(() => {
+    void scope;
+    loadBuckets().catch((e) => (error = errorMessage(e)));
   });
 
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -329,7 +343,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={scoped} {labels} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}
@@ -345,7 +359,7 @@
     </div>
   </main>
   {#if target}
-    <Inspector {target} {calendars} {labels} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
+    <Inspector {target} {calendars} {labels} {plans} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
   {/if}
 </div>
 

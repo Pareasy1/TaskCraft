@@ -12,6 +12,16 @@ describe('task form', () => {
     expect(out.status).toBe('inProgress');
     expect(out.labels).toEqual(['errands', 'Home']);
   });
+
+  it('round-trips plan and bucket', () => {
+    const input: TaskInput = {
+      calendarId: 1, title: 'Print stand', due: null, dueHasTime: false, tz: 'Europe/Rome',
+      rrule: null, notes: null, alerts: [], status: 'todo', labels: [], planId: 2, bucketId: 5,
+    };
+    const out = formToTask(taskToForm(input));
+    expect(out.planId).toBe(2);
+    expect(out.bucketId).toBe(5);
+  });
 });
 
 import { mergeTaskSave } from './edit';
@@ -39,6 +49,16 @@ describe('mergeTaskSave', () => {
     expect(out.status).toBe('done');
     expect(out.labels).toEqual(['work', 'urgent']);
   });
+
+  it('plan and bucket move together', () => {
+    const placed = { ...original, planId: 1, bucketId: 1 };
+    // The card was dragged to another plan's bucket while the dialog was open.
+    const moved = { ...placed, planId: 2, bucketId: 4 };
+    expect(mergeTaskSave(placed, formToTask(taskToForm(placed)), moved)).toMatchObject({ planId: 2, bucketId: 4 });
+    // The user picked another bucket in the same plan: their pair wins as a whole.
+    const edited = formToTask({ ...taskToForm(placed), bucketId: 2 });
+    expect(mergeTaskSave(placed, edited, moved)).toMatchObject({ planId: 1, bucketId: 2 });
+  });
 });
 
 import { taskInput } from './edit';
@@ -49,11 +69,11 @@ describe('taskInput', () => {
     const t: Task = {
       id: 7, calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
       completedAt: null, recurring: false, rrule: null, notes: 'n', color: '#fff', alerts: [], status: 'inProgress',
-      labels: [{ id: 1, name: 'home', color: '#000' }],
+      labels: [{ id: 1, name: 'home', color: '#000' }], planId: 3, bucketId: 8, sortOrder: 20,
     };
     expect(taskInput(t)).toEqual({
       calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
-      rrule: null, notes: 'n', alerts: [], status: 'inProgress', labels: ['home'],
+      rrule: null, notes: 'n', alerts: [], status: 'inProgress', labels: ['home'], planId: 3, bucketId: 8,
     });
   });
 });

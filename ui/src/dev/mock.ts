@@ -99,6 +99,13 @@ export function installMock() {
     t.status = status;
     t.completedAt = status === 'done' ? new Date().toISOString() : null;
   };
+  // A bucket decides its plan; a plan alone means its first bucket (placed last).
+  const place = (t: MockTask, planId?: number | null, bucketId?: number | null) => {
+    if (bucketId == null && (planId == null || planId === t.planId)) return;
+    const b = bucketId != null ? buckets.find((x) => x.id === bucketId)! : buckets.filter((x) => x.planId === planId).sort((p, q) => p.sort - q.sort)[0];
+    if (b.id === t.bucketId) return;
+    Object.assign(t, { planId: b.planId, bucketId: b.id, sortOrder: Math.max(0, ...all.filter((x) => x.bucketId === b.id).map((x) => x.sortOrder)) + 10 });
+  };
   mockIPC((cmd, args: any) => {
     switch (cmd) {
       case 'list_calendars': return calendars;
@@ -113,8 +120,17 @@ export function installMock() {
         const i = args.input;
         Object.assign(t, { title: i.title, due: i.due, dueHasTime: i.dueHasTime, notes: i.notes, labels: labels.filter((l) => i.labels.includes(l.name)) });
         setStatus(t, i.status);
+        place(t, i.planId, i.bucketId);
         changed();
         return null;
+      }
+      case 'create_task': {
+        const i = args.input;
+        const t = task(nextId++, i.title, i.due, i.dueHasTime, i.status, labels.filter((l) => i.labels.includes(l.name)).map((l) => l.id));
+        place(t, i.planId ?? defaultPlan, i.bucketId);
+        all = [...all, t];
+        changed();
+        return t.id;
       }
       case 'list_labels': return [...labels].sort((a, b) => a.name.localeCompare(b.name));
       case 'update_label': {
@@ -134,9 +150,10 @@ export function installMock() {
         const tags = [...String(args.text).matchAll(/#(\w+)/g)].map((m) => m[1]);
         const title = String(args.text).replace(/#\w+/g, '').trim();
         const lbl = tags.map((n) => labels.find((l) => l.name === n)?.id).filter((x): x is number => !!x);
-        all = [...all, task(100 + all.length, title, null, false, 'todo', lbl)];
+        const id = nextId++;
+        all = [...all, task(id, title, null, false, 'todo', lbl)];
         changed();
-        return { kind: 'task', id: 100 + all.length };
+        return { kind: 'task', id };
       }
       case 'list_plans': return [...plans].sort((a, b) => a.sort - b.sort).map((p) => ({ ...p, openCount: openCount(p.id) }));
       case 'create_plan': {
