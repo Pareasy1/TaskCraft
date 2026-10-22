@@ -194,3 +194,17 @@ fn many_midpoint_moves_renumber() {
     sorts.dedup();
     assert_eq!(sorts.len(), 62);
 }
+
+#[test]
+fn update_same_plan_keeps_bucket_and_order() {
+    let (_d, s) = store();
+    let a = s.default_plan_id().unwrap();
+    let b2 = s.create_bucket(a, "Two").unwrap();
+    let first = add(&s, "first", b2);
+    let t = add(&s, "t", b2);
+    let _ = first;
+    let before = s.get_task(t).unwrap();
+    s.update_task(t, &input("t", Some(a), None)).unwrap();
+    let after = s.get_task(t).unwrap();
+    assert_eq!((after.plan_id, after.bucket_id, after.sort_order), (a, b2, before.sort_order));
+}

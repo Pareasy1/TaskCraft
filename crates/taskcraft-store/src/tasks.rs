@@ -67,7 +67,9 @@ impl Store {
             })
             .optional()?;
         let cur = cur.ok_or(StoreError::NotFound)?;
-        let (plan_id, bucket_id, sort) = if t.plan_id.is_none() && t.bucket_id.is_none() {
+        let (plan_id, bucket_id, sort) = if t.bucket_id.is_none()
+            && t.plan_id.is_none_or(|p| p == cur.0)
+        {
             (cur.0, cur.1, None)
         } else {
             let (p, b) = self.placement(tx, t.plan_id, t.bucket_id)?;
