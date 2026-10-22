@@ -8,7 +8,7 @@
     applyFilters, boardColumns, filterTasks, isOverdue, STATUSES, STATUS_LABEL, taskCounts, taskPageGroups,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
-  import { dueColumns, labelColumns, planOrder, type DueKey, type GroupBy } from '../lib/plans';
+  import { dueColumns, labelColumns, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
   import { PopupMenu } from '../lib/menu.svelte';
   import Menu from './Menu.svelte';
   import HighlightInput from '../quick/HighlightInput.svelte';
@@ -195,13 +195,18 @@
     if (e.key === 'Escape') return void (text = '');
     if (e.key !== 'Enter' || !text.trim()) return;
     try {
-      const hinted = !!parsed?.plan;
-      const ref = await api.createFromText(text, true);
+      const typed = text;
+      const scopePlan = plan;
+      const first = buckets[0];
+      // Parse now rather than trusting the debounced preview, which may lag behind a fast Enter.
+      const hint = scopePlan ? (await api.parsePreview(typed, true)).plan : null;
+      const ref = await api.createFromText(typed, true);
       text = '';
       parsed = null;
+      if (!scopePlan || !first || ref.kind !== 'task') return;
       // Inside a plan, a task without its own plan hint goes to the end of this plan's first bucket.
-      const first = buckets[0];
-      if (plan && first && !hinted && ref.kind === 'task') {
+      const [created, defaultPlanId] = await Promise.all([api.getTask(ref.id), api.getDefaultPlan()]);
+      if (quickAddNeedsMove({ hint, taskPlanId: created.planId, scopePlanId: scopePlan.id, defaultPlanId })) {
         const last = tasks.filter((x) => x.bucketId === first.id).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).at(-1);
         await api.moveTask(ref.id, first.id, last?.id ?? null, null);
       }

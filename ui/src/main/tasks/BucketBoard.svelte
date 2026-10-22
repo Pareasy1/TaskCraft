@@ -55,22 +55,30 @@
 
   // ── Moving cards ──
   /** Keyboard focus to restore on this card once the board re-renders. */
-  let refocus = $state<number | null>(null);
+  // Plain variable: only a re-render (new `columns`) should act on it, not setting it.
+  let refocus: number | null = null;
   $effect(() => {
     void columns;
     if (refocus == null) return;
     const id = refocus;
     tick().then(() => {
       const el = boardEl?.querySelector<HTMLElement>(`[data-card-menu="${id}"]`);
-      if (el && el !== document.activeElement) {
-        el.focus();
+      // Found: done, whether or not focus had to move (a same-column move keeps the node).
+      if (el) {
+        if (el !== document.activeElement) el.focus();
         refocus = null;
       }
     });
   });
 
-  function moveTo(t: Task, bucketId: number, before: number | null, after: number | null) {
-    run(() => api.moveTask(t.id, bucketId, before, after));
+  async function moveTo(t: Task, bucketId: number, before: number | null, after: number | null) {
+    try {
+      await api.moveTask(t.id, bucketId, before, after);
+    } catch (e) {
+      if (refocus === t.id) refocus = null; // nothing moved: leave focus alone
+      onerror(errorMessage(e));
+      onreload();
+    }
   }
   /** Last card of another bucket (cards appended at the end). */
   function moveToBucket(t: Task, b: Bucket) {

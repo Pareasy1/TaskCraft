@@ -93,7 +93,8 @@
       plans = pls;
       // A deleted plan drops the view back to every plan.
       if (scope !== 'all' && !pls.some((p) => p.id === scope)) scope = 'all';
-      await loadBuckets();
+      // Buckets load separately so their failure never holds back the rest.
+      loadBuckets().catch((e) => (error = errorMessage(e)));
       allTasks = all;
       labels = lbls;
       occurrences = occ;
@@ -116,9 +117,10 @@
     const list = id === 'all' ? [] : await api.listBuckets(id);
     if (scope === id) buckets = list; // ignore a reply for a plan we already left
   }
-  // Switching plans needs only that plan's buckets.
+  // Switching plans needs only that plan's buckets; drop the old plan's meanwhile.
   $effect(() => {
     void scope;
+    buckets = [];
     loadBuckets().catch((e) => (error = errorMessage(e)));
   });
 

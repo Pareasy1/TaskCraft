@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketColumns, dropIndex, dropNeighbours, insertAt, planOrder, dueColumns, labelColumns, nextPlanColor, uniqueName } from './plans';
+import { bucketColumns, dropIndex, dropNeighbours, insertAt, planOrder, quickAddNeedsMove, dueColumns, labelColumns, nextPlanColor, uniqueName } from './plans';
 import { errorMessage } from './api';
 import { t } from './i18n';
 import type { Bucket, Plan } from './types';
@@ -51,6 +51,15 @@ describe('planOrder', () => {
     const cards = [card(1, 1, 0), card(2, 2, 20), card(3, 2, 10), card(4, 1, 0)];
     expect([...cards].sort(cmp).map((c) => c.id)).toEqual([3, 2, 1, 4]);
   });
+});
+
+describe('quickAddNeedsMove', () => {
+  // Viewing plan 2; the default plan is 1.
+  const at = (hint: string | null, taskPlan: number) => quickAddNeedsMove({ hint, taskPlanId: taskPlan, scopePlanId: 2, defaultPlanId: 1 });
+  it('moves a task without a plan hint from the default plan into the plan in view', () => expect(at(null, 1)).toBe(true));
+  it('keeps an explicit plan hint', () => expect(at('3D print', 1)).toBe(false));
+  it('leaves a task already in the plan in view', () => expect(at(null, 2)).toBe(false));
+  it('leaves a task the store put somewhere other than the default plan', () => expect(at(null, 3)).toBe(false));
 });
 
 describe('dueColumns', () => {

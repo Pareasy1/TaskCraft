@@ -48,6 +48,14 @@ export function planOrder(buckets: Bucket[]) {
     (pos.get(a.bucketId) ?? Infinity) - (pos.get(b.bucketId) ?? Infinity) || a.sortOrder - b.sortOrder || a.id - b.id;
 }
 
+/**
+ * Quick entry inside a plan: the store files a task without a (resolved) plan hint
+ * under the default plan; move it to the plan in view unless the text named a plan.
+ */
+export function quickAddNeedsMove(o: { hint: string | null; taskPlanId: number; scopePlanId: number; defaultPlanId: number }): boolean {
+  return !o.hint && o.taskPlanId !== o.scopePlanId && o.taskPlanId === o.defaultPlanId;
+}
+
 export type DueKey = 'overdue' | 'today' | 'thisWeek' | 'later' | 'nodate';
 const DUE_KEYS: DueKey[] = ['overdue', 'today', 'thisWeek', 'later', 'nodate'];
 

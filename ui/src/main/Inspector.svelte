@@ -75,6 +75,7 @@
     if (!task || id === task.planId) return;
     task.planId = id;
     task.bucketId = null; // set to the plan's first bucket once its buckets load
+    planBuckets = []; // never offer the old plan's buckets meanwhile
   }
 
   let labelText = $state('');
