@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { t } from './i18n';
 import type {
-  Calendar, CalendarInput, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem,
+  Bucket, Calendar, CalendarInput, DeleteMode, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
   Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus,
 } from './types';
 
@@ -35,6 +35,21 @@ export const api = {
   deleteCalendar: (id: number, moveTo: number) => invoke<void>('delete_calendar', { id, moveTo }),
   getSettings: () => invoke<Settings>('get_settings'),
   setSettings: (settings: Settings) => invoke<Settings>('set_settings', { settings }),
+  listPlans: () => invoke<Plan[]>('list_plans'),
+  createPlan: (name: string, color: string) => invoke<number>('create_plan', { name, color }),
+  updatePlan: (id: number, p: { name?: string | null; color?: string | null }) =>
+    invoke<void>('update_plan', { id, name: p.name ?? null, color: p.color ?? null }),
+  reorderPlans: (ids: number[]) => invoke<void>('reorder_plans', { ids }),
+  deletePlan: (id: number, mode: DeleteMode) => invoke<void>('delete_plan', { id, mode }),
+  listBuckets: (planId: number) => invoke<Bucket[]>('list_buckets', { planId }),
+  createBucket: (planId: number, name: string) => invoke<number>('create_bucket', { planId, name }),
+  renameBucket: (id: number, name: string) => invoke<void>('rename_bucket', { id, name }),
+  reorderBuckets: (planId: number, ids: number[]) => invoke<void>('reorder_buckets', { planId, ids }),
+  deleteBucket: (id: number, mode: DeleteMode) => invoke<void>('delete_bucket', { id, mode }),
+  moveTask: (taskId: number, bucketId: number, before: number | null, after: number | null) =>
+    invoke<void>('move_task', { taskId, bucketId, before, after }),
+  getDefaultPlan: () => invoke<number>('get_default_plan'),
+  setDefaultPlan: (id: number) => invoke<void>('set_default_plan', { id }),
   exportIcs: (path: string) => invoke<void>('export_ics', { path }),
   localTimeZone: () => invoke<string>('local_time_zone'),
   openMain: () => invoke<void>('open_main'),
@@ -46,7 +61,7 @@ export function onItemsChanged(cb: () => void): Promise<UnlistenFn> {
   return listen('items-changed', cb);
 }
 
-const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable'] as const;
+const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable', 'duplicate', 'last_plan', 'last_bucket'] as const;
 
 /** A user-facing message for an error from a command, in the app language when known. */
 export function errorMessage(e: unknown): string {
