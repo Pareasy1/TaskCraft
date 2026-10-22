@@ -145,15 +145,18 @@ impl Store {
     }
 
     pub fn delete_task(&self, id: i64) -> Result<()> {
-        self.in_tx(|tx| {
-            if tx.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
-                return Err(StoreError::NotFound);
-            }
-            tx.execute(
-                "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
-                [id],
-            )?;
-            Ok(())
-        })
+        self.in_tx(|tx| delete_task_row(tx, id))
     }
+}
+
+/// Deletes a task row and its alerts (task_labels cascade).
+pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()> {
+    if conn.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
+        return Err(StoreError::NotFound);
+    }
+    conn.execute(
+        "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
+        [id],
+    )?;
+    Ok(())
 }
