@@ -28,6 +28,9 @@ pub struct Text {
     pub all_day: &'static str,
     /// Prefix for a task's due time, e.g. "Due 18:00".
     pub due: &'static str,
+    /// Names of the seeded first plan and bucket.
+    pub seed_plan: &'static str,
+    pub seed_bucket: &'static str,
 }
 
 const EN: Text = Text {
@@ -37,6 +40,8 @@ const EN: Text = Text {
     quit: "Quit TaskCraft",
     all_day: "All day",
     due: "Due",
+    seed_plan: "My tasks",
+    seed_bucket: "To do",
 };
 
 const IT: Text = Text {
@@ -46,6 +51,8 @@ const IT: Text = Text {
     quit: "Esci da TaskCraft",
     all_day: "Tutto il giorno",
     due: "Scade alle",
+    seed_plan: "Le mie attività",
+    seed_bucket: "Da fare",
 };
 
 pub fn text(lang: Lang) -> &'static Text {

@@ -112,7 +112,9 @@ impl Store {
         match (plan_id, bucket_id) {
             (p, Some(b)) => {
                 let bp: i64 = conn
-                    .query_row("SELECT plan_id FROM buckets WHERE id = ?1", [b], |r| r.get(0))
+                    .query_row("SELECT plan_id FROM buckets WHERE id = ?1", [b], |r| {
+                        r.get(0)
+                    })
                     .optional()?
                     .ok_or_else(|| StoreError::Invalid("bucket does not exist".into()))?;
                 if p.is_some_and(|p| p != bp) {
@@ -121,8 +123,11 @@ impl Store {
                 Ok((bp, b))
             }
             (Some(p), None) => {
-                let exists: bool =
-                    conn.query_row("SELECT EXISTS(SELECT 1 FROM plans WHERE id = ?1)", [p], |r| r.get(0))?;
+                let exists: bool = conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM plans WHERE id = ?1)",
+                    [p],
+                    |r| r.get(0),
+                )?;
                 if !exists {
                     return Err(StoreError::Invalid("plan does not exist".into()));
                 }

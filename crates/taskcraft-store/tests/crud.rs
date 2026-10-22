@@ -186,7 +186,7 @@ fn from_parsed_all_day_range() {
     let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
     let p = parse("Trip Oct 24 to Oct 26", now, &ParseOptions::default());
     let cals = s.calendars().unwrap();
-    let NewItem::Event(e) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+    let NewItem::Event(e) = from_parsed(&p, Rome, personal(&s), &cals, 60, &[]) else {
         panic!("expected event")
     };
     assert_eq!(e.start, utc("2026-10-23T22:00:00Z"));
@@ -200,7 +200,7 @@ fn from_parsed_task_and_calendar() {
     let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
     let p = parse("todo call mom at 6pm /work", now, &ParseOptions::default());
     let cals = s.calendars().unwrap();
-    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60, &[]) else {
         panic!("expected task")
     };
     assert_eq!(t.calendar_id, work(&s));
@@ -215,7 +215,7 @@ fn from_parsed_copies_tags() {
     let cals = s.calendars().unwrap();
     let now = Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
     let p = parse("todo: pay rent #bills", now, &ParseOptions::default());
-    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60) else {
+    let NewItem::Task(t) = from_parsed(&p, Rome, personal(&s), &cals, 60, &[]) else {
         panic!("expected a task")
     };
     assert_eq!(t.labels, ["bills"]);

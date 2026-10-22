@@ -175,9 +175,14 @@ fn many_midpoint_moves_renumber() {
             let path = DB.with(|d| d.borrow().clone());
             let c = rusqlite::Connection::open(path).unwrap();
             let mut st = c
-                .prepare("SELECT id FROM tasks WHERE bucket_id=?1 AND id<>?2 ORDER BY sort_order, id")
+                .prepare(
+                    "SELECT id FROM tasks WHERE bucket_id=?1 AND id<>?2 ORDER BY sort_order, id",
+                )
                 .unwrap();
-            st.query_map([b, last], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
+            st.query_map([b, last], |r| r.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
         };
         let pos = v.iter().position(|t| *t == a).unwrap();
         let next = v[pos + 1];
@@ -206,5 +211,8 @@ fn update_same_plan_keeps_bucket_and_order() {
     let before = s.get_task(t).unwrap();
     s.update_task(t, &input("t", Some(a), None)).unwrap();
     let after = s.get_task(t).unwrap();
-    assert_eq!((after.plan_id, after.bucket_id, after.sort_order), (a, b2, before.sort_order));
+    assert_eq!(
+        (after.plan_id, after.bucket_id, after.sort_order),
+        (a, b2, before.sort_order)
+    );
 }

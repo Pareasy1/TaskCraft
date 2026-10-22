@@ -38,7 +38,12 @@ fn unknown_slash_stays_in_title() {
 
 #[test]
 fn slash_non_plans_untouched() {
-    for s in ["pay 1/2 rent", "lunch w/ Sam", "read https://x.y/casa", "a / b"] {
+    for s in [
+        "pay 1/2 rent",
+        "lunch w/ Sam",
+        "read https://x.y/casa",
+        "a / b",
+    ] {
         let a = parse_task(s, now(), &with_plans());
         let b = parse_task(s, now(), &ParseOptions::default());
         assert_eq!(a.plan, None, "{s}");

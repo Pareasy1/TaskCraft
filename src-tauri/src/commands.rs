@@ -76,11 +76,19 @@ fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
         .into_iter()
         .map(|c| c.name)
         .collect();
+    let plans = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .list_plans()?
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
     Ok(ParseOptions {
         default_event_minutes: settings.default_event_minutes,
         calendars,
         date_order: settings.date_order,
-        plans: vec![],
+        plans,
     })
 }
 
@@ -111,6 +119,7 @@ pub fn create_from_text_impl(
     let settings = st.settings.read().map_err(poisoned)?.clone();
     let store = st.store.lock().map_err(poisoned)?;
     let calendars = store.calendars()?;
+    let plans = store.list_plans()?;
     let default_cal = calendars
         .iter()
         .find(|c| c.id == settings.default_calendar_id)
@@ -123,6 +132,7 @@ pub fn create_from_text_impl(
         default_cal,
         &calendars,
         settings.default_event_minutes,
+        &plans,
     );
     let r = match item {
         NewItem::Event(e) => ItemRef {
@@ -287,6 +297,12 @@ pub fn set_task_status(
 pub fn set_ui_language(app: AppHandle, st: State<AppState>, lang: String) -> CmdResult<()> {
     let lang = crate::i18n::Lang::from_code(&lang);
     *st.lang.write().map_err(poisoned)? = lang;
+    let text = crate::i18n::text(lang);
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .localize_seed(text.seed_plan, text.seed_bucket)?;
+    changed(&app);
     if let Err(e) = crate::tray::set_menu_language(&app, lang) {
         tracing::warn!(error = %e, "cannot update tray menu language");
     }
@@ -476,6 +492,161 @@ pub fn export_ics(st: State<AppState>, path: String) -> CmdResult<()> {
     Ok(())
 }
 
+fn check_color(c: &str) -> CmdResult<()> {
+    if is_hex_color(c) {
+        Ok(())
+    } else {
+        Err(CmdError::new("invalid", "Pick a plan color"))
+    }
+}
+
+#[tauri::command]
+pub fn list_plans(st: State<AppState>) -> CmdResult<Vec<Plan>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_plans()?)
+}
+
+#[tauri::command]
+pub fn create_plan(
+    app: AppHandle,
+    st: State<AppState>,
+    name: String,
+    color: String,
+) -> CmdResult<i64> {
+    check_color(&color)?;
+    let id = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .create_plan(&name, &color)?;
+    changed(&app);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_plan(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    name: Option<String>,
+    color: Option<String>,
+) -> CmdResult<()> {
+    if let Some(c) = &color {
+        check_color(c)?;
+    }
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .update_plan(id, name.as_deref(), color.as_deref())?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_plans(app: AppHandle, st: State<AppState>, ids: Vec<i64>) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.reorder_plans(&ids)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_plan(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    mode: DeleteMode,
+) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.delete_plan(id, mode)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_buckets(st: State<AppState>, plan_id: i64) -> CmdResult<Vec<Bucket>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_buckets(plan_id)?)
+}
+
+#[tauri::command]
+pub fn create_bucket(
+    app: AppHandle,
+    st: State<AppState>,
+    plan_id: i64,
+    name: String,
+) -> CmdResult<i64> {
+    let id = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .create_bucket(plan_id, &name)?;
+    changed(&app);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn rename_bucket(app: AppHandle, st: State<AppState>, id: i64, name: String) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .rename_bucket(id, &name)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_buckets(
+    app: AppHandle,
+    st: State<AppState>,
+    plan_id: i64,
+    ids: Vec<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .reorder_buckets(plan_id, &ids)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_bucket(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    mode: DeleteMode,
+) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.delete_bucket(id, mode)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn move_task(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    bucket_id: i64,
+    before: Option<i64>,
+    after: Option<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .move_task(task_id, bucket_id, before, after)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_default_plan(st: State<AppState>) -> CmdResult<i64> {
+    Ok(st.store.lock().map_err(poisoned)?.default_plan_id()?)
+}
+
+#[tauri::command]
+pub fn set_default_plan(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.set_default_plan(id)?;
+    changed(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn local_time_zone() -> String {
     local_tz().name().to_string()
@@ -491,6 +662,58 @@ mod tests {
 
     fn now() -> chrono::DateTime<chrono_tz::Tz> {
         Rome.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn quick_entry_routes_slash_plan() {
+        let st = AppState::in_memory();
+        let pid = st
+            .store
+            .lock()
+            .unwrap()
+            .create_plan("3D print", "#112233")
+            .unwrap();
+        let r = create_from_text_impl(&st, "ship Rafael /3dprint", now(), true).unwrap();
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        assert_eq!(t.plan_id, pid);
+        assert_eq!(t.title, "ship Rafael");
+    }
+
+    #[test]
+    fn quick_entry_without_plan_uses_default() {
+        let st = AppState::in_memory();
+        let b = st
+            .store
+            .lock()
+            .unwrap()
+            .create_plan("B", "#112233")
+            .unwrap();
+        st.store.lock().unwrap().set_default_plan(b).unwrap();
+        let r = create_from_text_impl(&st, "buy milk", now(), true).unwrap();
+        assert_eq!(st.store.lock().unwrap().get_task(r.id).unwrap().plan_id, b);
+    }
+
+    #[test]
+    fn quick_entry_after_default_deleted() {
+        let st = AppState::in_memory();
+        let (a, b) = {
+            let s = st.store.lock().unwrap();
+            let a = s.default_plan_id().unwrap();
+            let b = s.create_plan("B", "#112233").unwrap();
+            s.set_default_plan(b).unwrap();
+            s.delete_plan(b, DeleteMode::MoveTo(a)).unwrap();
+            (a, b)
+        };
+        assert_ne!(a, b);
+        let r = create_from_text_impl(&st, "buy milk", now(), true).unwrap();
+        assert_eq!(st.store.lock().unwrap().get_task(r.id).unwrap().plan_id, a);
+    }
+
+    #[test]
+    fn store_errors_have_codes() {
+        assert_eq!(CmdError::from(StoreError::Duplicate).code, "duplicate");
+        assert_eq!(CmdError::from(StoreError::LastPlan).code, "last_plan");
+        assert_eq!(CmdError::from(StoreError::LastBucket).code, "last_bucket");
     }
 
     #[test]
