@@ -204,10 +204,20 @@
       onerror(errorMessage(e));
     }
   }
-  function confirmDelete(mode: DeleteMode) {
+  // The deleted column is gone from the DOM, so focus would fall to <body>;
+  // once the reloaded buckets no longer have it, focus the first remaining "…".
+  let afterDelete = $state<number | null>(null);
+  $effect(() => {
+    if (afterDelete === null || buckets.some((x) => x.id === afterDelete)) return;
+    afterDelete = null;
+    tick().then(() => boardEl?.querySelector<HTMLElement>('[data-bucket-menu]')?.focus());
+  });
+  async function confirmDelete(mode: DeleteMode) {
     const b = deleting?.bucket;
     deleting = null;
-    if (b) run(() => api.deleteBucket(b.id, mode));
+    if (!b) return;
+    await run(() => api.deleteBucket(b.id, mode));
+    afterDelete = b.id;
   }
 
   // ── New task at the bottom of a column ──

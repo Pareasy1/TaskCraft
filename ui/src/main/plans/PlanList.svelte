@@ -138,12 +138,22 @@
       fail(e);
     }
   }
+  // The deleted row is gone from the DOM, so focus would fall to <body>; once
+  // the refreshed list no longer has it, move focus to the "All tasks" row.
+  let afterDelete = $state<number | null>(null);
+  let allBtn = $state<HTMLButtonElement>();
+  $effect(() => {
+    if (afterDelete === null || plans.some((x) => x.id === afterDelete)) return;
+    afterDelete = null;
+    tick().then(() => allBtn?.focus());
+  });
   async function confirmDelete(mode: DeleteMode) {
     const p = deleting?.plan;
     deleting = null;
     if (!p) return;
     try {
       await api.deletePlan(p.id, mode);
+      afterDelete = p.id;
       if (scope === p.id) onselect('all');
     } catch (e) {
       fail(e);
@@ -190,7 +200,7 @@
     {/if}
   {/each}
   <div class="item">
-    <button class="main" aria-current={scope === 'all' ? 'page' : undefined} class:on={scope === 'all'} onclick={() => onselect('all')}>
+    <button class="main" bind:this={allBtn} aria-current={scope === 'all' ? 'page' : undefined} class:on={scope === 'all'} onclick={() => onselect('all')}>
       <ListTodo size={13} aria-hidden="true" class="all-icon" />
       <span class="nm">{t('plans.all')}</span>
       <span class="n">{allCount}</span>
