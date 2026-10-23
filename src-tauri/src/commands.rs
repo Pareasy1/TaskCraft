@@ -894,6 +894,9 @@ mod tests {
             (Rule::RepeatingSubtask, "repeating_subtask"),
             (Rule::StartAfterDue, "start_after_due"),
             (Rule::ChecklistText, "checklist_text"),
+            (Rule::AttachmentTooLarge, "attachment_too_large"),
+            (Rule::AttachmentUrl, "attachment_url"),
+            (Rule::TemplateName, "template_name"),
         ] {
             assert_eq!(CmdError::from(StoreError::Rule(r)).code, c);
         }

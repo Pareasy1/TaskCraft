@@ -243,7 +243,10 @@ fn list_and_reorder_subtasks() {
     s.reorder_subtasks(p, &[b, a]).unwrap();
     assert_eq!(ids(s.list_subtasks(p).unwrap()), vec![b, a]);
     for bad in [vec![a], vec![a, b, 999], vec![a, a]] {
-        assert!(matches!(s.reorder_subtasks(p, &bad), Err(StoreError::Invalid(_))));
+        assert!(matches!(
+            s.reorder_subtasks(p, &bad),
+            Err(StoreError::Invalid(_))
+        ));
     }
     assert_eq!(ids(s.list_subtasks(p).unwrap()), vec![b, a]);
 }
@@ -346,10 +349,16 @@ fn demote_task_under_parent() {
     assert_eq!(placed(&s, x), placed(&s, p));
     // Same rules as Task 1.
     let r = s.set_task_parent(p, Some(x));
-    assert!(matches!(r, Err(StoreError::Rule(Rule::ParentIsSubtask))), "{r:?}");
+    assert!(
+        matches!(r, Err(StoreError::Rule(Rule::ParentIsSubtask))),
+        "{r:?}"
+    );
     let y = s.insert_task(&input("y")).unwrap();
     let r = s.set_task_parent(p, Some(y));
-    assert!(matches!(r, Err(StoreError::Rule(Rule::HasSubtasks))), "{r:?}");
+    assert!(
+        matches!(r, Err(StoreError::Rule(Rule::HasSubtasks))),
+        "{r:?}"
+    );
 }
 
 #[test]
@@ -372,7 +381,13 @@ fn delete_parent_cascades() {
         )
         .unwrap();
     s.delete_task(p).unwrap();
-    assert_eq!(count(&path, "SELECT count(*) FROM tasks WHERE title IN ('p','a','b','lab')"), 0);
+    assert_eq!(
+        count(
+            &path,
+            "SELECT count(*) FROM tasks WHERE title IN ('p','a','b','lab')"
+        ),
+        0
+    );
     assert_eq!(count(&path, "SELECT count(*) FROM checklist_items"), 0);
     assert_eq!(count(&path, "SELECT count(*) FROM alerts"), 0);
     assert_eq!(count(&path, "SELECT count(*) FROM task_labels"), 0);
@@ -424,7 +439,10 @@ fn repeat_reset() {
         assert_eq!(k.status, TaskStatus::Todo);
         assert_eq!(k.completed_at, None);
     }
-    assert_eq!(count(&path, "SELECT count(*) FROM checklist_items WHERE done = 1"), 0);
+    assert_eq!(
+        count(&path, "SELECT count(*) FROM checklist_items WHERE done = 1"),
+        0
+    );
     assert_eq!(t.subtask_open, 2);
 }
 
@@ -466,7 +484,10 @@ fn update_parent_keeps_children() {
     .unwrap();
     assert_eq!(ids(s.list_subtasks(p).unwrap()), vec![a, b]);
     let t = s.get_task(p).unwrap();
-    assert_eq!((t.subtask_total, t.checklist_total, t.checklist_done), (2, 1, 1));
+    assert_eq!(
+        (t.subtask_total, t.checklist_total, t.checklist_done),
+        (2, 1, 1)
+    );
 }
 
 #[test]
@@ -484,7 +505,10 @@ fn today_excludes_not_started() {
         })
         .unwrap()
     };
-    let later = mk("later", Utc.with_ymd_and_hms(2026, 10, 25, 1, 0, 0).unwrap());
+    let later = mk(
+        "later",
+        Utc.with_ymd_and_hms(2026, 10, 25, 1, 0, 0).unwrap(),
+    );
     // The API forbids start after due; force it to cover the filter itself.
     raw(&path)
         .execute(
@@ -492,8 +516,13 @@ fn today_excludes_not_started() {
             [],
         )
         .unwrap();
-    let started = mk("started", Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap());
-    let today = ids(s.list_tasks(TaskFilter::Today, now, chrono_tz::Tz::UTC).unwrap());
+    let started = mk(
+        "started",
+        Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap(),
+    );
+    let today = ids(s
+        .list_tasks(TaskFilter::Today, now, chrono_tz::Tz::UTC)
+        .unwrap());
     assert!(today.contains(&started));
     assert!(!today.contains(&later));
 }
@@ -502,7 +531,13 @@ fn today_excludes_not_started() {
 fn plan_open_count_top_level_only() {
     let (_d, _p, s) = store();
     let (plan, _, _, _) = family(&s);
-    let n = s.list_plans().unwrap().into_iter().find(|p| p.id == plan).unwrap().open_count;
+    let n = s
+        .list_plans()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.id == plan)
+        .unwrap()
+        .open_count;
     assert_eq!(n, 1);
 }
 

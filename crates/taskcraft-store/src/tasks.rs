@@ -36,6 +36,7 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         subtask_total: 0,
         checklist_done: 0,
         checklist_total: 0,
+        attachment_count: 0,
     })
 }
 
@@ -153,7 +154,16 @@ impl Store {
             let (k, v) = r?;
             cl.insert(k, v);
         }
+        let mut att: HashMap<i64, i64> = HashMap::new();
+        let mut st = self
+            .conn
+            .prepare("SELECT task_id, count(*) FROM attachments GROUP BY task_id")?;
+        for r in st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))? {
+            let (k, v) = r?;
+            att.insert(k, v);
+        }
         for t in tasks {
+            t.attachment_count = att.get(&t.id).copied().unwrap_or(0);
             (t.subtask_open, t.subtask_total) = subs.get(&t.id).copied().unwrap_or((0, 0));
             (t.checklist_done, t.checklist_total) = cl.get(&t.id).copied().unwrap_or((0, 0));
         }
@@ -358,8 +368,9 @@ impl Store {
     }
 }
 
-/// Deletes a task, its subtasks and their checklist items and alerts
-/// (task_labels cascade).
+/// Deletes a task, its subtasks and their checklist items, alerts and
+/// attachment rows (task_labels cascade); stored files are queued for a
+/// delayed delete so Undo can still find them.
 pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()> {
     let mut st = conn.prepare("SELECT id FROM tasks WHERE parent_id = ?1")?;
     let mut all: Vec<i64> = st
@@ -370,7 +381,9 @@ pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()
     if conn.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
         return Err(StoreError::NotFound);
     }
+    let now = Utc::now();
     for t in all {
+        crate::attachments::delete_rows_for_task(conn, t, now)?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", [t])?;
         conn.execute("DELETE FROM checklist_items WHERE task_id = ?1", [t])?;
         conn.execute(

@@ -1,6 +1,7 @@
 //! SQLite storage for TaskCraft: calendars, events, tasks and alerts.
 
 mod alerts;
+mod attachments;
 mod calendars;
 mod checklist;
 mod events;
@@ -16,6 +17,9 @@ mod tasks;
 mod time;
 
 pub use alerts::DueAlert;
+#[doc(hidden)]
+pub use attachments::sanitize_name;
+pub use attachments::{Attachment, AttachmentKind};
 pub use checklist::ChecklistItem;
 pub use model::*;
 pub use query::{Hit, Occurrence, Scope, TaskFilter};

@@ -13,7 +13,7 @@ echo "ok   app running"
 ls "$LOGS"/taskcraft*.log >/dev/null 2>&1 || fail "no log file in $LOGS"
 echo "ok   log file present"
 
-[ "$(sqlite3 "$DB" 'PRAGMA user_version')" = "4" ] || fail "database schema version is not 4"
+[ "$(sqlite3 "$DB" 'PRAGMA user_version')" = "5" ] || fail "database schema version is not 5"
 echo "ok   database schema v4"
 
 OUT=$("$BIN" --smoke "Lunch with Sam tomorrow at 1") || fail "smoke run failed"
