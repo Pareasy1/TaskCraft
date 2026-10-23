@@ -43,8 +43,9 @@ fn body(store: &Store, a: &DueAlert, tz: Tz, lang: Lang) -> String {
     s
 }
 
-/// Notifies every due alert once and marks it fired, then deletes removed
-/// attachment files whose Undo delay has passed.
+/// Deletes removed attachment files whose Undo delay has passed, then
+/// notifies every due alert once and marks it fired. The purge runs first so
+/// a failing alert never stops it.
 pub fn tick(
     store: &Store,
     n: &dyn Notifier,
@@ -53,15 +54,15 @@ pub fn tick(
     lang: Lang,
     data_dir: &Path,
 ) -> Result<Vec<DueAlert>, StoreError> {
-    let due = store.due_alerts(now)?;
-    for a in &due {
-        n.notify(&a.title, &body(store, a, tz, lang));
-        store.mark_fired(a.alert_id, now)?;
-    }
     match store.purge_pending_files(now, data_dir) {
         Ok(0) => {}
         Ok(count) => tracing::info!(count, "purged removed attachment files"),
         Err(e) => tracing::warn!(error = %e, "attachment purge failed"),
+    }
+    let due = store.due_alerts(now)?;
+    for a in &due {
+        n.notify(&a.title, &body(store, a, tz, lang));
+        store.mark_fired(a.alert_id, now)?;
     }
     Ok(due)
 }
@@ -320,5 +321,46 @@ mod tests {
         )
         .unwrap();
         assert!(!stored.exists(), "purged once the delay has passed");
+    }
+
+    struct Panics;
+    impl Notifier for Panics {
+        fn notify(&self, _: &str, _: &str) {
+            panic!("notifier failed");
+        }
+    }
+
+    #[test]
+    fn tick_purges_even_when_alerts_fail() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = Store::open_in_memory().unwrap();
+        add(&s, "Call", "2026-10-20T10:05:00Z", None);
+        let task = s
+            .insert_task(&taskcraft_store::TaskInput {
+                calendar_id: 1,
+                title: "T".into(),
+                tz: "Europe/Rome".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        let src = tmp.path().join("a.txt");
+        std::fs::write(&src, b"hi").unwrap();
+        let a = s.add_file_attachment(task, &src, tmp.path()).unwrap();
+        let stored = tmp.path().join(a.stored.as_deref().unwrap());
+        let removed = utc("2026-10-20T09:00:00Z");
+        s.remove_attachment(a.id, removed).unwrap();
+        let now = utc("2026-10-20T10:00:00Z");
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tick(
+                &s,
+                &Panics,
+                now,
+                chrono_tz::Europe::Rome,
+                Lang::En,
+                tmp.path(),
+            )
+        }));
+        assert!(r.is_err(), "the alert step failed");
+        assert!(!stored.exists(), "files are purged even when alerts fail");
     }
 }

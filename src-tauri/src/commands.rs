@@ -8,7 +8,7 @@ use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use taskcraft_parse::{parse, parse_task, ParseOptions, ParsedItem};
 use taskcraft_store::*;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CmdError {
@@ -792,6 +792,12 @@ pub enum OpenTarget {
     Url(String),
 }
 
+/// Drops the `\\?\` verbatim prefix `canonicalize` adds on Windows, which
+/// ShellExecute and many apps handle badly. Unchanged elsewhere.
+pub fn native_path(p: &std::path::Path) -> std::path::PathBuf {
+    dunce::simplified(p).to_path_buf()
+}
+
 fn is_http(url: &str) -> bool {
     let u = url.trim().to_ascii_lowercase();
     u.starts_with("http://") || u.starts_with("https://")
@@ -803,7 +809,9 @@ pub fn open_target(st: &AppState, id: i64) -> CmdResult<OpenTarget> {
     let store = st.store.lock().map_err(poisoned)?;
     let a = store.get_attachment(id)?;
     match a.kind {
-        AttachmentKind::File => Ok(OpenTarget::Path(store.attachment_path(id, &st.data_dir)?)),
+        AttachmentKind::File => Ok(OpenTarget::Path(native_path(
+            &store.attachment_path(id, &st.data_dir)?,
+        ))),
         AttachmentKind::Link => match a.url {
             Some(u) if is_http(&u) => Ok(OpenTarget::Url(u)),
             _ => Err(CmdError::new(
@@ -851,28 +859,21 @@ pub struct AddFilesResult {
 }
 
 /// Adds each file; a failing file is reported by name and does not stop
-/// the others.
+/// the others. The store is locked per file, so other commands wait for at
+/// most one copy.
 pub fn add_files_impl(st: &AppState, task_id: i64, paths: &[std::path::PathBuf]) -> AddFilesResult {
     let mut out = AddFilesResult::default();
-    let store = match st.store.lock() {
-        Ok(s) => s,
-        Err(_) => {
-            out.errors = paths
-                .iter()
-                .map(|p| FileError {
-                    name: display_name(p),
-                    code: "internal".into(),
-                })
-                .collect();
-            return out;
-        }
-    };
     for p in paths {
-        match store.add_file_attachment(task_id, p, &st.data_dir) {
+        let r = st
+            .store
+            .lock()
+            .map_err(poisoned)
+            .and_then(|s| Ok(s.add_file_attachment(task_id, p, &st.data_dir)?));
+        match r {
             Ok(a) => out.added.push(a),
             Err(e) => out.errors.push(FileError {
                 name: display_name(p),
-                code: CmdError::from(e).code,
+                code: e.code,
             }),
         }
     }
@@ -898,11 +899,7 @@ pub fn list_attachments(st: State<AppState>, task_id: i64) -> CmdResult<Vec<Atta
 /// the dialog never blocks the main thread, and the store is only locked
 /// after the dialog has closed.
 #[tauri::command]
-pub async fn pick_and_add_files(
-    app: AppHandle,
-    st: State<'_, AppState>,
-    task_id: i64,
-) -> CmdResult<AddFilesResult> {
+pub async fn pick_and_add_files(app: AppHandle, task_id: i64) -> CmdResult<AddFilesResult> {
     use tauri_plugin_dialog::DialogExt;
     let builder = app.dialog().file();
     let picked = tauri::async_runtime::spawn_blocking(move || builder.blocking_pick_files())
@@ -923,7 +920,13 @@ pub async fn pick_and_add_files(
             }),
         }
     }
-    let mut r = add_files_impl(&st, task_id, &paths);
+    // Copying can take a while: keep it off the async workers.
+    let handle = app.clone();
+    let mut r = tauri::async_runtime::spawn_blocking(move || {
+        add_files_impl(&handle.state::<AppState>(), task_id, &paths)
+    })
+    .await
+    .map_err(|e| CmdError::new("internal", e.to_string()))?;
     r.errors.extend(bad);
     if !r.added.is_empty() {
         changed(&app);
@@ -1012,7 +1015,8 @@ pub fn open_attachment(app: AppHandle, st: State<AppState>, id: i64) -> CmdResul
     use tauri_plugin_opener::OpenerExt;
     open_attachment_impl(&st, id, |t| {
         let r = match t {
-            OpenTarget::Path(p) => app.opener().open_path(p.to_string_lossy(), None::<&str>),
+            // The free function takes a Path, so non-UTF-8 names survive.
+            OpenTarget::Path(p) => tauri_plugin_opener::open_path(p, None::<&str>),
             OpenTarget::Url(u) => app.opener().open_url(u, None::<&str>),
         };
         r.map_err(|e| e.to_string())
@@ -1531,6 +1535,17 @@ mod tests {
                 name: "gone.pdf".into(),
                 code: "not_found".into()
             }]
+        );
+    }
+
+    #[test]
+    fn native_path_strips_verbatim_prefix_only_on_windows() {
+        let p = std::path::Path::new("/Users/me/Library/TaskCraft/attachments/1/1-a.txt");
+        assert_eq!(native_path(p), p);
+        #[cfg(windows)]
+        assert_eq!(
+            native_path(std::path::Path::new(r"\\?\C:\data\a.txt")),
+            std::path::Path::new(r"C:\data\a.txt")
         );
     }
 
