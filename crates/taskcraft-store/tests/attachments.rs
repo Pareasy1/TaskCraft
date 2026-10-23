@@ -313,3 +313,59 @@ fn attachment_count_on_task() {
         .unwrap();
     assert_eq!(l.iter().find(|x| x.id == t).unwrap().attachment_count, 2);
 }
+
+#[cfg(unix)]
+#[test]
+fn unreadable_source_not_found() {
+    use std::os::unix::fs::PermissionsExt;
+    let (s, t, data, sd) = setup();
+    let p = src(sd.path(), "locked", b"x");
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::File::open(&p).is_ok() {
+        return; // running as root
+    }
+    let r = s.add_file_attachment(t, &p, data.path());
+    assert!(matches!(r, Err(StoreError::NotFound)), "{r:?}");
+    assert!(s.list_attachments(t).unwrap().is_empty());
+    let d = data.path().join(format!("attachments/{t}"));
+    assert_eq!(std::fs::read_dir(d).unwrap().count(), 0);
+}
+
+#[test]
+fn long_non_ascii_name_fits() {
+    let (s, t, data, sd) = setup();
+    for name in [format!("{}.stl", "漢".repeat(150)), "😀".repeat(120)] {
+        let a = s
+            .add_file_attachment(t, &src(sd.path(), &name, b"1"), data.path())
+            .unwrap();
+        let stored = a.stored.unwrap();
+        let file = stored.rsplit('/').next().unwrap();
+        assert!(file.len() <= 255, "{}", file.len());
+        assert!(data.path().join(&stored).exists());
+        if name.ends_with(".stl") {
+            assert!(file.ends_with(".stl"), "{file}");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn purge_does_not_follow_symlinks_out() {
+    let (s, t, data, sd) = setup();
+    let outside = src(sd.path(), "keep.txt", b"keep");
+    let a = s.add_file_attachment(t, &outside, data.path()).unwrap();
+    let stored = a.stored.clone().unwrap();
+    let now = Utc::now();
+    s.remove_attachment(a.id, now).unwrap();
+    // swap the task folder for a symlink to an outside directory
+    let dir = data.path().join(format!("attachments/{t}"));
+    let victim = sd.path().join("victim");
+    std::fs::create_dir(&victim).unwrap();
+    let name = stored.rsplit('/').next().unwrap();
+    std::fs::write(victim.join(name), b"precious").unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::os::unix::fs::symlink(&victim, &dir).unwrap();
+    s.purge_pending_files(now + Duration::seconds(60), data.path())
+        .unwrap();
+    assert!(victim.join(name).exists());
+}

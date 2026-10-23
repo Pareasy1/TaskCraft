@@ -12,6 +12,8 @@ use std::path::{Component, Path, PathBuf};
 /// 100 MiB.
 pub(crate) const MAX_ATTACHMENT_BYTES: u64 = 104_857_600;
 const MAX_NAME: usize = 120;
+/// Well under the ~255 byte file name limit of common file systems.
+const MAX_NAME_BYTES: usize = 200;
 /// How long a removed file stays on disk (longer than the Undo toast).
 const PENDING_DELAY_SECS: i64 = 15;
 
@@ -79,12 +81,36 @@ pub fn sanitize_name(raw: &str) -> String {
                 '_'
             }
         })
-        .take(MAX_NAME)
         .collect();
     if s.chars().all(|c| c == '.' || c == ' ') {
         s = "_".into();
     }
-    s
+    cut_name(&s)
+}
+
+/// Cuts to at most 120 chars and 200 bytes at a char boundary, keeping a
+/// short extension when there is one.
+fn cut_name(s: &str) -> String {
+    if s.chars().count() <= MAX_NAME && s.len() <= MAX_NAME_BYTES {
+        return s.to_string();
+    }
+    let ext = match s.rfind('.') {
+        Some(i) if i > 0 && s.len() - i <= 20 => &s[i..],
+        _ => "",
+    };
+    let stem = &s[..s.len() - ext.len()];
+    let (mut chars, mut bytes) = (ext.chars().count(), ext.len());
+    let mut out = String::new();
+    for c in stem.chars() {
+        if chars + 1 > MAX_NAME || bytes + c.len_utf8() > MAX_NAME_BYTES {
+            break;
+        }
+        chars += 1;
+        bytes += c.len_utf8();
+        out.push(c);
+    }
+    out.push_str(ext);
+    out
 }
 
 pub(crate) fn queue_file(conn: &Connection, stored: &str, now: DateTime<Utc>) -> Result<()> {
@@ -239,33 +265,50 @@ impl Store {
         let rel_dir = format!("attachments/{task_id}");
         let dir = data_dir.join(&rel_dir);
         std::fs::create_dir_all(&dir)?;
+        use std::io::{Read, Write};
+        let mut input = std::fs::File::open(src).map_err(|_| StoreError::NotFound)?;
+        // create_new never replaces an existing file; retry with the next n.
         let mut n = 1;
-        let (rel, full) = loop {
+        let (rel, full, mut out) = loop {
             let file = format!("{n}-{safe}");
             let full = dir.join(&file);
-            if !full.exists() {
-                break (format!("{rel_dir}/{file}"), full);
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&full)
+            {
+                Ok(f) => break (format!("{rel_dir}/{file}"), full, f),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
+                Err(e) => return Err(e.into()),
             }
-            n += 1;
         };
-        let tmp = dir.join(format!(".{n}-incoming.tmp"));
-        let copied = std::fs::copy(src, &tmp).map_err(|e| {
-            let _ = std::fs::remove_file(&tmp);
-            StoreError::from(e)
-        });
-        let size = match copied {
-            // The file may have grown between stat and copy.
-            Ok(sz) if sz > limit => {
-                let _ = std::fs::remove_file(&tmp);
-                return Err(StoreError::Rule(Rule::AttachmentTooLarge));
+        // Source read errors are NotFound (unreadable); destination errors are Io.
+        let copy = (|| -> Result<u64> {
+            let mut buf = vec![0u8; 64 * 1024];
+            let mut total: u64 = 0;
+            loop {
+                let k = input.read(&mut buf).map_err(|_| StoreError::NotFound)?;
+                if k == 0 {
+                    break;
+                }
+                total += k as u64;
+                // The file may have grown between stat and copy.
+                if total > limit {
+                    return Err(StoreError::Rule(Rule::AttachmentTooLarge));
+                }
+                out.write_all(&buf[..k])?;
             }
+            out.flush()?;
+            Ok(total)
+        })();
+        drop(out);
+        let size = match copy {
             Ok(sz) => sz,
-            Err(e) => return Err(e),
+            Err(e) => {
+                let _ = std::fs::remove_file(&full);
+                return Err(e);
+            }
         };
-        if let Err(e) = std::fs::rename(&tmp, &full) {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(e.into());
-        }
         let res = self.in_tx(|tx| {
             // A queued file at the same path (never reused: names are unique
             // on disk) would be a stale entry; drop it defensively.
@@ -435,13 +478,23 @@ impl Store {
         for stored in due {
             if check_stored_shape(&stored).is_ok() {
                 let full = data_dir.join(&stored);
-                match std::fs::remove_file(&full) {
-                    Ok(()) => n += 1,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(_) => continue, // retry on the next tick
-                }
-                if let Some(parent) = full.parent() {
-                    let _ = std::fs::remove_dir(parent); // only if empty
+                // Resolve symlinks first: never delete outside attachments/.
+                let inside = match (
+                    data_dir.join("attachments").canonicalize(),
+                    full.canonicalize(),
+                ) {
+                    (Ok(root), Ok(real)) => real.starts_with(root).then_some(real),
+                    _ => None,
+                };
+                if let Some(real) = inside {
+                    match std::fs::remove_file(&real) {
+                        Ok(()) => n += 1,
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(_) => continue, // retry on the next tick
+                    }
+                    if let Some(parent) = real.parent() {
+                        let _ = std::fs::remove_dir(parent); // only if empty
+                    }
                 }
             }
             self.conn.execute(
