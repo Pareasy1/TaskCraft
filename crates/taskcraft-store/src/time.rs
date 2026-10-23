@@ -3,7 +3,7 @@
 use crate::model::*;
 use chrono::{DateTime, Days, Duration, LocalResult, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use chrono_tz::Tz;
-use taskcraft_parse::{AlertSpec, ItemKind, ParsedItem, When};
+use taskcraft_parse::{AlertSpec, ItemKind, ParsedItem, ParsedPriority, When};
 
 /// Date-only values mean local midnight. Ambiguous local times (DST end)
 /// take the earliest instant; nonexistent ones (DST start) move forward 1h.
@@ -71,6 +71,12 @@ pub fn from_parsed(
             alerts,
             labels: p.tags.clone(),
             plan_id,
+            priority: match p.priority {
+                Some(ParsedPriority::Urgent) => Priority::Urgent,
+                Some(ParsedPriority::Important) => Priority::Important,
+                Some(ParsedPriority::Low) => Priority::Low,
+                Some(ParsedPriority::Medium) | None => Priority::Medium,
+            },
             ..Default::default()
         }),
         ItemKind::Event => {

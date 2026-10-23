@@ -177,6 +177,128 @@ pub fn create_from_text(
 }
 
 #[tauri::command]
+pub fn list_subtasks(st: State<AppState>, parent_id: i64) -> CmdResult<Vec<Task>> {
+    Ok(st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .list_subtasks(parent_id)?)
+}
+
+#[tauri::command]
+pub fn reorder_subtasks(
+    app: AppHandle,
+    st: State<AppState>,
+    parent_id: i64,
+    ids: Vec<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .reorder_subtasks(parent_id, &ids)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_task_parent(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    parent_id: Option<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .set_task_parent(task_id, parent_id)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn complete_with_subtasks(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .complete_with_subtasks(id, Utc::now())?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_checklist(st: State<AppState>, task_id: i64) -> CmdResult<Vec<ChecklistItem>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_checklist(task_id)?)
+}
+
+#[tauri::command]
+pub fn add_checklist_item(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    text: String,
+) -> CmdResult<i64> {
+    let id = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .add_checklist_item(task_id, &text)?;
+    changed(&app);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_checklist_item(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    text: Option<String>,
+    done: Option<bool>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .update_checklist_item(id, text.as_deref(), done)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_checklist(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    ids: Vec<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .reorder_checklist(task_id, &ids)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_checklist_item(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .delete_checklist_item(id)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn checklist_item_to_subtask(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<i64> {
+    let sub = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .checklist_item_to_subtask(id)?;
+    changed(&app);
+    Ok(sub)
+}
+
+#[tauri::command]
 pub fn get_event(st: State<AppState>, id: i64) -> CmdResult<Event> {
     Ok(st.store.lock().map_err(poisoned)?.get_event(id)?)
 }
@@ -752,6 +874,29 @@ mod tests {
             CmdError::from(StoreError::Rule(taskcraft_store::Rule::StartAfterDue)).code,
             "start_after_due"
         );
+    }
+
+    #[test]
+    fn quick_entry_sets_priority() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "pay rent !urgente", now(), true).unwrap();
+        let t = st.store.lock().unwrap().get_task(r.id).unwrap();
+        assert_eq!(t.priority, Priority::Urgent);
+        assert_eq!(t.title, "pay rent");
+    }
+
+    #[test]
+    fn rule_errors_have_codes() {
+        use taskcraft_store::Rule;
+        for (r, c) in [
+            (Rule::ParentIsSubtask, "parent_is_subtask"),
+            (Rule::HasSubtasks, "has_subtasks"),
+            (Rule::RepeatingSubtask, "repeating_subtask"),
+            (Rule::StartAfterDue, "start_after_due"),
+            (Rule::ChecklistText, "checklist_text"),
+        ] {
+            assert_eq!(CmdError::from(StoreError::Rule(r)).code, c);
+        }
     }
 
     #[test]
