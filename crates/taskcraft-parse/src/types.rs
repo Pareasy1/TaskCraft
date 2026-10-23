@@ -15,6 +15,7 @@ pub struct ParseOptions {
     pub calendars: Vec<String>,
     pub date_order: DateOrder,
     /// Plan names that `/plan` quick-entry hints can route a task to.
+    #[serde(default)]
     pub plans: Vec<String>,
 }
 

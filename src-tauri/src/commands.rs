@@ -690,6 +690,29 @@ mod tests {
     }
 
     #[test]
+    fn quick_entry_slash_matching_calendar_and_plan_sets_both() {
+        let st = AppState::in_memory();
+        let pid = st
+            .store
+            .lock()
+            .unwrap()
+            .create_plan("Work", "#112233")
+            .unwrap();
+        let r = create_from_text_impl(&st, "pay invoice /work", now(), true).unwrap();
+        let s = st.store.lock().unwrap();
+        let t = s.get_task(r.id).unwrap();
+        let work = s
+            .calendars()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.name == "Work")
+            .unwrap();
+        assert_eq!(t.calendar_id, work.id);
+        assert_eq!(t.plan_id, pid);
+        assert_eq!(t.title, "pay invoice");
+    }
+
+    #[test]
     fn quick_entry_without_plan_uses_default() {
         let st = AppState::in_memory();
         let b = st

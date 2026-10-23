@@ -56,3 +56,35 @@ fn events_ignore_slash_plan() {
     let r = parse("dinner /casa tomorrow", now(), &with_plans());
     assert_eq!(r.plan, None);
 }
+
+#[test]
+fn slash_matching_calendar_and_plan_sets_both() {
+    let opts = ParseOptions {
+        plans: vec!["Work".into(), "3D print".into()],
+        ..Default::default()
+    };
+    let s = "pay invoice /work";
+    let r = parse_task(s, now(), &opts);
+    assert_eq!(r.calendar.as_deref(), Some("Work"));
+    assert_eq!(r.plan.as_deref(), Some("Work"));
+    assert_eq!(r.title, "pay invoice");
+    let cal: Vec<&str> = r
+        .spans
+        .iter()
+        .filter(|x| x.label == Label::Calendar)
+        .map(|x| &s[x.start..x.end])
+        .collect();
+    assert_eq!(cal, ["/work"]);
+    assert!(r.spans.iter().all(|x| x.label != Label::Plan));
+}
+
+#[test]
+fn slash_calendar_only_unchanged() {
+    let opts = ParseOptions {
+        plans: vec!["3D print".into()],
+        ..Default::default()
+    };
+    let r = parse_task("pay invoice /work", now(), &opts);
+    assert_eq!(r.calendar.as_deref(), Some("Work"));
+    assert_eq!(r.plan, None);
+}

@@ -122,7 +122,8 @@ pub fn plan_key(name: &str) -> String {
 }
 
 /// Labels the first `/plan` token matching a known plan and returns the
-/// plan's exact name. Other `/word` tokens are left for the title.
+/// plan's exact name (a token that is also a calendar name is left to the
+/// calendar rule). Other `/word` tokens are left for the title.
 fn mark_plan(toks: &[Token], tags: &mut [Tagged], opts: &ParseOptions) -> Option<String> {
     for (t, tag) in toks.iter().zip(tags.iter_mut()) {
         if tag.label.is_some() {
@@ -136,7 +137,11 @@ fn mark_plan(toks: &[Token], tags: &mut [Tagged], opts: &ParseOptions) -> Option
         }
         let key = plan_key(word);
         if let Some(name) = opts.plans.iter().find(|p| plan_key(p) == key) {
-            tag.label = Some(Label::Plan);
+            // A name that is also a calendar stays unlabelled so the calendar
+            // rule claims the token; the plan is still reported.
+            if !opts.calendars.iter().any(|c| c.eq_ignore_ascii_case(word)) {
+                tag.label = Some(Label::Plan);
+            }
             return Some(name.clone());
         }
     }
