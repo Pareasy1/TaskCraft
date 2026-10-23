@@ -505,3 +505,74 @@ fn plan_open_count_top_level_only() {
     let n = s.list_plans().unwrap().into_iter().find(|p| p.id == plan).unwrap().open_count;
     assert_eq!(n, 1);
 }
+
+#[test]
+fn complete_with_subtasks_on_repeating_parent() {
+    let (_d, _p, s) = store();
+    let due = Utc.with_ymd_and_hms(2026, 10, 25, 9, 0, 0).unwrap();
+    let p = s
+        .insert_task(&TaskInput {
+            rrule: Some("FREQ=DAILY".into()),
+            due: Some(due),
+            due_has_time: true,
+            ..input("rp")
+        })
+        .unwrap();
+    let a = s.insert_task(&child("a", p)).unwrap();
+    let b = s.insert_task(&child("b", p)).unwrap();
+    s.set_task_completed(a, true, Utc::now()).unwrap();
+    s.complete_with_subtasks(p, Utc::now()).unwrap();
+    let t = s.get_task(p).unwrap();
+    assert_eq!(t.due, Some(due + chrono::Duration::days(1)));
+    assert!(t.completed_at.is_none());
+    for k in [a, b] {
+        let k = s.get_task(k).unwrap();
+        assert_eq!(k.status, TaskStatus::Todo);
+        assert_eq!(k.completed_at, None);
+    }
+}
+
+#[test]
+fn repeat_reset_rearms_future_subtask_alerts() {
+    let (_d, path, s) = store();
+    let now = Utc.with_ymd_and_hms(2026, 10, 23, 12, 0, 0).unwrap();
+    let p = s
+        .insert_task(&TaskInput {
+            rrule: Some("FREQ=DAILY".into()),
+            due: Some(Utc.with_ymd_and_hms(2026, 10, 25, 9, 0, 0).unwrap()),
+            due_has_time: true,
+            ..input("rp")
+        })
+        .unwrap();
+    let past = now - chrono::Duration::hours(1);
+    let a = s
+        .insert_task(&TaskInput {
+            due: Some(Utc.with_ymd_and_hms(2026, 10, 30, 10, 0, 0).unwrap()),
+            due_has_time: true,
+            alerts: vec![AlertSpecUtc::Before(10), AlertSpecUtc::At(past)],
+            ..child("a", p)
+        })
+        .unwrap();
+    let pending = |sql: &str| {
+        count(&path, &format!("SELECT count(*) FROM alerts WHERE owner_kind = 'task' AND owner_id = {a} AND fired_at IS NULL {sql}"))
+    };
+    // Ticking the subtask: the next alert sweep marks all its alerts fired.
+    s.set_task_completed(a, true, now).unwrap();
+    s.due_alerts(now).unwrap();
+    assert_eq!(pending(""), 0);
+    // The repeating parent advances: the subtask's future alerts are pending again.
+    s.set_task_completed(p, true, now).unwrap();
+    assert_eq!(s.get_task(a).unwrap().completed_at, None);
+    assert_eq!(
+        pending(&format!(
+            "AND fire_at_utc > '{}'",
+            now.format("%Y-%m-%dT%H:%M:%S")
+        )),
+        2
+    );
+    assert_eq!(pending(""), 2, "the past alert stays fired");
+    let due: Vec<_> = s
+        .due_alerts(Utc.with_ymd_and_hms(2026, 10, 30, 9, 55, 0).unwrap())
+        .unwrap();
+    assert!(due.iter().any(|x| x.owner_id == a), "{due:?}");
+}

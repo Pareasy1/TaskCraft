@@ -115,12 +115,23 @@ impl Store {
     }
 }
 
-/// A repeating task came back for its next occurrence: reopen its subtasks
-/// and untick its checklist and theirs.
-pub(crate) fn reset_for_next_occurrence(conn: &Connection, task_id: i64) -> Result<()> {
+/// A repeating task came back for its next occurrence: reopen its subtasks,
+/// re-arm their alerts still ahead of `now` (ticking a subtask marks its
+/// alerts fired), and untick its checklist and theirs.
+pub(crate) fn reset_for_next_occurrence(
+    conn: &Connection,
+    task_id: i64,
+    now: DateTime<Utc>,
+) -> Result<()> {
     conn.execute(
         "UPDATE tasks SET status = 'todo', completed_at = NULL, updated_at = ?2 WHERE parent_id = ?1",
         params![task_id, fmt_ts(Utc::now())],
+    )?;
+    conn.execute(
+        "UPDATE alerts SET fired_at = NULL
+         WHERE owner_kind = 'task' AND fire_at_utc > ?2
+           AND owner_id IN (SELECT id FROM tasks WHERE parent_id = ?1)",
+        params![task_id, fmt_ts(now)],
     )?;
     conn.execute(
         "UPDATE checklist_items SET done = 0

@@ -311,7 +311,7 @@ impl Store {
                             "UPDATE tasks SET due_utc = ?1, completed_at = NULL, status = 'todo', updated_at = ?2 WHERE id = ?3",
                             params![fmt_ts(next), fmt_ts(Utc::now()), id],
                         )?;
-                        reset_for_next_occurrence(tx, id)?;
+                        reset_for_next_occurrence(tx, id, now)?;
                         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)
                     });
                 }
