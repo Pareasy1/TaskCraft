@@ -91,6 +91,8 @@ export function installMock() {
   ];
   type MockAtt = { id: number; taskId: number; kind: 'file' | 'link'; name: string; stored: string | null; url: string | null; size: number | null; createdAt: string; sort: number };
   let atts: MockAtt[] = [];
+  let picks = 0;
+  const nextSort = (taskId: number) => Math.max(-1, ...atts.filter((a) => a.taskId === taskId).map((a) => a.sort)) + 1;
   let templates: { id: number; name: string; subtaskCount: number; source: number }[] = [];
   const cleanName = (n: unknown, max: number, code: string) => {
     const v = String(n ?? '').trim();
@@ -265,6 +267,7 @@ export function installMock() {
         const gone = new Set(all.filter((t) => t.id === args.id || t.parentId === args.id).map((t) => t.id));
         all = all.filter((t) => !gone.has(t.id));
         items = items.filter((i) => !gone.has(i.taskId));
+        atts = atts.filter((a) => !gone.has(a.taskId));
         changed();
         return null;
       }
@@ -321,15 +324,19 @@ export function installMock() {
       }
       case 'list_attachments': return atts.filter((a) => a.taskId === args.taskId).sort((a, b) => a.sort - b.sort);
       case 'pick_and_add_files': {
-        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: 'notes.pdf', stored: 'mock-notes.pdf', url: null, size: 1_250_000, createdAt: new Date().toISOString(), sort: atts.length };
+        // Cycles through three picks; every third also reports a file that was too large, and its
+        // "missing" file fails to open (not_found), so both toasts can be checked by eye.
+        const n = picks++ % 3;
+        const [name, size] = ([['notes.pdf', 1_250_000], ['photo.jpg', 482_000], ['missing.docx', 18_400]] as const)[n];
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name, stored: `mock-${name}`, url: null, size, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
         atts.push(a);
         changed();
-        return { added: [a], errors: [] };
+        return { added: [a], errors: n === 2 ? [{ name: 'holiday-video.mov', code: 'attachment_too_large' }] : [] };
       }
       case 'add_link_attachment': {
         const url = String(args.url).trim();
         if (!/^https?:\/\/\S+/i.test(url)) throw { code: 'attachment_url', message: 'attachment_url' };
-        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'link', name: args.name?.trim() || new URL(url).hostname.replace(/^www\./, ''), stored: null, url, size: null, createdAt: new Date().toISOString(), sort: atts.length };
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'link', name: args.name?.trim() || new URL(url).hostname.replace(/^www\./, ''), stored: null, url, size: null, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
         atts.push(a);
         changed();
         return a;
@@ -338,13 +345,17 @@ export function installMock() {
       case 'reorder_attachments': reorder(atts.filter((a) => a.taskId === args.taskId), args.ids); changed(); return null;
       case 'remove_attachment': { const a = attOf(args.id); atts = atts.filter((x) => x.id !== a.id); changed(); return a; }
       case 'restore_file_attachment': {
-        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: args.name, stored: args.stored, url: null, size: args.size, createdAt: new Date().toISOString(), sort: atts.length };
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: args.name, stored: args.stored, url: null, size: args.size, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
         atts.push(a);
         changed();
         return a;
       }
-      case 'open_attachment': attOf(args.id); return null;
-      case 'reveal_attachment': attOf(args.id); return null;
+      case 'open_attachment':
+      case 'reveal_attachment': {
+        const a = attOf(args.id);
+        if (a.stored?.includes('missing')) throw { code: 'not_found', message: 'not_found' };
+        return null;
+      }
       case 'duplicate_task': {
         const src = all.find((t) => t.id === args.id);
         if (!src) throw { code: 'not_found', message: 'not_found' };

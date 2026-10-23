@@ -8,7 +8,7 @@
   import type { Snippet } from 'svelte';
   import { activate, isSelected, select } from '../../lib/selection.svelte';
   import { t as tr } from '../../lib/i18n';
-  import { Repeat } from 'lucide-svelte';
+  import { Paperclip, Repeat } from 'lucide-svelte';
   import type { Plan, Task, TaskStatus } from '../../lib/types';
   import { isOverdue } from '../../lib/tasks';
   import { fmtShortDate, fmtSpan, fmtTime } from '../../lib/format';
@@ -85,7 +85,7 @@
       onclick={(e) => { e.stopPropagation(); activate(e, onopen, () => select({ kind: 'task', id: t.id })); }} onkeydown={ontitlekey}>{t.title}</button>
     {@render actions?.()}
   </div>
-  {#if t.labels.length || t.due || t.recurring || progress || checklist}
+  {#if t.labels.length || t.due || t.recurring || progress || checklist || t.attachmentCount}
     <div class="meta">
       {#if progress}
         <button class="count prog" aria-expanded={open} disabled={!children.length}
@@ -96,6 +96,7 @@
         </button>
       {/if}
       {#if checklist}<span class="count" title={tr('checklist.title')}><span aria-hidden="true">☑</span> <span class="sr">{tr('checklist.title')}</span>{checklist}</span>{/if}
+      {#if t.attachmentCount}<span class="count" title={tr('attachments.title')}><Paperclip size={11} aria-hidden="true" /><span class="sr">{tr('attachments.title')}</span>{t.attachmentCount}</span>{/if}
       {#each t.labels as l (l.id)}
         <LabelChip name={l.name} color={l.color} active={activeLabels.includes(l.id)} onclick={() => onlabel(l.id)} />
       {/each}

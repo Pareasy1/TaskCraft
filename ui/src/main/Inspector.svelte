@@ -8,6 +8,7 @@
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import SubtaskList from './tasks/SubtaskList.svelte';
   import Checklist from './tasks/Checklist.svelte';
+  import Attachments from './tasks/Attachments.svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { parentCandidates } from '../lib/subtasks';
@@ -175,11 +176,13 @@
   // ── Saving, closing and moving to another task never drop what was typed ──
   let subtaskList = $state<SubtaskList | undefined>();
   let checklist = $state<Checklist | undefined>();
-  /** Adds the text still sitting in the "Add subtask" / "Add item" fields; false if that failed (the error shows). */
+  let attachments = $state<Attachments | undefined>();
+  /** Adds the text still sitting in the "Add subtask" / "Add item" / link fields; false if that failed (the error shows). */
   async function flushAdds(): Promise<boolean> {
     try {
       await subtaskList?.flush();
       await checklist?.flush();
+      await attachments?.flush();
       return true;
     } catch {
       return false;
@@ -261,7 +264,7 @@
         const id = target.id;
         const saved = await snapshotWithSubtasks(id);
         await api.deleteTask(id);
-        // Undo brings back its checklist, its subtasks and their checklists too (they went with it).
+        // Undo brings back its checklist, attachments and subtasks (with theirs) too: they went with it.
         notify(t('msg.deleted', { title: saved.task.input.title }), () => restoreWithSubtasks(saved).then(() => {}));
       }
       onsaved();
@@ -418,6 +421,7 @@
         <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} />
       {/if}
       <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
+      <Attachments bind:this={attachments} task={stored} onerror={(m) => (error = m)} />
     {/if}
   {/if}
 

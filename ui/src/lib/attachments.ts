@@ -31,3 +31,18 @@ export function isWebUrl(s: string): boolean {
     return false;
   }
 }
+
+/**
+ * One toast for the files "Add file…" could not add: a sentence per reason, listing its names,
+ * in the order the reasons first appear. Null when all were added.
+ */
+export function notAddedMessage(
+  errors: { name: string; code: string }[],
+  reason: (code: string) => string,
+  sentence: (names: string, reason: string) => string,
+): string | null {
+  if (!errors.length) return null;
+  const byCode = new Map<string, string[]>();
+  for (const e of errors) byCode.set(e.code, [...(byCode.get(e.code) ?? []), e.name]);
+  return [...byCode].map(([code, names]) => sentence(names.join(', '), reason(code))).join(' ');
+}

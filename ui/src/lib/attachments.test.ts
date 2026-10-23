@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSize, isWebUrl, urlHost } from './attachments';
+import { formatSize, isWebUrl, notAddedMessage, urlHost } from './attachments';
 
 describe('formatSize', () => {
   it('uses bytes below 1 KB', () => {
@@ -34,5 +34,22 @@ describe('isWebUrl', () => {
     expect(isWebUrl('javascript:alert(1)')).toBe(false);
     expect(isWebUrl('a.io')).toBe(false);
     expect(isWebUrl('')).toBe(false);
+  });
+});
+
+describe('notAddedMessage', () => {
+  const reason = (code: string) => `<${code}>`;
+  const fmt = (names: string, why: string) => `${names}: ${why}`;
+  it('is null when every file was added', () => {
+    expect(notAddedMessage([], reason, fmt)).toBeNull();
+  });
+  it('lists the names that share a reason once', () => {
+    expect(notAddedMessage([{ name: 'a.mov', code: 'attachment_too_large' }, { name: 'b.iso', code: 'attachment_too_large' }], reason, fmt))
+      .toBe('a.mov, b.iso: <attachment_too_large>');
+  });
+  it('keeps one sentence per reason, in the order they first appear', () => {
+    expect(notAddedMessage([
+      { name: 'a.mov', code: 'attachment_too_large' }, { name: 'gone.txt', code: 'not_found' }, { name: 'b.iso', code: 'attachment_too_large' },
+    ], reason, fmt)).toBe('a.mov, b.iso: <attachment_too_large> gone.txt: <not_found>');
   });
 });
