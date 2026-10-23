@@ -36,11 +36,19 @@ export function spanRole(task: TaskLike, day: Date): SpanRole | null {
   return d === s ? 'start' : d === e ? 'end' : 'middle';
 }
 
-/** The start moved by the same delta as the due date, or null when the task has no start. */
+/**
+ * The start moved with the due date: by the same number of local calendar days
+ * (so DST never shifts the day) plus the same change in local clock time.
+ */
 export function shiftStart(task: TaskLike, newDue: string): string | null {
   if (!task.start || !task.due) return null;
-  const delta = new Date(newDue).getTime() - new Date(task.due).getTime();
-  return new Date(new Date(task.start).getTime() + delta).toISOString();
+  const oldDue = new Date(task.due);
+  const nd = new Date(newDue);
+  const days = Math.round((startOfDay(nd).getTime() - startOfDay(oldDue).getTime()) / 86_400_000);
+  const minutes = nd.getHours() * 60 + nd.getMinutes() - (oldDue.getHours() * 60 + oldDue.getMinutes());
+  const moved = addDays(new Date(task.start), days);
+  moved.setMinutes(moved.getMinutes() + minutes);
+  return moved.toISOString();
 }
 
 /**

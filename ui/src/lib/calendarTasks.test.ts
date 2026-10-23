@@ -106,3 +106,28 @@ describe('shiftStart', () => {
     expect(shiftStart({ ...t, start: null }, at(23, 12))).toBeNull();
   });
 });
+
+describe('shiftStart across DST (Europe/Rome)', () => {
+  const L = (m: number, d: number, h = 0, mi = 0) => new Date(2026, m, d, h, mi).toISOString();
+  const span = (start: string, due: string, dueHasTime: boolean) => ({ id: 1, due, dueHasTime, completedAt: null, start });
+  it('date-only span over spring-forward (29 Mar) keeps local midnight', () => {
+    const t = span(L(2, 28), L(2, 29), false);
+    expect(shiftStart(t, L(2, 30))).toBe(L(2, 29));
+    expect(shiftStart(t, L(2, 28))).toBe(L(2, 27));
+  });
+  it('date-only span over fall-back (25 Oct) keeps local midnight', () => {
+    const t = span(L(9, 24), L(9, 25), false);
+    expect(shiftStart(t, L(9, 26))).toBe(L(9, 25));
+    expect(shiftStart(t, L(9, 24))).toBe(L(9, 23));
+  });
+  it('timed span keeps wall-clock time across spring-forward and fall-back', () => {
+    const a = span(L(2, 28, 9), L(2, 29, 18), true);
+    expect(shiftStart(a, L(2, 30, 18))).toBe(L(2, 29, 9));
+    const b = span(L(9, 24, 9), L(9, 25, 18), true);
+    expect(shiftStart(b, L(9, 26, 18))).toBe(L(9, 25, 9));
+  });
+  it('a 15-minute timed move shifts start by 15 minutes of wall-clock time', () => {
+    const t = span(L(9, 24, 9), L(9, 25, 18), true);
+    expect(shiftStart(t, L(9, 25, 18, 15))).toBe(L(9, 24, 9, 15));
+  });
+});

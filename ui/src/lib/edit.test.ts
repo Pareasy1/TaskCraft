@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formToTask, taskToForm } from './edit';
+import { formToTask, taskInput, taskToForm } from './edit';
 import type { TaskInput } from './types';
 
 describe('task form', () => {
@@ -61,7 +61,6 @@ describe('mergeTaskSave', () => {
   });
 });
 
-import { taskInput } from './edit';
 import type { Task } from './types';
 
 describe('taskInput', () => {
@@ -76,6 +75,26 @@ describe('taskInput', () => {
     expect(taskInput(t)).toEqual({
       calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
       rrule: null, notes: 'n', alerts: [], status: 'inProgress', labels: ['home'], planId: 3, bucketId: 8,
+      parentId: null, priority: 'medium', start: null, startHasTime: false,
     });
+  });
+});
+
+describe('subtask fields', () => {
+  const t: Task = {
+    id: 8, calendarId: 1, title: 'Sub', due: null, dueHasTime: false, tz: 'Europe/Rome',
+    completedAt: null, recurring: false, rrule: null, notes: null, color: '#fff', alerts: [], status: 'todo',
+    labels: [], planId: 1, bucketId: 1, sortOrder: 10,
+    parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true,
+    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+  };
+  it('taskInput carries priority, start and parent', () => {
+    expect(taskInput(t)).toMatchObject({ parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true });
+  });
+  it('mergeTaskSave keeps the latest parent when the dialog didn’t change it', () => {
+    const original = taskInput(t);
+    const edited = formToTask({ ...taskToForm(original), notes: 'x' });
+    const latest = { ...original, parentId: 9, priority: 'low' as const, start: null };
+    expect(mergeTaskSave(original, edited, latest)).toMatchObject({ notes: 'x', parentId: 9, priority: 'low', start: null });
   });
 });

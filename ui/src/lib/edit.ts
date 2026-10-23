@@ -1,5 +1,5 @@
 // Conversions between store records and inspector form fields.
-import type { AlertSpecUtc, EventInput, Task, TaskInput, TaskStatus } from './types';
+import type { AlertSpecUtc, EventInput, Priority, Task, TaskInput, TaskStatus } from './types';
 import { addDays } from './layout';
 import { ymd } from './format';
 
@@ -89,6 +89,7 @@ export function taskInput(t: Task): TaskInput {
     calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz,
     rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
     planId: t.planId, bucketId: t.bucketId,
+    parentId: t.parentId, priority: t.priority, start: t.start, startHasTime: t.startHasTime,
   };
 }
 
@@ -106,6 +107,11 @@ export interface TaskForm {
   /** Null for a new task: the store picks the default plan / the plan's first bucket. */
   planId: number | null;
   bucketId: number | null;
+  /** Carried through so a save never drops them (the inspector edits them directly). */
+  parentId?: number | null;
+  priority?: Priority;
+  start?: string | null;
+  startHasTime?: boolean;
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
@@ -124,6 +130,7 @@ export function taskToForm(t: TaskInput): TaskForm {
     labels: [...t.labels],
     planId: t.planId ?? null,
     bucketId: t.bucketId ?? null,
+    parentId: t.parentId, priority: t.priority, start: t.start, startHasTime: t.startHasTime,
   };
 }
 
@@ -143,6 +150,7 @@ export function formToTask(f: TaskForm): TaskInput {
     labels: f.labels,
     planId: f.planId,
     bucketId: f.bucketId,
+    parentId: f.parentId, priority: f.priority, start: f.start, startHasTime: f.startHasTime,
   };
 }
 
@@ -156,7 +164,8 @@ export function mergeTaskSave(original: TaskInput, edited: TaskInput, latest: Ta
   // normalisation (trimming, date formatting) doesn't count as an edit.
   const base = formToTask(taskToForm(original));
   const out = { ...edited };
-  for (const k of Object.keys(edited) as (keyof TaskInput)[]) {
+  const keys = new Set([...Object.keys(edited), 'parentId', 'priority', 'start', 'startHasTime']) as Set<keyof TaskInput>;
+  for (const k of keys) {
     if (k === 'planId' || k === 'bucketId') continue;
     if (JSON.stringify(edited[k]) === JSON.stringify(base[k])) (out as Record<string, unknown>)[k] = latest[k];
   }
