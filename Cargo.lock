@@ -4026,6 +4026,7 @@ dependencies = [
  "rrule",
  "rusqlite",
  "serde",
+ "serde_json",
  "taskcraft-parse",
  "tempfile",
  "thiserror 2.0.21",

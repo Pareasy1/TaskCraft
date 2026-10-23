@@ -15,6 +15,7 @@ mod recur;
 mod schema;
 mod subtasks;
 mod tasks;
+mod templates;
 mod time;
 
 pub use alerts::DueAlert;
@@ -25,6 +26,7 @@ pub use checklist::ChecklistItem;
 pub use duplicate::DuplicateResult;
 pub use model::*;
 pub use query::{Hit, Occurrence, Scope, TaskFilter};
+pub use templates::{TemplateBody, TemplateInfo, TemplateSubtask};
 pub use time::{from_parsed, local_to_utc, to_utc};
 
 use chrono::{DateTime, SecondsFormat, Utc};
