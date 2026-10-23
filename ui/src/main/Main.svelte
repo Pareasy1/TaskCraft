@@ -361,7 +361,7 @@
     </div>
   </main>
   {#if target}
-    <Inspector {target} {calendars} {labels} {plans} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} />
+    <Inspector {target} {calendars} {labels} {plans} onclose={() => (target = null)} onsaved={() => (target = null)} {askScope} onopentask={openTask} />
   {/if}
 </div>
 
