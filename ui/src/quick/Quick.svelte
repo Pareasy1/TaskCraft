@@ -8,6 +8,7 @@
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import type { Calendar, ItemRef, Occurrence, ParsedItem, Settings, Task, TaskStatus } from '../lib/types';
   import { STATUS_LABEL } from '../lib/tasks';
+  import { topLevel } from '../lib/subtasks';
   import { monthGrid, addDays, startOfDay } from '../lib/layout';
   import { ymd } from '../lib/format';
   import HighlightInput from './HighlightInput.svelte';
@@ -53,9 +54,10 @@
       const [occ, overdue, today, upcoming, cals, s] = await Promise.all([
         api.listRange(start, end), api.listTasks('overdue'), api.listTasks('today'), api.listTasks('upcoming'), api.listCalendars(), api.getSettings(),
       ]);
-      upcomingTasks = upcoming;
+      // Top-level tasks only; each shows its subtask progress.
+      upcomingTasks = topLevel(upcoming);
       occurrences = occ;
-      tasks = [...overdue, ...today];
+      tasks = topLevel([...overdue, ...today]);
       calendars = cals;
       settings = s;
     } catch (e) {

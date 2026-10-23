@@ -17,6 +17,9 @@
   import TasksView from './TasksView.svelte';
   import Toast from './Toast.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
+  import CompleteDialog from './CompleteDialog.svelte';
+  import { pending } from '../lib/complete.svelte';
+  import { childrenByParent, statusCtx, topLevel } from '../lib/subtasks';
   import { notify } from '../lib/toast.svelte';
   import { changeStatus } from '../lib/actions';
   import { activate, clearSelection, isSelected, select } from '../lib/selection.svelte';
@@ -43,7 +46,10 @@
   const SECTION_NAMES = {
     overdue: t('group.overdue'), today: t('view.today'), upcoming: t('view.upcoming'), nodate: t('view.nodate'), completed: t('view.completed'),
   };
-  let taskSections = $derived(sidebarSections(allTasks, new Date()).map((sec) => ({ ...sec, name: SECTION_NAMES[sec.key] })));
+  // The sidebar lists top-level tasks only (with their subtask progress).
+  let taskSections = $derived(sidebarSections(topLevel(allTasks), new Date()).map((sec) => ({ ...sec, name: SECTION_NAMES[sec.key] })));
+  /** Subtasks by parent id, for the boards' expandable cards. */
+  let kids = $derived(childrenByParent(allTasks));
   /** Label filter shared by the Tasks page and the sidebar's label list. */
   let activeLabels = $state<number[]>([]);
   let labels = $state<TaskLabel[]>([]);
@@ -258,7 +264,7 @@
 
   async function setStatus(t: Task, s: TaskStatus) {
     try {
-      await changeStatus(t, s);
+      await changeStatus(t, s, statusCtx(t, allTasks));
     } catch (e) {
       error = errorMessage(e);
     }
@@ -345,7 +351,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} children={kids} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}
@@ -366,6 +372,8 @@
 </div>
 
 <Toast />
+
+{#if pending.current}<CompleteDialog task={pending.current.task} openChildren={pending.current.openChildren} />{/if}
 
 {#if settingsOpen}<SettingsDialog onclose={() => (settingsOpen = false)} />{/if}
 

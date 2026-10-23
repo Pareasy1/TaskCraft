@@ -3,7 +3,7 @@ import { startOfDay } from './layout';
 import { isOverdue } from './tasks';
 import type { Bucket, Plan, TaskLabel } from './types';
 
-export type GroupBy = 'bucket' | 'status' | 'due' | 'label';
+export type GroupBy = 'bucket' | 'status' | 'due' | 'label' | 'priority';
 
 /** One column per bucket in `sort` order (empty ones kept); cards by (sortOrder, id). */
 export function bucketColumns<T extends { bucketId: number; sortOrder: number; id: number }>(

@@ -4,6 +4,7 @@
   import { fmtShortDate, fmtTime } from '../lib/format';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import LabelChip from './tasks/LabelChip.svelte';
+  import { progressLabel } from '../lib/subtasks';
 
   let {
     sections,
@@ -32,9 +33,10 @@
           <StatusGlyph status={t.status} size={15} onchange={(st) => onstatus(t, st)} />
           <button class="open-btn body" onclick={(e) => { e.stopPropagation(); activate(e, () => onopen(t), () => select({ kind: 'task', id: t.id })); }}>
             <span class="name">{t.title}</span>
-            {#if t.due || t.labels.length}
+            {#if t.due || t.labels.length || t.subtaskTotal}
               <span class="meta">
                 {#if t.due}<span class="due" class:overdue={s.key === 'overdue'}>{due(t)}</span>{/if}
+                {#if t.subtaskTotal}<span class="prog">{progressLabel(t)}</span>{/if}
                 {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
               </span>
             {/if}
@@ -74,6 +76,7 @@
   .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 11.5px; }
   .meta :global(.chip) { font-size: 11.5px; }
   .due { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .prog { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .due.overdue { color: var(--danger); }
   .done .name { color: var(--muted); text-decoration: line-through; }
 </style>

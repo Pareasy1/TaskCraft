@@ -146,7 +146,7 @@ describe('statusCtx', () => {
 describe('nestGroups (Tasks list)', () => {
   // 1 ← 2, 3 ; 4 ; 5 ← 6
   const all = [task(1, null), task(2, 1, 10), task(3, 1, 20), task(4, null), task(5, null), task(6, 5)];
-  const rows = (gs: ReturnType<typeof nestGroups<T>>) => gs.map((g) => [g.key, g.rows.map((r) => [r.parent.id, r.dimmed, ids(r.children)])]);
+  const rows = (gs: { key: string; rows: { parent: T; dimmed: boolean; children: T[] }[] }[]) => gs.map((g) => [g.key, g.rows.map((r) => [r.parent.id, r.dimmed, ids(r.children)])]);
   it('a shown parent takes its shown children, whatever group they fell in', () => {
     const gs = nestGroups([{ key: 'a', tasks: [all[0], all[2]] }, { key: 'b', tasks: [all[1], all[3]] }], all);
     expect(rows(gs)).toEqual([['a', [[1, false, [2, 3]]]], ['b', [[4, false, []]]]]);

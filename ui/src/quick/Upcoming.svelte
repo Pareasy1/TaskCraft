@@ -6,6 +6,7 @@
   import LabelChip from '../main/tasks/LabelChip.svelte';
   import { fmtDayHeading, fmtTime, ymd } from '../lib/format';
   import { dayGroups } from '../lib/layout';
+  import { progressLabel } from '../lib/subtasks';
 
   let {
     occurrences,
@@ -38,6 +39,7 @@
     <button class="open-btn opener" title={tr('quick.openTask', { title: t.title })} onclick={(e) => { e.stopPropagation(); activate(e, () => onopen('task', t.id), () => select({ kind: 'task', id: t.id })); }}>
       <span class="name">{t.title}</span>
       {#each t.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
+      {#if t.subtaskTotal}<span class="meta">{progressLabel(t)}</span>{/if}
       <span class="meta" class:late>{meta}</span>
     </button>
   </div>
