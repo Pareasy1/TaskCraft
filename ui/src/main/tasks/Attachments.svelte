@@ -2,7 +2,7 @@
   import { onDestroy, tick } from 'svelte';
   import { Ellipsis, ExternalLink, FileText, FolderOpen, Link, Paperclip, Plus } from 'lucide-svelte';
   import { t } from '../../lib/i18n';
-  import { api, errorMessage, onItemsChanged } from '../../lib/api';
+  import { api, errorMessage, knownErrorMessage, onItemsChanged } from '../../lib/api';
   import { formatSize, isWebUrl, notAddedMessage, urlHost } from '../../lib/attachments';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { dropIndex, insertAt } from '../../lib/plans';
@@ -156,7 +156,7 @@
     picking = true;
     try {
       const { errors } = await api.pickAndAddFiles(task.id);
-      const msg = notAddedMessage(errors, (code) => errorMessage({ code }), (names, reason) => t('attachments.notAdded', { names, reason }));
+      const msg = notAddedMessage(errors, knownErrorMessage, (names, reason) => t('attachments.notAdded', { names, reason }), t('attachments.copyFailed'));
       if (msg) notify(msg);
     } catch (e) {
       onerror(errorMessage(e));
@@ -175,17 +175,21 @@
     await tick();
     urlEl?.focus();
   }
-  function hideLink() {
+  /** Closes the link field; `refocus` (the Esc path) moves focus to "Add file…" instead of <body>. */
+  function hideLink(refocus = false) {
     linkOpen = false;
     url = '';
     urlError = false;
-    tick().then(() => fileBtn?.focus());
+    if (refocus) tick().then(() => fileBtn?.focus());
   }
   function addLink(): Promise<void> {
     const value = url.trim();
     if (!value) return pending;
     if (!isWebUrl(value)) {
       urlError = true;
+      // Save/Close wait on this field: show it (the dialog may be scrolled) so Esc can clear it.
+      urlEl?.focus();
+      tick().then(() => (document.getElementById(`att-url-error-${task.id}`) ?? urlEl)?.scrollIntoView({ block: 'nearest' }));
       return Promise.reject(new Error('attachment_url'));
     }
     url = ''; // the field keeps focus for the next one
@@ -216,7 +220,7 @@
       if (url) {
         url = '';
         urlError = false;
-      } else hideLink();
+      } else hideLink(true);
     }
   }
 
@@ -239,7 +243,7 @@
           draggable={renaming !== a.id}
           ondragstart={(e) => { dragId = a.id; e.dataTransfer?.setData('text/plain', a.name); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
           ondragend={endDrag}
-          ondblclick={() => renaming !== a.id && open(a)}
+          ondblclick={(e) => { if (renaming !== a.id && !(e.target as Element).closest('button, input')) open(a); }}
           oncontextmenu={(e) => { e.preventDefault(); menu.open(a, e.clientX, e.clientY, menuBtn(a.id) ?? (e.currentTarget as HTMLElement)); }}
         >
           <span class="kind" aria-hidden="true">

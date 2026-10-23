@@ -34,15 +34,20 @@ export function isWebUrl(s: string): boolean {
 
 /**
  * One toast for the files "Add file…" could not add: a sentence per reason, listing its names,
- * in the order the reasons first appear. Null when all were added.
+ * in the order the reasons first appear. `reason` gives null for codes without a message of
+ * their own (io, db…); those share `fallback`. Null when all were added.
  */
 export function notAddedMessage(
   errors: { name: string; code: string }[],
-  reason: (code: string) => string,
+  reason: (code: string) => string | null,
   sentence: (names: string, reason: string) => string,
+  fallback = '',
 ): string | null {
   if (!errors.length) return null;
-  const byCode = new Map<string, string[]>();
-  for (const e of errors) byCode.set(e.code, [...(byCode.get(e.code) ?? []), e.name]);
-  return [...byCode].map(([code, names]) => sentence(names.join(', '), reason(code))).join(' ');
+  const byReason = new Map<string, string[]>();
+  for (const e of errors) {
+    const why = reason(e.code) ?? fallback;
+    byReason.set(why, [...(byReason.get(why) ?? []), e.name]);
+  }
+  return [...byReason].map(([why, names]) => sentence(names.join(', '), why)).join(' ');
 }

@@ -93,11 +93,16 @@ const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavaila
   'parent_is_subtask', 'has_subtasks', 'repeating_subtask', 'start_after_due', 'checklist_text',
   'attachment_too_large', 'attachment_url', 'template_name'] as const;
 
+/** The app-language message for an error code, or null when the code has none. */
+export function knownErrorMessage(code: string): string | null {
+  return (TRANSLATED_ERRORS as readonly string[]).includes(code) ? t(`error.${code as (typeof TRANSLATED_ERRORS)[number]}`) : null;
+}
+
 /** A user-facing message for an error from a command, in the app language when known. */
 export function errorMessage(e: unknown): string {
   if (e && typeof e === 'object' && 'code' in e) {
-    const code = String((e as { code: unknown }).code);
-    if ((TRANSLATED_ERRORS as readonly string[]).includes(code)) return t(`error.${code as (typeof TRANSLATED_ERRORS)[number]}`);
+    const known = knownErrorMessage(String((e as { code: unknown }).code));
+    if (known) return known;
   }
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message);
   return String(e);

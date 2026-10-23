@@ -52,4 +52,10 @@ describe('notAddedMessage', () => {
       { name: 'a.mov', code: 'attachment_too_large' }, { name: 'gone.txt', code: 'not_found' }, { name: 'b.iso', code: 'attachment_too_large' },
     ], reason, fmt)).toBe('a.mov, b.iso: <attachment_too_large> gone.txt: <not_found>');
   });
+  it('uses the generic reason for codes without a message of their own (io, db…)', () => {
+    const known = (code: string) => (code === 'attachment_too_large' ? '<too large>' : null);
+    expect(notAddedMessage([
+      { name: 'x.bin', code: 'io' }, { name: 'y.bin', code: 'db' }, { name: 'a.mov', code: 'attachment_too_large' },
+    ], known, fmt, '<not copied>')).toBe('x.bin, y.bin: <not copied> a.mov: <too large>');
+  });
 });
