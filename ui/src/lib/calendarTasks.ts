@@ -99,3 +99,9 @@ export function movedDue(task: TaskLike, key: string): string | null {
       return null;
   }
 }
+
+/** A keyboard move for the whole task: the new due date and, for a span, the start shifted with it. */
+export function movedSpan(task: TaskLike, key: string): { due: string; start: string | null } | null {
+  const due = movedDue(task, key);
+  return due ? { due, start: shiftStart(task, due) } : null;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { movedDue, shiftStart, spanRole, tasksForDay, TASK_SLOT_MIN } from './calendarTasks';
+import { movedDue, movedSpan, shiftStart, spanRole, tasksForDay, TASK_SLOT_MIN } from './calendarTasks';
 
 type T = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
 const at = (d: number, h = 0, m = 0) => new Date(2026, 9, d, h, m).toISOString();
@@ -129,5 +129,17 @@ describe('shiftStart across DST (Europe/Rome)', () => {
   it('a 15-minute timed move shifts start by 15 minutes of wall-clock time', () => {
     const t = span(L(9, 24, 9), L(9, 25, 18), true);
     expect(shiftStart(t, L(9, 25, 18, 15))).toBe(L(9, 24, 9, 15));
+  });
+});
+
+describe('movedSpan', () => {
+  const span = { id: 1, due: at(22, 12), dueHasTime: true, completedAt: null, start: at(20, 12) };
+  it('movedDue on a span also shifts start', () => {
+    expect(movedSpan(span, 'ArrowRight')).toEqual({ due: at(23, 12), start: at(21, 12) });
+    expect(movedSpan(span, 'ArrowDown')).toEqual({ due: at(22, 12, 15), start: at(20, 12, 15) });
+  });
+  it('leaves start null without one, and ignores other keys', () => {
+    expect(movedSpan({ ...span, start: null }, 'ArrowLeft')).toEqual({ due: at(21, 12), start: null });
+    expect(movedSpan(span, 'a')).toBeNull();
   });
 });

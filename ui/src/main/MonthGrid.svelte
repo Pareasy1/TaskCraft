@@ -17,6 +17,7 @@
     tasks = [],
     ontaskopen = () => {},
     ontaskstatus = () => {},
+    parentTitles = new Map(),
   }: {
     month: Date;
     weekStart: 0 | 1;
@@ -26,6 +27,8 @@
     tasks?: Task[];
     ontaskopen?: (t: Task) => void;
     ontaskstatus?: (t: Task, s: TaskStatus) => void;
+    /** Task id to title, to label subtasks "Subtask · Parent". */
+    parentTitles?: Map<number, string>;
   } = $props();
 
   let days = $derived(monthGrid(month.getFullYear(), month.getMonth(), weekStart));
@@ -42,7 +45,7 @@
   // Tasks due on the day (date-only first), listed under its events.
   const tasksOn = (d: Date) => {
     const r = tasksForDay(tasks, d, today);
-    return [...r.allDay.filter((x) => sameDay(new Date(x.task.due!), d)), ...r.timed];
+    return [...r.allDay.filter((x) => x.span || sameDay(new Date(x.task.due!), d)), ...r.timed];
   };
   const hiddenBarsAt = (i: number) =>
     bars.filter((b) => b.lane >= LANES && b.row === Math.floor(i / 7) && b.col <= i % 7 && i % 7 < b.col + b.span).length;
@@ -74,11 +77,12 @@
             </button>
           {/each}
           {#each dayTasks.slice(0, taskRoom) as x (x.task.id)}
-            <div class="titem" class:is-selected={isSelected('task', x.task.id)} class:done={x.task.status === 'done'} class:overdue={x.overdue}>
+            {@const label = (x.task.parentId != null ? t('subtasks.calTitle', { parent: parentTitles.get(x.task.parentId) ?? '' }) + ' — ' : '') + x.task.title}
+            <div class="titem" class:span-start={x.span === 'start'} class:span-middle={x.span === 'middle'} class:span-end={x.span === 'end'} class:is-selected={isSelected('task', x.task.id)} class:done={x.task.status === 'done'} class:overdue={x.overdue}>
               <StatusGlyph status={x.task.status} size={12} onchange={(st) => ontaskstatus(x.task, st)} />
               <button class="t" onclick={(e) => activate(e, () => ontaskopen(x.task), () => select({ kind: 'task', id: x.task.id }))}
                 ondblclick={() => ontaskopen(x.task)}
-                aria-label="{x.task.title}, {STATUS_LABEL[x.task.status]}">{x.task.title}</button>
+                aria-label="{label}{x.span ? ` (${t(`span.${x.span}`)})` : ''}, {STATUS_LABEL[x.task.status]}">{#if x.span}<span aria-hidden="true">{x.span === 'start' ? '↦' : x.span === 'middle' ? '→' : '⇥'} </span>{/if}{label}</button>
               {#if x.task.dueHasTime}<span class="time">{fmtTime(new Date(x.task.due!))}</span>{/if}
             </div>
           {/each}
@@ -166,6 +170,10 @@
   .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .time { color: var(--muted); font-size: 11px; }
   .titem { display: flex; align-items: center; gap: 4px; padding: 1px 4px 1px 3px; min-width: 0; border-radius: 4px; }
+  .titem.span-start { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .titem.span-middle { border-radius: 0; }
+  .titem.span-end { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .titem.span-start, .titem.span-middle, .titem.span-end { background: var(--hover); }
   .titem:hover { background: var(--hover); }
   .titem .t { border: none; background: none; padding: 0; text-align: left; font-size: 11.5px; color: var(--text); }
   .titem.done .t { color: var(--muted); text-decoration: line-through; }

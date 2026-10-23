@@ -50,6 +50,7 @@
   let taskSections = $derived(sidebarSections(topLevel(allTasks), new Date()).map((sec) => ({ ...sec, name: SECTION_NAMES[sec.key] })));
   /** Subtasks by parent id, for the boards' expandable cards. */
   let kids = $derived(childrenByParent(allTasks));
+  let parentTitles = $derived(new Map(allTasks.map((x) => [x.id, x.title])));
   /** Label filter shared by the Tasks page and the sidebar's label list. */
   let activeLabels = $state<number[]>([]);
   let labels = $state<TaskLabel[]>([]);
@@ -249,10 +250,10 @@
   }
 
   /** Moves a task to a new due date from the calendar, with Undo. */
-  async function moveTask(task: Task, due: string) {
-    const before = toTaskInput(task);
+  async function moveTask(task: Task, due: string, start: string | null = null) {
+    const before = toTaskInput(task); // carries start, so Undo restores both
     try {
-      await api.updateTask(task.id, { ...before, due });
+      await api.updateTask(task.id, { ...before, due, start });
       const d = new Date(due);
       notify(t('msg.movedTo', { title: task.title, where: `${fmtShortDate(d)}${task.dueHasTime ? `, ${fmtTime(d)}` : ''}` }), () =>
         api.updateTask(task.id, before),
@@ -354,12 +355,12 @@
         <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} children={kids} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
-          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}
+          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} {parentTitles}
           onselect={(o) => openEvent(o.eventId, o.start)}
           onday={(d) => { anchor = startOfDay(d); view = 'day'; }} />
       {:else}
         <DayWeekGrid {days} {occurrences} tasks={allTasks}
-          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} ontaskmove={moveTask}
+          ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} ontaskmove={moveTask} {parentTitles}
           onselect={(o) => openEvent(o.eventId, o.start)}
           oncreate={newEvent}
           onmove={move} />
