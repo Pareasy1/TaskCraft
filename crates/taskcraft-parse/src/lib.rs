@@ -61,6 +61,11 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
     } else {
         None
     };
+    let priority = if kind == ItemKind::Task {
+        mark_priority(&toks, &mut tags)
+    } else {
+        None
+    };
     let ctx = Ctx { now, opts };
     rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
     let attendees = rules::fields::attendees(&toks, &mut tags);
@@ -84,6 +89,7 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
         url: r.url,
         tags: tags_found,
         plan,
+        priority,
         spans,
     }
 }
@@ -111,6 +117,26 @@ fn mark_tags(toks: &[Token], tags: &mut [Tagged]) -> Vec<String> {
         }
     }
     out
+}
+
+/// Labels the first priority word (`!urgent`, `!bassa`, ...) and returns its
+/// level. Later priority words and other `!words` stay in the title.
+fn mark_priority(toks: &[Token], tags: &mut [Tagged]) -> Option<ParsedPriority> {
+    for (t, tag) in toks.iter().zip(tags.iter_mut()) {
+        if tag.label.is_some() {
+            continue;
+        }
+        let level = match t.lower.as_str() {
+            "!urgent" | "!urgente" => ParsedPriority::Urgent,
+            "!important" | "!importante" => ParsedPriority::Important,
+            "!medium" | "!media" => ParsedPriority::Medium,
+            "!low" | "!bassa" => ParsedPriority::Low,
+            _ => continue,
+        };
+        tag.label = Some(Label::Priority);
+        return Some(level);
+    }
+    None
 }
 
 /// Lowercased alphanumeric characters only, so "3D print" and "/3dprint" match.

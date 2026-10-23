@@ -62,6 +62,17 @@ pub enum Label {
     /// `#word` on a task.
     Tag,
     Plan,
+    /// `!urgent` style priority word on a task.
+    Priority,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParsedPriority {
+    Urgent,
+    Important,
+    Medium,
+    Low,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,5 +177,7 @@ pub struct ParsedItem {
     /// Label names from `#word` tokens (tasks only), without the `#`.
     pub tags: Vec<String>,
     pub plan: Option<String>,
+    /// From the first `!urgent`-style word (tasks only).
+    pub priority: Option<ParsedPriority>,
     pub spans: Vec<Span>,
 }
