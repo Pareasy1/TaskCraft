@@ -107,16 +107,18 @@ export interface TaskForm {
   /** Null for a new task: the store picks the default plan / the plan's first bucket. */
   planId: number | null;
   bucketId: number | null;
-  /** Carried through so a save never drops them (the inspector edits them directly). */
+  /** Carried through so a save never drops it (the inspector changes it with `setTaskParent`). */
   parentId?: number | null;
-  priority?: Priority;
-  start?: string | null;
-  startHasTime?: boolean;
+  priority: Priority;
+  /** `YYYY-MM-DD` and `HH:MM` (local), or '' when unset. */
+  startDate: string;
+  startTime: string;
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
   const pad2 = (n: number) => String(n).padStart(2, '0');
   const d = t.due ? new Date(t.due) : null;
+  const s = t.start ? new Date(t.start) : null;
   return {
     title: t.title,
     calendarId: t.calendarId,
@@ -130,13 +132,18 @@ export function taskToForm(t: TaskInput): TaskForm {
     labels: [...t.labels],
     planId: t.planId ?? null,
     bucketId: t.bucketId ?? null,
-    parentId: t.parentId, priority: t.priority, start: t.start, startHasTime: t.startHasTime,
+    parentId: t.parentId,
+    priority: t.priority ?? 'medium',
+    startDate: s ? ymd(s) : '',
+    startTime: s && t.startHasTime ? `${pad2(s.getHours())}:${pad2(s.getMinutes())}` : '',
   };
 }
 
 export function formToTask(f: TaskForm): TaskInput {
   let due: string | null = null;
   if (f.dueDate) due = f.dueTime ? new Date(`${f.dueDate}T${f.dueTime}`).toISOString() : midnight(f.dueDate);
+  let start: string | null = null;
+  if (f.startDate) start = f.startTime ? new Date(`${f.startDate}T${f.startTime}`).toISOString() : midnight(f.startDate);
   return {
     calendarId: f.calendarId,
     title: f.title.trim(),
@@ -150,9 +157,16 @@ export function formToTask(f: TaskForm): TaskInput {
     labels: f.labels,
     planId: f.planId,
     bucketId: f.bucketId,
-    parentId: f.parentId, priority: f.priority, start: f.start, startHasTime: f.startHasTime,
+    parentId: f.parentId,
+    priority: f.priority,
+    start,
+    startHasTime: !!(f.startDate && f.startTime),
   };
 }
+
+/** The store's rule: a start may not be after the due date (instants, when both are set). */
+export const startAfterDue = (t: { start?: string | null; due: string | null }) =>
+  !!t.start && !!t.due && new Date(t.start).getTime() > new Date(t.due).getTime();
 
 /**
  * Three-way merge for saving a task the side panel opened as `original`:

@@ -71,3 +71,30 @@ describe('priorityColumns', () => {
     expect(cols.map((c) => ids(c.tasks))).toEqual([[2], [], [4], [3, 1]]);
   });
 });
+
+import { parentCandidates, shiftId } from './subtasks';
+
+describe('parentCandidates', () => {
+  type P = { id: number; parentId: number | null; sortOrder: number; planId: number; title: string; completedAt: string | null };
+  const p = (id: number, title: string, o: Partial<P> = {}): P => ({ id, parentId: null, sortOrder: id, planId: 1, title, completedAt: null, ...o });
+  it('lists open top-level tasks of the same plan, without the task itself, by title', () => {
+    const all = [p(1, 'Zeta'), p(2, 'Alpha'), p(3, 'Self'), p(4, 'Sub', { parentId: 1 }), p(5, 'Other plan', { planId: 2 }), p(6, 'Done', { completedAt: 'x' })];
+    expect(ids(parentCandidates(all, 3, 1, null))).toEqual([2, 1]);
+  });
+  it('keeps the current parent even when it is completed', () => {
+    const all = [p(1, 'Beta'), p(6, 'Alpha', { completedAt: 'x' })];
+    expect(ids(parentCandidates(all, 3, 1, 6))).toEqual([6, 1]);
+  });
+});
+
+describe('shiftId', () => {
+  it('moves an id one place up or down', () => {
+    expect(shiftId([1, 2, 3], 2, -1)).toEqual([2, 1, 3]);
+    expect(shiftId([1, 2, 3], 2, 1)).toEqual([1, 3, 2]);
+  });
+  it('returns null at either end or when missing', () => {
+    expect(shiftId([1, 2, 3], 1, -1)).toBeNull();
+    expect(shiftId([1, 2, 3], 3, 1)).toBeNull();
+    expect(shiftId([1, 2, 3], 9, 1)).toBeNull();
+  });
+});

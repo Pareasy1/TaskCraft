@@ -71,3 +71,24 @@ export function priorityColumns<T extends { priority: Priority; sortOrder: numbe
     tasks: tasks.filter((x) => x.priority === key).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id),
   }));
 }
+
+type Candidate = Child & { planId: number; title: string; completedAt: string | null };
+
+/**
+ * Tasks that can be picked as `selfId`'s parent: open top-level tasks of the same plan,
+ * by title. The current parent stays listed even when completed, so the picker shows it.
+ */
+export function parentCandidates<T extends Candidate>(tasks: T[], selfId: number, planId: number, currentParentId: number | null): T[] {
+  return tasks
+    .filter((x) => x.id !== selfId && x.parentId == null && x.planId === planId && (!x.completedAt || x.id === currentParentId))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id);
+}
+
+/** `ids` with `id` moved one place up (-1) or down (1); null when it can't move. */
+export function shiftId(ids: number[], id: number, by: -1 | 1): number[] | null {
+  const i = ids.indexOf(id), j = i + by;
+  if (i < 0 || j < 0 || j >= ids.length) return null;
+  const out = [...ids];
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}

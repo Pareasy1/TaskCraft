@@ -98,3 +98,39 @@ describe('subtask fields', () => {
     expect(mergeTaskSave(original, edited, latest)).toMatchObject({ notes: 'x', parentId: 9, priority: 'low', start: null });
   });
 });
+
+import { startAfterDue } from './edit';
+
+describe('start and priority in the form', () => {
+  const base: TaskInput = {
+    calendarId: 1, title: 'Ship', due: '2026-10-28T15:30:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
+    rrule: null, notes: null, alerts: [], status: 'todo', labels: [], priority: 'important',
+    start: '2026-10-24T07:00:00.000Z', startHasTime: true,
+  };
+  it('splits the start into date and time fields and back', () => {
+    const f = taskToForm(base);
+    expect(f.startDate).toBe(new Date('2026-10-24T07:00:00.000Z').toLocaleDateString('sv'));
+    expect(f.startTime).toMatch(/^\d\d:\d\d$/);
+    expect(f.priority).toBe('important');
+    const out = formToTask(f);
+    expect(new Date(out.start!).getTime()).toBe(new Date('2026-10-24T07:00:00.000Z').getTime());
+    expect(out.startHasTime).toBe(true);
+    expect(out.priority).toBe('important');
+  });
+  it('a date-only start is local midnight; no start date means no start', () => {
+    const f = { ...taskToForm(base), startDate: '2026-10-24', startTime: '' };
+    expect(formToTask(f)).toMatchObject({ start: new Date(2026, 9, 24).toISOString(), startHasTime: false });
+    expect(formToTask({ ...f, startDate: '' })).toMatchObject({ start: null, startHasTime: false });
+  });
+  it('a task without priority edits as Medium', () => {
+    const { priority: _p, ...rest } = base;
+    void _p;
+    expect(taskToForm(rest).priority).toBe('medium');
+  });
+  it('startAfterDue compares instants only when both are set', () => {
+    expect(startAfterDue({ start: '2026-10-29T00:00:00.000Z', due: '2026-10-28T15:30:00.000Z' })).toBe(true);
+    expect(startAfterDue({ start: '2026-10-28T15:30:00.000Z', due: '2026-10-28T15:30:00.000Z' })).toBe(false);
+    expect(startAfterDue({ start: '2026-10-29T00:00:00.000Z', due: null })).toBe(false);
+    expect(startAfterDue({ start: null, due: '2026-10-28T15:30:00.000Z' })).toBe(false);
+  });
+});
