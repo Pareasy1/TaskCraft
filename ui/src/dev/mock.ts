@@ -35,11 +35,16 @@ export function installMock() {
     completedAt: string | null; recurring: boolean; rrule: string | null; notes: string | null; color: string;
     alerts: []; status: 'todo' | 'inProgress' | 'done'; labels: { id: number; name: string; color: string }[];
     planId: number; bucketId: number; sortOrder: number;
+    parentId: number | null; priority: 'urgent' | 'important' | 'medium' | 'low'; start: string | null; startHasTime: boolean;
+    subtaskOpen: number; subtaskTotal: number; checklistDone: number; checklistTotal: number;
   };
+  type MockItem = { id: number; taskId: number; text: string; done: boolean; sort: number };
   const task = (id: number, title: string, due: string | null, dueHasTime: boolean, status: MockTask['status'] = 'todo', lbl: number[] = []): MockTask => ({
     id, calendarId: 1, title, due, dueHasTime, tz: 'Europe/Rome', completedAt: status === 'done' ? d(0, 8) : null,
     recurring: false, rrule: null, notes: null, color: '#3b82f6', alerts: [], status, labels: L(...lbl),
     planId: 1, bucketId: 1, sortOrder: id * 10,
+    parentId: null, priority: 'medium', start: null, startHasTime: false,
+    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
   });
   let all: MockTask[] = [
     task(10, 'Pay electricity bill', midnight(-2), false, 'todo', [1]),
@@ -71,6 +76,19 @@ export function installMock() {
     { ...task(22, 'Sand and paint figurine', null, false, 'inProgress'), planId: 2, bucketId: 5 },
     { ...task(23, 'Ship order #1042', midnight(2), false), planId: 2, bucketId: 6 },
   );
+  // Subtasks of "Quarterly report draft" (16), a spanning task and a checklist.
+  all.push(
+    { ...task(30, 'Collect figures', midnight(1), false), parentId: 16, sortOrder: 10, priority: 'important' },
+    { ...task(31, 'Write summary', midnight(2), false), parentId: 16, sortOrder: 20 },
+    { ...task(32, 'Review with team', null, false, 'done'), parentId: 16, sortOrder: 30 },
+  );
+  Object.assign(all.find((t) => t.id === 11)!, { priority: 'urgent' });
+  Object.assign(all.find((t) => t.id === 12)!, { start: midnight(-1), due: midnight(1), priority: 'low' });
+  let items: MockItem[] = [
+    { id: 1, taskId: 17, text: 'Outline', done: true, sort: 0 },
+    { id: 2, taskId: 17, text: 'Pick images', done: false, sort: 1 },
+    { id: 3, taskId: 17, text: 'Rehearse', done: false, sort: 2 },
+  ];
   let defaultPlan = 1;
   let nextId = 1000;
   const openCount = (planId: number) => all.filter((t) => t.planId === planId && !t.completedAt).length;
@@ -94,6 +112,15 @@ export function installMock() {
     today: () => open().filter((t) => t.due && new Date(t.due).getTime() >= startToday && new Date(t.due).getTime() < startTomorrow),
     upcoming: () => open().filter((t) => !t.due || new Date(t.due).getTime() >= startTomorrow),
   };
+  // Keeps the counts on every returned task consistent with the data.
+  const withCounts = (t: MockTask): MockTask => {
+    const kids = all.filter((x) => x.parentId === t.id);
+    const list = items.filter((i) => i.taskId === t.id);
+    return Object.assign(t, {
+      subtaskTotal: kids.length, subtaskOpen: kids.filter((k) => !k.completedAt).length,
+      checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
+    });
+  };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
   const setStatus = (t: MockTask, status: MockTask['status']) => {
     t.status = status;
@@ -111,14 +138,20 @@ export function installMock() {
       case 'list_calendars': return calendars;
       case 'get_settings': return { hotkey: 'Alt+Super+Space', launchAtLogin: false, defaultCalendarId: 1, defaultEventMinutes: 60, weekStart: 'Mon', dateOrder: 'dayMonth' };
       case 'list_range': return occ;
-      case 'list_tasks': return byFilter[args.filter]();
-      case 'get_task': return all.find((t) => t.id === args.id);
+      case 'list_tasks': return byFilter[args.filter]().map(withCounts);
+      case 'get_task': return withCounts(all.find((t) => t.id === args.id)!);
       case 'set_task_status': setStatus(all.find((t) => t.id === args.id)!, args.status); changed(); return null;
       case 'set_task_completed': setStatus(all.find((t) => t.id === args.id)!, args.done ? 'done' : 'todo'); changed(); return null;
       case 'update_task': {
         const t = all.find((x) => x.id === args.id)!;
         const i = args.input;
-        Object.assign(t, { title: i.title, due: i.due, dueHasTime: i.dueHasTime, notes: i.notes, labels: labels.filter((l) => i.labels.includes(l.name)) });
+        if (i.start && i.due && new Date(i.start) > new Date(i.due)) throw { code: 'start_after_due', message: 'start_after_due' };
+        if (i.parentId != null && all.some((x) => x.parentId === t.id)) throw { code: 'has_subtasks', message: 'has_subtasks' };
+        Object.assign(t, {
+          title: i.title, due: i.due, dueHasTime: i.dueHasTime, notes: i.notes, labels: labels.filter((l) => i.labels.includes(l.name)),
+          ...(i.priority ? { priority: i.priority } : {}), ...(i.start !== undefined ? { start: i.start, startHasTime: !!i.startHasTime } : {}),
+          ...(i.parentId !== undefined ? { parentId: i.parentId } : {}),
+        });
         setStatus(t, i.status);
         place(t, i.planId, i.bucketId);
         changed();
@@ -126,7 +159,11 @@ export function installMock() {
       }
       case 'create_task': {
         const i = args.input;
+        if (i.start && i.due && new Date(i.start) > new Date(i.due)) throw { code: 'start_after_due', message: 'start_after_due' };
+        if (i.parentId != null && all.find((x) => x.id === i.parentId)?.parentId != null) throw { code: 'parent_is_subtask', message: 'parent_is_subtask' };
         const t = task(nextId++, i.title, i.due, i.dueHasTime, i.status, labels.filter((l) => i.labels.includes(l.name)).map((l) => l.id));
+        Object.assign(t, { priority: i.priority ?? 'medium', start: i.start ?? null, startHasTime: !!i.startHasTime, parentId: i.parentId ?? null });
+        if (i.parentId != null) t.sortOrder = Math.max(0, ...all.filter((x) => x.parentId === i.parentId).map((x) => x.sortOrder)) + 10;
         place(t, i.planId ?? defaultPlan, i.bucketId);
         all = [...all, t];
         changed();
@@ -210,6 +247,57 @@ export function installMock() {
         changed();
         return null;
       }
+      case 'list_subtasks': return all.filter((t) => t.parentId === args.parentId).sort((a, b) => a.sortOrder - b.sortOrder).map(withCounts);
+      case 'reorder_subtasks': args.ids.forEach((id: number, i: number) => { const x = all.find((y) => y.id === id); if (x) x.sortOrder = (i + 1) * 10; }); changed(); return null;
+      case 'set_task_parent': {
+        const t = all.find((x) => x.id === args.taskId)!;
+        if (args.parentId != null) {
+          if (all.find((x) => x.id === args.parentId)?.parentId != null) throw { code: 'parent_is_subtask', message: 'parent_is_subtask' };
+          if (all.some((x) => x.parentId === t.id)) throw { code: 'has_subtasks', message: 'has_subtasks' };
+          if (t.recurring) throw { code: 'repeating_subtask', message: 'repeating_subtask' };
+        }
+        t.parentId = args.parentId;
+        t.sortOrder = Math.max(0, ...all.filter((x) => x.parentId === args.parentId && x.id !== t.id).map((x) => x.sortOrder)) + 10;
+        changed();
+        return null;
+      }
+      case 'complete_with_subtasks':
+        all.filter((t) => t.id === args.id || t.parentId === args.id).forEach((t) => !t.completedAt && setStatus(t, 'done'));
+        changed();
+        return null;
+      case 'list_checklist': return items.filter((i) => i.taskId === args.taskId).sort((a, b) => a.sort - b.sort);
+      case 'add_checklist_item': {
+        const text = String(args.text).trim();
+        if (!text || text.length > 200) throw { code: 'checklist_text', message: 'checklist_text' };
+        const id = nextId++;
+        items.push({ id, taskId: args.taskId, text, done: false, sort: items.filter((i) => i.taskId === args.taskId).length });
+        changed();
+        return id;
+      }
+      case 'update_checklist_item': {
+        const i = items.find((x) => x.id === args.id)!;
+        if (args.text != null) {
+          const text = String(args.text).trim();
+          if (!text || text.length > 200) throw { code: 'checklist_text', message: 'checklist_text' };
+          i.text = text;
+        }
+        if (args.done != null) i.done = args.done;
+        changed();
+        return null;
+      }
+      case 'reorder_checklist': reorder(items.filter((i) => i.taskId === args.taskId), args.ids); changed(); return null;
+      case 'delete_checklist_item': items = items.filter((i) => i.id !== args.id); changed(); return null;
+      case 'checklist_item_to_subtask': {
+        const i = items.find((x) => x.id === args.id)!;
+        const parent = all.find((x) => x.id === i.taskId)!;
+        const t = task(nextId++, i.text, null, false);
+        Object.assign(t, { parentId: parent.id, planId: parent.planId, bucketId: parent.bucketId, sortOrder: Math.max(0, ...all.filter((x) => x.parentId === parent.id).map((x) => x.sortOrder)) + 10 });
+        if (i.done) setStatus(t, 'done');
+        all = [...all, t];
+        items = items.filter((x) => x.id !== i.id);
+        changed();
+        return t.id;
+      }
       case 'get_default_plan': return defaultPlan;
       case 'set_default_plan': defaultPlan = args.id; changed(); return null;
       case 'local_time_zone': return 'Europe/Rome';
@@ -221,7 +309,7 @@ export function installMock() {
         return {
           kind: 'event', title: i > 0 ? t.slice(0, i) : t, start: { date: '2026-10-21', time: '13:00:00' },
           end: { date: '2026-10-21', time: '14:00:00' }, allDay: false, location: null, attendees: ['Sam'],
-          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null,
+          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null,
           spans: i > 0 ? [{ start: 0, end: i, label: 'title' }, { start: i + 1, end: i + 9, label: 'date' }, { start: i + 10, end: i + 12, label: 'separator' }, { start: i + 13, end: i + 14, label: 'time' }] : [],
         };
       }

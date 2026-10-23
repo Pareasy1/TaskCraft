@@ -145,3 +145,16 @@ describe('taskPageGroups (date tabs + status + labels)', () => {
     expect(taskPageGroups(xs, { view: 'all', status: 'done', labels: [2] }, now)).toEqual([]);
   });
 });
+
+describe('start dates', () => {
+  type S = T & { start: string | null };
+  const xs: S[] = [
+    { ...task(1, at(25)), start: at(21) },   // not started yet
+    { ...task(2, at(25)), start: at(20) },   // started today but due later
+    { ...task(3, at(20)), start: at(18) },   // due today
+  ];
+  it('today view excludes tasks whose start is after today', () => {
+    expect(ids(filterTasks(xs, 'today', now))).toEqual([3]);
+    expect(ids(sidebarSections(xs, now).find((s) => s.key === 'today')!.tasks)).toEqual([3]);
+  });
+});

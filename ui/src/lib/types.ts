@@ -2,7 +2,12 @@
 
 export type Label =
   | 'title' | 'taskPrefix' | 'date' | 'time' | 'duration' | 'recurrence'
-  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag' | 'plan';
+  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag' | 'plan' | 'priority';
+
+export type Priority = 'urgent' | 'important' | 'medium' | 'low';
+export const PRIORITIES: Priority[] = ['urgent', 'important', 'medium', 'low'];
+
+export interface ChecklistItem { id: number; taskId: number; text: string; done: boolean; sort: number }
 
 export interface When { date: string; time: string | null }
 export interface Span { start: number; end: number; label: Label }
@@ -23,6 +28,7 @@ export interface ParsedItem {
   url: string | null;
   tags: string[];
   plan: string | null;
+  priority: Priority | null;
   spans: Span[];
 }
 
@@ -65,6 +71,10 @@ export interface TaskInput {
   labels: string[];
   planId?: number | null;
   bucketId?: number | null;
+  parentId?: number | null;
+  priority?: Priority;
+  start?: string | null;
+  startHasTime?: boolean;
 }
 
 export interface Task {
@@ -85,6 +95,14 @@ export interface Task {
   planId: number;
   bucketId: number;
   sortOrder: number;
+  parentId: number | null;
+  priority: Priority;
+  start: string | null;
+  startHasTime: boolean;
+  subtaskOpen: number;
+  subtaskTotal: number;
+  checklistDone: number;
+  checklistTotal: number;
 }
 
 export interface Occurrence {

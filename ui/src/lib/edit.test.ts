@@ -70,6 +70,8 @@ describe('taskInput', () => {
       id: 7, calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
       completedAt: null, recurring: false, rrule: null, notes: 'n', color: '#fff', alerts: [], status: 'inProgress',
       labels: [{ id: 1, name: 'home', color: '#000' }], planId: 3, bucketId: 8, sortOrder: 20,
+      parentId: null, priority: 'medium', start: null, startHasTime: false,
+      subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
     };
     expect(taskInput(t)).toEqual({
       calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
