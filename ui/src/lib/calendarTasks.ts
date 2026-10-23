@@ -1,8 +1,13 @@
 // Which tasks the Day/Week/Month views show, and how a keyboard move changes a due date.
 import { addDays, sameDay, startOfDay } from './layout';
+import { t } from './i18n';
 import { isOverdue } from './tasks';
 
-type TaskLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
+type TaskLike = {
+  id: number; due: string | null; dueHasTime: boolean; completedAt: string | null; start?: string | null; startHasTime?: boolean;
+};
+
+export type SpanRole = 'start' | 'middle' | 'end';
 
 /**
  * A timed task occupies this many minutes in the day's overlap layout (tasks
@@ -16,15 +21,53 @@ const MOVE_STEP_MIN = 15;
 export interface DayTask<T> {
   task: T;
   overdue: boolean;
+  /** Where this day sits in a start-to-due span; null for a single-day task. */
+  span: SpanRole | null;
 }
 
 const byDue = <T extends TaskLike>(a: DayTask<T>, b: DayTask<T>) =>
   new Date(a.task.due!).getTime() - new Date(b.task.due!).getTime() || a.task.id - b.task.id;
 
+/** A task's title on the calendar: "Subtask · Parent — title" for a subtask whose parent is known, else the plain title. */
+export function calTaskTitle(task: { title: string; parentId: number | null }, parentTitles: Map<number, string>): string {
+  const parent = task.parentId == null ? undefined : parentTitles.get(task.parentId);
+  return parent == null ? task.title : `${t('subtasks.calTitle', { parent })} — ${task.title}`;
+}
+
+/** Where `day` falls in the task's start-to-due span; null without a start or when both are the same day. */
+export function spanRole(task: TaskLike, day: Date): SpanRole | null {
+  if (!task.start || !task.due) return null;
+  const s = startOfDay(new Date(task.start)).getTime();
+  const e = startOfDay(new Date(task.due)).getTime();
+  if (s >= e) return null;
+  const d = startOfDay(day).getTime();
+  if (d < s || d > e) return null;
+  return d === s ? 'start' : d === e ? 'end' : 'middle';
+}
+
+/**
+ * The start moved with the due date: by the same number of local calendar days
+ * (so DST never shifts the day) plus, for a timed start, the same change in
+ * local clock time. A date-only start stays at local midnight.
+ */
+export function shiftStart(task: TaskLike, newDue: string): string | null {
+  if (!task.start || !task.due) return null;
+  const oldDue = new Date(task.due);
+  const nd = new Date(newDue);
+  const days = Math.round((startOfDay(nd).getTime() - startOfDay(oldDue).getTime()) / 86_400_000);
+  const moved = addDays(new Date(task.start), days);
+  if (!task.startHasTime) return moved.toISOString();
+  const minutes = nd.getHours() * 60 + nd.getMinutes() - (oldDue.getHours() * 60 + oldDue.getMinutes());
+  moved.setMinutes(moved.getMinutes() + minutes);
+  return moved.toISOString();
+}
+
 /**
  * Tasks for one day: timed ones go on the grid, date-only ones in the all-day
  * strip. Done tasks stay on their day. Today's strip also lists open tasks
  * that became overdue on an earlier day, so nothing overdue is off-screen.
+ * A task with a start before its due day is a span: it sits in the all-day
+ * strip on every day it covers, timed or not.
  */
 export function tasksForDay<T extends TaskLike>(tasks: T[], day: Date, now: Date): { timed: DayTask<T>[]; allDay: DayTask<T>[] } {
   const timed: DayTask<T>[] = [];
@@ -34,7 +77,13 @@ export function tasksForDay<T extends TaskLike>(tasks: T[], day: Date, now: Date
   for (const task of tasks) {
     if (!task.due) continue;
     const d = new Date(task.due);
-    const entry = { task, overdue: isOverdue(task, now) };
+    const overdue = isOverdue(task, now);
+    const role = spanRole(task, day);
+    if (role) {
+      due.push({ task, overdue, span: role });
+      continue;
+    }
+    const entry = { task, overdue, span: null };
     if (sameDay(d, day)) (task.dueHasTime ? timed : due).push(entry);
     else if (isToday && entry.overdue && d < startOfDay(now)) carried.push(entry);
   }
@@ -60,4 +109,10 @@ export function movedDue(task: TaskLike, key: string): string | null {
     default:
       return null;
   }
+}
+
+/** A keyboard move for the whole task: the new due date and, for a span, the start shifted with it. */
+export function movedSpan(task: TaskLike, key: string): { due: string; start: string | null } | null {
+  const due = movedDue(task, key);
+  return due ? { due, start: shiftStart(task, due) } : null;
 }

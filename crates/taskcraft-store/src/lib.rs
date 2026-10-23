@@ -2,6 +2,7 @@
 
 mod alerts;
 mod calendars;
+mod checklist;
 mod events;
 mod ics;
 mod labels;
@@ -10,10 +11,12 @@ mod plans;
 mod query;
 mod recur;
 mod schema;
+mod subtasks;
 mod tasks;
 mod time;
 
 pub use alerts::DueAlert;
+pub use checklist::ChecklistItem;
 pub use model::*;
 pub use query::{Hit, Occurrence, Scope, TaskFilter};
 pub use time::{from_parsed, local_to_utc, to_utc};

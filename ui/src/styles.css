@@ -17,6 +17,7 @@
   --today: #d70015;
   --on-today: #ffffff;
   --danger: #c0261b;
+  --warning: #b45309;
   --radius: 10px;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
 
@@ -52,6 +53,7 @@
     --today: #ff6961;
     --on-today: #1c1c1e;
     --danger: #f87171;
+    --warning: #fbbf24;
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
     --label-date: #6ea2ff;
     --label-time: #4ccf8a;

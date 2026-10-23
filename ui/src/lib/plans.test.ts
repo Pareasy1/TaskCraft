@@ -135,3 +135,17 @@ describe('uniqueName', () => {
     expect(uniqueName('New plan', ['new plan'])).toBe('New plan 2');
   });
 });
+
+import { lastTopLevelIn } from './plans';
+
+describe('lastTopLevelIn (quick add appends after it)', () => {
+  const x = (id: number, bucketId: number, sortOrder: number, parentId: number | null = null) => ({ id, bucketId, sortOrder, parentId });
+  it('ignores subtasks, which share their parent bucket and have sibling sort orders', () => {
+    const tasks = [x(1, 5, 10), x(2, 5, 20), x(3, 5, 99, 1), x(4, 6, 50)];
+    expect(lastTopLevelIn(tasks, 5)?.id).toBe(2);
+  });
+  it('null for an empty bucket or one with only subtasks', () => {
+    expect(lastTopLevelIn([x(3, 5, 99, 1)], 5)).toBeNull();
+    expect(lastTopLevelIn([], 5)).toBeNull();
+  });
+});

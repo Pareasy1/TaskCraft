@@ -4,7 +4,7 @@
   import type { Occurrence, Task, TaskStatus } from '../lib/types';
   import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
   import { fmtHour, fmtShortDate, fmtTime, fmtWeekdayShort } from '../lib/format';
-  import { movedDue, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
+  import { calTaskTitle, movedSpan, shiftStart, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
   import { nextStatus, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { activate, isSelected, select } from '../lib/selection.svelte';
@@ -22,6 +22,7 @@
     ontaskopen = () => {},
     ontaskstatus = () => {},
     ontaskmove = () => {},
+    parentTitles = new Map(),
   }: {
     days: Date[];
     occurrences: Occurrence[];
@@ -31,8 +32,10 @@
     tasks?: Task[];
     ontaskopen?: (t: Task) => void;
     ontaskstatus?: (t: Task, s: TaskStatus) => void;
-    /** `due` is the new ISO due date. */
-    ontaskmove?: (t: Task, due: string) => void;
+    /** `due` is the new ISO due date; `start` moves with it for a span (null otherwise). */
+    ontaskmove?: (t: Task, due: string, start: string | null) => void;
+    /** Task id to title, to label subtasks "Subtask · Parent". */
+    parentTitles?: Map<number, string>;
   } = $props();
 
   let now = $state(new Date());
@@ -165,7 +168,8 @@
     if (!d.moved) return select({ kind: 'task', id: d.task.id });
     if (!d.dMin && !d.dDay) return;
     const due = new Date(d.task.due!);
-    ontaskmove(d.task, addDays(new Date(due.getTime() + d.dMin * 60_000), d.dDay).toISOString());
+    const newDue = addDays(new Date(due.getTime() + d.dMin * 60_000), d.dDay).toISOString();
+    ontaskmove(d.task, newDue, shiftStart(d.task, newDue));
   }
   /** The system interrupted the gesture (app switch, trackpad gesture): drop the preview, move nothing. */
   const cancelTask = () => (tdrag = null);
@@ -183,11 +187,11 @@
       e.preventDefault();
       return ontaskstatus(task, nextStatus(task.status));
     }
-    const due = movedDue(task, e.key);
-    if (!due) return;
+    const mv = movedSpan(task, e.key);
+    if (!mv) return;
     e.preventDefault();
     refocusTask = task.id;
-    ontaskmove(task, due);
+    ontaskmove(task, mv.due, mv.start);
   }
   $effect(() => {
     void dayTasks;
@@ -201,11 +205,13 @@
       }
     });
   });
+  const titleOf = (task: Task) => calTaskTitle(task, parentTitles);
+  const MARK = { start: '↦', middle: '→', end: '⇥' } as const;
   const taskAria = (x: DayTask<Task>) => {
     const due = new Date(x.task.due!);
     const when = x.task.dueHasTime ? `${fmtShortDate(due)}, ${fmtTime(due)}` : fmtShortDate(due);
     return t('grid.taskAria', {
-      title: x.task.title,
+      title: titleOf(x.task) + (x.span ? ` (${t(`span.${x.span}`)})` : ''),
       when: x.overdue ? `${when} (${t('group.overdue')})` : when,
       status: STATUS_LABEL[x.task.status],
     });
@@ -257,6 +263,9 @@
             class:done={x.task.status === 'done'}
             class:overdue={x.overdue}
             class:dragging={!!dr}
+            class:span-start={x.span === 'start'}
+            class:span-middle={x.span === 'middle'}
+            class:span-end={x.span === 'end'}
             style="--c:{x.task.color}; transform:translateX({dr ? dr.dDay * dr.colW : 0}px)"
             onpointerdown={(e) => beginTask(e, x.task, false)}
             onpointermove={moveTask}
@@ -266,8 +275,9 @@
             <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
             <button class="open-btn opener" data-task={x.task.id} aria-label={taskAria(x)}
               onclick={(e) => e.detail === 0 && ontaskopen(x.task)} onkeydown={(e) => taskKey(e, x.task)}>
-              <span class="tt">{x.task.title}</span>
-              {#if !sameDay(new Date(x.task.due!), days[i])}<span class="when">{fmtShortDate(new Date(x.task.due!))}</span>{/if}
+              {#if x.span}<span class="mark" aria-hidden="true">{MARK[x.span]}</span>{/if}
+              <span class="tt">{titleOf(x.task)}</span>
+              {#if !x.span && !sameDay(new Date(x.task.due!), days[i])}<span class="when">{fmtShortDate(new Date(x.task.due!))}</span>{/if}
             </button>
           </div>
         {/each}
@@ -309,7 +319,7 @@
                   <StatusGlyph status={x.task.status} size={13} onchange={(st) => ontaskstatus(x.task, st)} />
                   <button class="open-btn opener" data-task={x.task.id} aria-label={taskAria(x)}
                     onclick={(e) => e.detail === 0 && ontaskopen(x.task)} onkeydown={(e) => taskKey(e, x.task)}>
-                    <span class="tt">{x.task.title}</span>
+                    <span class="tt">{titleOf(x.task)}</span>
                     <span class="time">{fmtTime(new Date(x.task.due!))}</span>
                   </button>
                 </div>
@@ -452,6 +462,10 @@
   .task.dragging { position: absolute; }
   .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .task .time { flex: none; color: var(--muted); font-size: 11px; }
+  .tchip.span-start { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -4px; }
+  .tchip.span-middle { border-radius: 0; margin-inline: -4px; }
+  .tchip.span-end { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -4px; }
+  .tchip .mark { flex: none; color: var(--muted); font-size: 11px; }
   .tchip .when { flex: none; font-size: 11px; }
   .done .tt { color: var(--muted); text-decoration: line-through; }
   .overdue .time, .overdue .when { color: var(--danger); }

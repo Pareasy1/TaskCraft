@@ -86,7 +86,7 @@ fn v2_tasks_land_in_seed_plan_in_list_order() {
     let path = dir.path().join("taskcraft.db");
     v2_db(&path);
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 3);
+    assert_eq!(s.schema_version().unwrap(), 4);
     let mut tasks = all_tasks(&s);
     assert!(tasks.iter().all(|t| t.plan_id == 1 && t.bucket_id == 1));
     tasks.sort_by(|a, b| a.sort_order.partial_cmp(&b.sort_order).unwrap());
@@ -131,7 +131,7 @@ fn real_db_copy() {
         .query_row("SELECT count(*) FROM tasks", [], |r| r.get(0))
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(s.schema_version().unwrap(), 3);
+    assert_eq!(s.schema_version().unwrap(), 4);
     let orphans: i64 = Connection::open(&path)
         .unwrap()
         .query_row(

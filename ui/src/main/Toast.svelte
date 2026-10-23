@@ -1,13 +1,14 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import { X } from 'lucide-svelte';
-  import { dismiss, toast, undo } from '../lib/toast.svelte';
+  import { dismiss, runAction, toast, undo } from '../lib/toast.svelte';
 </script>
 
 <div class="region" role="status" aria-live="polite">
   {#if toast.current}
     <div class="toast">
       <span class="msg">{toast.current.message}</span>
+      {#if toast.current.action}<button class="undo" onclick={runAction}>{toast.current.action}</button>{/if}
       {#if toast.current.canUndo}<button class="undo" onclick={undo}>{t('common.undo')}</button>{/if}
       <button class="icon-btn" aria-label={t('common.dismiss')} onclick={dismiss}><X size={14} aria-hidden="true" /></button>
     </div>

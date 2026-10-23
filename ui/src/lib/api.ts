@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { t } from './i18n';
 import type {
-  Bucket, Calendar, CalendarInput, DeleteMode, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
+  Bucket, Calendar, ChecklistItem, CalendarInput, DeleteMode, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
   Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus,
 } from './types';
 
@@ -48,6 +48,17 @@ export const api = {
   deleteBucket: (id: number, mode: DeleteMode) => invoke<void>('delete_bucket', { id, mode }),
   moveTask: (taskId: number, bucketId: number, before: number | null, after: number | null) =>
     invoke<void>('move_task', { taskId, bucketId, before, after }),
+  listSubtasks: (parentId: number) => invoke<Task[]>('list_subtasks', { parentId }),
+  reorderSubtasks: (parentId: number, ids: number[]) => invoke<void>('reorder_subtasks', { parentId, ids }),
+  setTaskParent: (taskId: number, parentId: number | null) => invoke<void>('set_task_parent', { taskId, parentId }),
+  completeWithSubtasks: (id: number) => invoke<void>('complete_with_subtasks', { id }),
+  listChecklist: (taskId: number) => invoke<ChecklistItem[]>('list_checklist', { taskId }),
+  addChecklistItem: (taskId: number, text: string) => invoke<number>('add_checklist_item', { taskId, text }),
+  updateChecklistItem: (id: number, p: { text?: string | null; done?: boolean | null }) =>
+    invoke<void>('update_checklist_item', { id, text: p.text ?? null, done: p.done ?? null }),
+  reorderChecklist: (taskId: number, ids: number[]) => invoke<void>('reorder_checklist', { taskId, ids }),
+  deleteChecklistItem: (id: number) => invoke<void>('delete_checklist_item', { id }),
+  checklistItemToSubtask: (id: number) => invoke<number>('checklist_item_to_subtask', { id }),
   getDefaultPlan: () => invoke<number>('get_default_plan'),
   setDefaultPlan: (id: number) => invoke<void>('set_default_plan', { id }),
   exportIcs: (path: string) => invoke<void>('export_ics', { path }),
@@ -61,7 +72,8 @@ export function onItemsChanged(cb: () => void): Promise<UnlistenFn> {
   return listen('items-changed', cb);
 }
 
-const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable', 'duplicate', 'last_plan', 'last_bucket'] as const;
+const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable', 'duplicate', 'last_plan', 'last_bucket',
+  'parent_is_subtask', 'has_subtasks', 'repeating_subtask', 'start_after_due', 'checklist_text'] as const;
 
 /** A user-facing message for an error from a command, in the app language when known. */
 export function errorMessage(e: unknown): string {

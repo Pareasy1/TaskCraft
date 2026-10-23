@@ -38,6 +38,8 @@
     onlabel,
     ondrop,
     onkeymove,
+    children,
+    stateOf = (t) => STATUS_LABEL[t.status],
   }: {
     columns: BoardColumn[];
     now: Date;
@@ -51,6 +53,10 @@
     ondrop?: (t: Task, key: string) => void;
     /** Left/Right arrow on a card's title; return true if it moved the card. */
     onkeymove?: (t: Task, by: -1 | 1) => boolean;
+    /** Subtasks by parent id, shown on expandable cards. */
+    children?: Map<number, Task[]>;
+    /** What the arrow keys change, read out on the card ("To do", "Urgent"). */
+    stateOf?: (t: Task) => string;
   } = $props();
 
   let dragging = $state<number | null>(null);
@@ -94,7 +100,7 @@
       class="col"
       class:over={over === col.key}
       aria-label={col.title}
-      ondragover={(e) => { if (!ondrop) return; e.preventDefault(); over = col.key; }}
+      ondragover={(e) => { if (!ondrop) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; over = col.key; }}
       ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) over = null; }}
       ondrop={(e) => drop(e, col.key)}
     >
@@ -111,12 +117,13 @@
             class:dragging={dragging === t.id}
             draggable={ondrop ? 'true' : undefined}
             animate:flip={{ duration: reduce ? 0 : 180 }}
-            ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
+            ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
             ondragend={() => { dragging = null; over = null; }}
           >
             <BoardCard task={t} {now} {activeLabels} plan={planOf(t)}
-              titleLabel={onkeymove ? tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] }) : undefined}
-              onstatus={(s) => onstatus(t, s)} onopen={() => onopen(t)} {onlabel} ontitlekey={(e) => keys(e, t)} />
+              titleLabel={onkeymove ? tr('board.cardAria', { title: t.title, status: stateOf(t) }) : undefined}
+              onstatus={(s) => onstatus(t, s)} onopen={() => onopen(t)} {onlabel} ontitlekey={(e) => keys(e, t)}
+              children={children?.get(t.id)} onchildstatus={onstatus} onchildopen={onopen} />
           </div>
         {:else}
           <div class="empty"><Doodle size={34} /><p>{col.empty}</p></div>

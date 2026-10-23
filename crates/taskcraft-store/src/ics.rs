@@ -26,6 +26,16 @@ fn local_date(t: DateTime<Utc>, tz: Tz) -> String {
     t.with_timezone(&tz).format("%Y%m%d").to_string()
 }
 
+/// RFC 5545 PRIORITY: 1 is the highest, 9 the lowest (0 would mean undefined).
+fn ical_priority(p: Priority) -> u8 {
+    match p {
+        Priority::Urgent => 1,
+        Priority::Important => 3,
+        Priority::Medium => 5,
+        Priority::Low => 9,
+    }
+}
+
 /// Folds a content line at 75 octets without splitting UTF-8 characters.
 fn fold(line: &str, out: &mut String) {
     let mut width = 0;
@@ -132,6 +142,13 @@ impl Store {
             lines.push(format!("UID:task-{}@taskcraft", t.id));
             lines.push(format!("DTSTAMP:{stamp}"));
             lines.push(format!("SUMMARY:{}", esc(&t.title)));
+            if let Some(d) = t.start {
+                if t.start_has_time {
+                    lines.push(format!("DTSTART:{}", utc_stamp(d)));
+                } else {
+                    lines.push(format!("DTSTART;VALUE=DATE:{}", local_date(d, tz)));
+                }
+            }
             if let Some(d) = t.due {
                 if t.due_has_time {
                     lines.push(format!("DUE:{}", utc_stamp(d)));
@@ -148,6 +165,10 @@ impl Store {
                     "RRULE:{}",
                     recur::normalize_until(&recur::split(r).rule, tz)
                 ));
+            }
+            lines.push(format!("PRIORITY:{}", ical_priority(t.priority)));
+            if let Some(p) = t.parent_id {
+                lines.push(format!("RELATED-TO;RELTYPE=PARENT:task-{p}@taskcraft"));
             }
             match t.completed_at {
                 Some(c) => {

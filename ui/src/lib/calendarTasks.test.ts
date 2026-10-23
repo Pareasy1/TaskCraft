@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { movedDue, tasksForDay, TASK_SLOT_MIN } from './calendarTasks';
+import { calTaskTitle, movedDue, movedSpan, shiftStart, spanRole, tasksForDay, TASK_SLOT_MIN } from './calendarTasks';
+import { t } from './i18n';
 
 type T = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
 const at = (d: number, h = 0, m = 0) => new Date(2026, 9, d, h, m).toISOString();
@@ -64,5 +65,109 @@ describe('movedDue', () => {
     expect(movedDue(task(2, at(20)), 'ArrowUp')).toBeNull();
     expect(movedDue(task(1, at(20, 18), true), 'a')).toBeNull();
     expect(movedDue(task(7, null), 'ArrowRight')).toBeNull();
+  });
+});
+
+describe('spanRole', () => {
+  const span = { id: 1, due: at(22), dueHasTime: false, completedAt: null, start: at(20) }; // Tue 20 -> Thu 22
+  it('start, middle, end, outside', () => {
+    expect(spanRole(span, day(20))).toBe('start');
+    expect(spanRole(span, day(21))).toBe('middle');
+    expect(spanRole(span, day(22))).toBe('end');
+    expect(spanRole(span, day(23))).toBeNull();
+    expect(spanRole(span, day(19))).toBeNull();
+  });
+  it('null without a start or when start and due are on the same day', () => {
+    expect(spanRole({ ...span, start: null }, day(21))).toBeNull();
+    expect(spanRole({ ...span, due: at(20, 18), dueHasTime: true, start: at(20, 9) }, day(20))).toBeNull();
+  });
+  it('a timed span across midnight is start then end', () => {
+    const s = { ...span, start: at(20, 22), due: at(21, 2), dueHasTime: true };
+    expect(spanRole(s, day(20))).toBe('start');
+    expect(spanRole(s, day(21))).toBe('end');
+  });
+});
+
+describe('tasksForDay with spans', () => {
+  const s = { id: 1, due: at(23), dueHasTime: false, completedAt: null, start: at(21) };
+  it('lists a spanning task once per covered day in the all-day strip with its role', () => {
+    const roles = [20, 21, 22, 23, 24].map((d) => tasksForDay([s], day(d), now).allDay.map((x) => x.span));
+    expect(roles).toEqual([[], ['start'], ['middle'], ['end'], []]);
+    expect(tasksForDay([s], day(22), now).timed).toEqual([]);
+  });
+  it('non-spanning tasks have span null', () => {
+    expect(tasksForDay([task(2, at(20))], day(20), now).allDay[0].span).toBeNull();
+  });
+});
+
+describe('shiftStart', () => {
+  it('moves start by the same delta as due', () => {
+    const t = { id: 1, due: at(22, 12), dueHasTime: true, completedAt: null, start: at(20, 12), startHasTime: true };
+    expect(shiftStart(t, at(23, 12))).toBe(at(21, 12));
+    expect(shiftStart({ ...t, start: null }, at(23, 12))).toBeNull();
+  });
+  describe('date-only start with a timed due', () => {
+    const t = { id: 1, due: at(23, 10), dueHasTime: true, completedAt: null, start: at(23), startHasTime: false };
+    it('a negative minute change keeps the start on its day at midnight', () => {
+      expect(shiftStart(t, at(23, 9, 45))).toBe(at(23));
+    });
+    it('a positive minute change keeps the start on its day at midnight', () => {
+      expect(shiftStart(t, at(23, 10, 15))).toBe(at(23));
+      expect(shiftStart({ ...t, due: at(23, 23, 50) }, at(24, 0, 5))).toBe(at(24));
+    });
+    it('a day move still shifts the start by a day', () => {
+      expect(shiftStart(t, at(24, 10))).toBe(at(24));
+      expect(shiftStart(t, at(22, 9, 45))).toBe(at(22));
+    });
+  });
+});
+
+describe('shiftStart across DST (Europe/Rome)', () => {
+  const L = (m: number, d: number, h = 0, mi = 0) => new Date(2026, m, d, h, mi).toISOString();
+  const span = (start: string, due: string, dueHasTime: boolean) => ({ id: 1, due, dueHasTime, completedAt: null, start, startHasTime: dueHasTime });
+  it('date-only span over spring-forward (29 Mar) keeps local midnight', () => {
+    const t = span(L(2, 28), L(2, 29), false);
+    expect(shiftStart(t, L(2, 30))).toBe(L(2, 29));
+    expect(shiftStart(t, L(2, 28))).toBe(L(2, 27));
+  });
+  it('date-only span over fall-back (25 Oct) keeps local midnight', () => {
+    const t = span(L(9, 24), L(9, 25), false);
+    expect(shiftStart(t, L(9, 26))).toBe(L(9, 25));
+    expect(shiftStart(t, L(9, 24))).toBe(L(9, 23));
+  });
+  it('timed span keeps wall-clock time across spring-forward and fall-back', () => {
+    const a = span(L(2, 28, 9), L(2, 29, 18), true);
+    expect(shiftStart(a, L(2, 30, 18))).toBe(L(2, 29, 9));
+    const b = span(L(9, 24, 9), L(9, 25, 18), true);
+    expect(shiftStart(b, L(9, 26, 18))).toBe(L(9, 25, 9));
+  });
+  it('a 15-minute timed move shifts start by 15 minutes of wall-clock time', () => {
+    const t = span(L(9, 24, 9), L(9, 25, 18), true);
+    expect(shiftStart(t, L(9, 25, 18, 15))).toBe(L(9, 24, 9, 15));
+  });
+});
+
+describe('movedSpan', () => {
+  const span = { id: 1, due: at(22, 12), dueHasTime: true, completedAt: null, start: at(20, 12), startHasTime: true };
+  it('movedDue on a span also shifts start', () => {
+    expect(movedSpan(span, 'ArrowRight')).toEqual({ due: at(23, 12), start: at(21, 12) });
+    expect(movedSpan(span, 'ArrowDown')).toEqual({ due: at(22, 12, 15), start: at(20, 12, 15) });
+  });
+  it('leaves start null without one, and ignores other keys', () => {
+    expect(movedSpan({ ...span, start: null }, 'ArrowLeft')).toEqual({ due: at(21, 12), start: null });
+    expect(movedSpan(span, 'a')).toBeNull();
+  });
+});
+
+describe('calTaskTitle', () => {
+  const titles = new Map([[1, 'Ship Rafael']]);
+  it('a top-level task shows its own title', () => {
+    expect(calTaskTitle({ title: 'Plan', parentId: null }, titles)).toBe('Plan');
+  });
+  it('a subtask shows "Subtask · Parent — title"', () => {
+    expect(calTaskTitle({ title: 'Test', parentId: 1 }, titles)).toBe(`${t('subtasks.calTitle', { parent: 'Ship Rafael' })} — Test`);
+  });
+  it('a subtask whose parent title is unknown shows its plain title', () => {
+    expect(calTaskTitle({ title: 'Test', parentId: 99 }, titles)).toBe('Test');
   });
 });

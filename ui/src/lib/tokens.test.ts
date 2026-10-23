@@ -24,7 +24,7 @@ const ratio = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-const TEXT = ['text', 'muted', 'faint', 'accent', 'danger', 'label-date', 'label-time', 'label-duration', 'label-location',
+const TEXT = ['text', 'muted', 'faint', 'accent', 'danger', 'warning', 'label-date', 'label-time', 'label-duration', 'label-location',
   'label-attendees', 'label-recurrence', 'label-alert', 'label-calendar', 'label-url', 'label-prefix', 'label-tag', 'today'];
 const GRAPHIC = ['status-progress', 'status-done'];
 

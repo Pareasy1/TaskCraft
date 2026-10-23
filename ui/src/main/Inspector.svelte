@@ -2,14 +2,18 @@
   import { isMod } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onDestroy, tick } from 'svelte';
-  import { X, Trash2 } from 'lucide-svelte';
-  import type { Bucket, Calendar, EventInput, Plan, TaskInput, TaskLabel } from '../lib/types';
+  import { X, Trash2, CornerLeftUp } from 'lucide-svelte';
+  import { PRIORITIES, type Bucket, type Calendar, type EventInput, type Plan, type Task, type TaskInput, type TaskLabel } from '../lib/types';
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
-  import { api, errorMessage } from '../lib/api';
-  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import SubtaskList from './tasks/SubtaskList.svelte';
+  import Checklist from './tasks/Checklist.svelte';
+  import { api, errorMessage, onItemsChanged } from '../lib/api';
+  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import { parentCandidates } from '../lib/subtasks';
   import { ymd } from '../lib/format';
   import { notify } from '../lib/toast.svelte';
+  import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
 
   export type Target =
     | { kind: 'event'; id: number | null; occurrence: string | null; recurring: boolean; input: EventInput }
@@ -23,6 +27,7 @@
     onclose,
     onsaved,
     askScope,
+    onopentask,
   }: {
     target: Target;
     calendars: Calendar[];
@@ -31,6 +36,8 @@
     onclose: () => void;
     onsaved: () => void;
     askScope: (verb: string, allowThis: boolean) => Promise<'this' | 'all' | null>;
+    /** Opens another task's details in place of this one (a subtask, or the parent). */
+    onopentask?: (id: number) => void;
   } = $props();
 
   let ev = $state<EventForm | null>(null);
@@ -52,9 +59,49 @@
   $effect(() => {
     ev = target.kind === 'event' ? eventToForm(target.input) : null;
     task = target.kind === 'task' ? taskToForm(target.input) : null;
+    parentPick = target.kind === 'task' ? target.input.parentId ?? null : null;
     confirmDelete = false;
     error = '';
   });
+
+  // ── A stored task's subtasks, parent and parent choices (live: reloaded on every change) ──
+  let stored = $state<Task | null>(null);
+  let subtasks = $state<Task[]>([]);
+  let allTasks = $state<Task[]>([]);
+  let parentTask = $state<Task | null>(null);
+  /** The parent picked in the dialog; applied with `setTaskParent` on Save. */
+  let parentPick = $state<number | null>(null);
+  async function loadRelated() {
+    const id = target.kind === 'task' ? target.id : null;
+    if (id == null) return void ((stored = parentTask = null), (subtasks = allTasks = []));
+    try {
+      const [me, subs, all] = await Promise.all([api.getTask(id), api.listSubtasks(id), api.listTasks('all')]);
+      if (target.kind !== 'task' || target.id !== id) return;
+      stored = me;
+      subtasks = subs;
+      allTasks = all;
+      parentTask = me.parentId == null ? null : all.find((x) => x.id === me.parentId) ?? (await api.getTask(me.parentId));
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+  $effect(() => {
+    void target;
+    loadRelated();
+  });
+  const unlisten = onItemsChanged(() => loadRelated());
+  onDestroy(() => void unlisten.then((f) => f()));
+
+  let candidates = $derived(stored && task?.planId != null ? parentCandidates(allTasks, stored.id, task.planId, parentPick) : []);
+  /** A task with subtasks or a repeat can't become a subtask, so it gets no parent picker. */
+  let canHaveParent = $derived(!!stored && !subtasks.length && !stored.rrule);
+  let isSubtask = $derived(stored?.parentId != null);
+
+  // A start time goes with a due time: clearing the due time clears it.
+  $effect(() => {
+    if (task && task.startTime && !(task.dueDate && task.dueTime)) task.startTime = '';
+  });
+  let startInvalid = $derived(!!task && startAfterDue(formToTask(task)));
 
   // Plan and bucket: the bucket list follows the chosen plan.
   let planBuckets = $state<Bucket[]>([]);
@@ -125,15 +172,42 @@
     }
   }
 
+  // ── Saving, closing and moving to another task never drop what was typed ──
+  let subtaskList = $state<SubtaskList | undefined>();
+  let checklist = $state<Checklist | undefined>();
+  /** Adds the text still sitting in the "Add subtask" / "Add item" fields; false if that failed (the error shows). */
+  async function flushAdds(): Promise<boolean> {
+    try {
+      await subtaskList?.flush();
+      await checklist?.flush();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   async function save() {
+    if ((await flushAdds()) && (await persist())) onsaved();
+  }
+  async function close() {
+    if (await flushAdds()) onclose();
+  }
+  /** Opens a subtask or the parent; unsaved edits to this task are saved first (and on failure it stays). */
+  async function openOther(id: number) {
+    if (!(await flushAdds())) return;
+    if (target.kind === 'task' && target.id != null && task && taskFormDirty(target.input, task, parentPick) && !(await persist())) return;
+    onopentask?.(id);
+  }
+
+  /** Writes the form to the store; false (with the error shown) when it didn't. */
+  async function persist(): Promise<boolean> {
     try {
       if (ev && target.kind === 'event') {
         const input = formToEvent(ev);
-        if (!input.title) return (error = t('inspector.titleRequired'));
+        if (!input.title) { error = t('inspector.titleRequired'); return false; }
         if (target.id == null) await api.createEvent(input);
         else if (target.recurring && target.occurrence) {
           const scope = await askScope(t('scope.change'), true);
-          if (!scope) return;
+          if (!scope) return false;
           if (scope === 'this') {
             // Detach this occurrence, then apply every edited field to the copy.
             const newId = await api.moveEvent(target.id, target.occurrence, input.start, input.end, 'this');
@@ -152,16 +226,23 @@
         } else await api.updateEvent(target.id, input);
       } else if (task && target.kind === 'task') {
         const input = formToTask(task);
-        if (!input.title) return (error = t('inspector.titleRequired'));
+        if (!input.title) { error = t('inspector.titleRequired'); return false; }
+        if (startAfterDue(input)) { error = t('error.start_after_due'); return false; }
         if (target.id == null) await api.createTask(input);
         else {
+          // The parent goes first: its rules (no nesting, no repeat) may refuse it.
+          if (parentPick !== (target.input.parentId ?? null)) await api.setTaskParent(target.id, parentPick);
           const latest = taskInput(await api.getTask(target.id));
-          await api.updateTask(target.id, mergeTaskSave(target.input, input, latest));
+          const out = mergeTaskSave(target.input, input, latest);
+          // A subtask lives in its parent's plan and bucket.
+          if (latest.parentId != null) Object.assign(out, { planId: latest.planId, bucketId: latest.bucketId });
+          await api.updateTask(target.id, out);
         }
       }
-      onsaved();
+      return true;
     } catch (e) {
       error = errorMessage(e);
+      return false;
     }
   }
 
@@ -177,9 +258,11 @@
         // A single event can be recreated; a repeating series change has no undo.
         notify(t('msg.deleted', { title: saved.title }), target.recurring ? undefined : () => api.createEvent(saved).then(() => {}));
       } else if (target.kind === 'task' && target.id != null) {
-        const saved = taskInput(await api.getTask(target.id));
-        await api.deleteTask(target.id);
-        notify(t('msg.deleted', { title: saved.title }), () => api.createTask(saved).then(() => {}));
+        const id = target.id;
+        const saved = await snapshotWithSubtasks(id);
+        await api.deleteTask(id);
+        // Undo brings back its checklist, its subtasks and their checklists too (they went with it).
+        notify(t('msg.deleted', { title: saved.task.input.title }), () => restoreWithSubtasks(saved).then(() => {}));
       }
       onsaved();
     } catch (e) {
@@ -200,7 +283,7 @@
   }
 
   function keys(e: KeyboardEvent) {
-    if (e.key === 'Escape') onclose();
+    if (e.key === 'Escape') close();
     if (e.key === 'Enter' && isMod(e)) save();
   }
 </script>
@@ -208,11 +291,11 @@
 <svelte:window onkeydown={keys} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (backdrop click closes; Esc is the keyboard path) -->
-<div class="scrim" onclick={(e) => e.target === e.currentTarget && onclose()}>
+<div class="scrim" onclick={(e) => e.target === e.currentTarget && close()}>
 <div class="panel" role="dialog" aria-modal="true" aria-label={t('inspector.label')} tabindex="-1" bind:this={panelEl} onkeydown={trapTab}>
   <div class="top">
     <span class="kind">{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
-    <button class="icon-btn" aria-label={t('common.close')} onclick={onclose}><X size={16} /></button>
+    <button class="icon-btn" aria-label={t('common.close')} onclick={close}><X size={16} /></button>
   </div>
   {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
 
@@ -261,6 +344,11 @@
     <textarea class="field notes" bind:value={ev.notes} placeholder={t('inspector.notes')}></textarea>
   {:else if task}
     <input class="field title" bind:value={task.title} onblur={reparseTitle} placeholder={t('inspector.taskPlaceholder')} />
+    {#if isSubtask && parentTask}
+      <button class="btn link part-of" onclick={() => parentTask && openOther(parentTask.id)}>
+        <CornerLeftUp size={13} aria-hidden="true" />{t('subtasks.partOf', { title: parentTask.title })}
+      </button>
+    {/if}
     <div class="row"><span>{t('inspector.status')}</span>
       <div class="seg" role="radiogroup" aria-label={t('inspector.status')}>
         {#each STATUSES as s}
@@ -280,7 +368,12 @@
         <datalist id="label-names">{#each labels as l}<option value={l.name}></option>{/each}</datalist>
       </div>
     </div>
-    {#if plans.length}
+    <label class="row"><span>{t('priority.title')}</span>
+      <select class="field" bind:value={task.priority}>
+        {#each PRIORITIES as p}<option value={p}>{t(`priority.${p}`)}</option>{/each}
+      </select>
+    </label>
+    {#if plans.length && parentPick == null}
       <label class="row"><span>{t('details.plan')}</span>
         <select class="field" value={task.planId ?? ''} onchange={(e) => pickPlan(Number(e.currentTarget.value))}>
           {#if task.planId == null}<option value="" disabled></option>{/if}
@@ -301,16 +394,41 @@
       <input class="field" type="time" bind:value={task.dueTime} disabled={!task.dueDate} />
     </label>
     {#if !task.dueDate}<button class="btn link" onclick={() => task && (task.dueDate = ymd(new Date()))}>{t('inspector.dueToday')}</button>{/if}
+    <div class="row"><label for="start-date">{t('start.title')}</label>
+      <div class="pair">
+        <input id="start-date" class="field" type="date" bind:value={task.startDate} max={task.dueDate || undefined}
+          aria-invalid={startInvalid} aria-describedby={startInvalid ? 'start-error' : undefined} />
+        {#if task.dueDate && task.dueTime}
+          <input class="field" type="time" bind:value={task.startTime} disabled={!task.startDate} aria-label={t('start.time')} />
+        {/if}
+      </div>
+    </div>
+    {#if startInvalid}<p class="inline-error" id="start-error">{t('error.start_after_due')}</p>{/if}
+    {#if canHaveParent && stored && (candidates.length || parentPick != null)}
+      <label class="row"><span>{t('subtasks.parent')}</span>
+        <select class="field" value={parentPick ?? ''} onchange={(e) => (parentPick = e.currentTarget.value ? Number(e.currentTarget.value) : null)}>
+          <option value="">{t('subtasks.none')}</option>
+          {#each candidates as c (c.id)}<option value={c.id}>{c.title}</option>{/each}
+        </select>
+      </label>
+    {/if}
     <textarea class="field notes" bind:value={task.notes} placeholder={t('inspector.notes')}></textarea>
+    {#if stored}
+      {#if !isSubtask}
+        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} />
+      {/if}
+      <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
+    {/if}
   {/if}
 
   <div class="actions">
     {#if target.id != null}
       <button class="btn danger" onclick={remove}><Trash2 size={13} /> {confirmDelete ? t('inspector.confirmDelete') : t('common.delete')}</button>
+      {#if confirmDelete && subtasks.length}<span class="warn">{t('delete.withSubtasks', { n: subtasks.length })}</span>{/if}
     {/if}
     <span class="spacer"></span>
-    <button class="btn" onclick={onclose}>{t('common.cancel')}</button>
-    <button class="btn primary" onclick={save}>{t('common.save')}</button>
+    <button class="btn" onclick={close}>{t('common.cancel')}</button>
+    <button class="btn primary" onclick={save} disabled={startInvalid}>{t('common.save')}</button>
   </div>
 </div>
 </div>
@@ -319,8 +437,8 @@
   /* Item details open as a centred dialog over the main window. */
   .scrim { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, 0.32); }
   .panel {
-    width: min(460px, 100%);
-    max-height: min(640px, 100%);
+    width: min(480px, 100%);
+    max-height: min(760px, 100%);
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -342,7 +460,12 @@
   .kind { font-size: 12px; font-weight: 600; color: var(--muted); }
   .title { font-size: 15px; font-weight: 600; }
   .row { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 10px; }
-  .row > span { color: var(--muted); font-size: 12px; }
+  .row > span, .row > label { color: var(--muted); font-size: 12px; }
+  .pair { display: flex; gap: 6px; }
+  .pair .field { flex: 1; min-width: 0; }
+  .inline-error { margin: -4px 0 0 98px; font-size: 12px; color: var(--danger); }
+  .warn { font-size: 12px; color: var(--danger); }
+  .link.part-of { display: inline-flex; align-items: center; gap: 5px; margin-left: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .check { display: flex; align-items: center; gap: 6px; padding-left: 98px; }
   .alerts { display: flex; flex-wrap: wrap; gap: 4px; }
   .pill {

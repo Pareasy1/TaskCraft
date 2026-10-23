@@ -1,5 +1,5 @@
 // Conversions between store records and inspector form fields.
-import type { AlertSpecUtc, EventInput, Task, TaskInput, TaskStatus } from './types';
+import type { AlertSpecUtc, EventInput, Priority, Task, TaskInput, TaskStatus } from './types';
 import { addDays } from './layout';
 import { ymd } from './format';
 
@@ -89,6 +89,7 @@ export function taskInput(t: Task): TaskInput {
     calendarId: t.calendarId, title: t.title, due: t.due, dueHasTime: t.dueHasTime, tz: t.tz,
     rrule: t.rrule, notes: t.notes, alerts: t.alerts, status: t.status, labels: t.labels.map((l) => l.name),
     planId: t.planId, bucketId: t.bucketId,
+    parentId: t.parentId, priority: t.priority, start: t.start, startHasTime: t.startHasTime,
   };
 }
 
@@ -106,11 +107,18 @@ export interface TaskForm {
   /** Null for a new task: the store picks the default plan / the plan's first bucket. */
   planId: number | null;
   bucketId: number | null;
+  /** Carried through so a save never drops it (the inspector changes it with `setTaskParent`). */
+  parentId?: number | null;
+  priority: Priority;
+  /** `YYYY-MM-DD` and `HH:MM` (local), or '' when unset. */
+  startDate: string;
+  startTime: string;
 }
 
 export function taskToForm(t: TaskInput): TaskForm {
   const pad2 = (n: number) => String(n).padStart(2, '0');
   const d = t.due ? new Date(t.due) : null;
+  const s = t.start ? new Date(t.start) : null;
   return {
     title: t.title,
     calendarId: t.calendarId,
@@ -124,12 +132,18 @@ export function taskToForm(t: TaskInput): TaskForm {
     labels: [...t.labels],
     planId: t.planId ?? null,
     bucketId: t.bucketId ?? null,
+    parentId: t.parentId,
+    priority: t.priority ?? 'medium',
+    startDate: s ? ymd(s) : '',
+    startTime: s && t.startHasTime ? `${pad2(s.getHours())}:${pad2(s.getMinutes())}` : '',
   };
 }
 
 export function formToTask(f: TaskForm): TaskInput {
   let due: string | null = null;
   if (f.dueDate) due = f.dueTime ? new Date(`${f.dueDate}T${f.dueTime}`).toISOString() : midnight(f.dueDate);
+  let start: string | null = null;
+  if (f.startDate) start = f.startTime ? new Date(`${f.startDate}T${f.startTime}`).toISOString() : midnight(f.startDate);
   return {
     calendarId: f.calendarId,
     title: f.title.trim(),
@@ -143,8 +157,16 @@ export function formToTask(f: TaskForm): TaskInput {
     labels: f.labels,
     planId: f.planId,
     bucketId: f.bucketId,
+    parentId: f.parentId,
+    priority: f.priority,
+    start,
+    startHasTime: !!(f.startDate && f.startTime),
   };
 }
+
+/** The store's rule: a start may not be after the due date (instants, when both are set). */
+export const startAfterDue = (t: { start?: string | null; due: string | null }) =>
+  !!t.start && !!t.due && new Date(t.start).getTime() > new Date(t.due).getTime();
 
 /**
  * Three-way merge for saving a task the side panel opened as `original`:
@@ -156,7 +178,8 @@ export function mergeTaskSave(original: TaskInput, edited: TaskInput, latest: Ta
   // normalisation (trimming, date formatting) doesn't count as an edit.
   const base = formToTask(taskToForm(original));
   const out = { ...edited };
-  for (const k of Object.keys(edited) as (keyof TaskInput)[]) {
+  const keys = new Set([...Object.keys(edited), 'parentId', 'priority', 'start', 'startHasTime']) as Set<keyof TaskInput>;
+  for (const k of keys) {
     if (k === 'planId' || k === 'bucketId') continue;
     if (JSON.stringify(edited[k]) === JSON.stringify(base[k])) (out as Record<string, unknown>)[k] = latest[k];
   }
@@ -179,3 +202,10 @@ export function recurrenceToRrule(r: NonNullable<import('./types').ParsedItem['r
 
 /** True when two ISO strings denote the same instant (formats differ between Rust and JS). */
 export const sameInstant = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime();
+
+/** True when the dialog's task form (or its picked parent) differs from the task it opened. */
+export function taskFormDirty(original: TaskInput, form: TaskForm, parentPick: number | null): boolean {
+  if (parentPick !== (original.parentId ?? null)) return true;
+  // Both sides go through the form, so formatting differences don't count as edits.
+  return JSON.stringify(formToTask(taskToForm(original))) !== JSON.stringify(formToTask(form));
+}

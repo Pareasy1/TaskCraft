@@ -28,6 +28,22 @@ export const fmtHour = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString
 export const fmtShortDate = (d: Date) =>
   d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
 
+/** A start → due span on a card: "Oct 24 → 28", "24 → 28 ott", or both dates in full across months. */
+export function fmtSpan(start: Date, due: Date): string {
+  const f = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
+  const a = f.format(start), b = f.format(due);
+  if (start.getFullYear() !== due.getFullYear() || start.getMonth() !== due.getMonth()) return `${a} → ${b}`;
+  const types = f.formatToParts(due).map((p) => p.type);
+  // Keep the month on the side the language writes it.
+  return types.indexOf('day') < types.indexOf('month') ? `${start.getDate()} → ${b}` : `${a} → ${due.getDate()}`;
+}
+
+/** A due date in the Tasks list: time only (or nothing) inside its own day group, otherwise the full date. */
+export function dueInGroup(due: Date, hasTime: boolean, groupDay: Date | null): string {
+  if (groupDay && due.toDateString() === groupDay.toDateString()) return hasTime ? fmtTime(due) : '';
+  return `${fmtShortDate(due)}${hasTime ? ` ${fmtTime(due)}` : ''}`;
+}
+
 export const monthTitle = (d: Date) => d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 
 export function weekdayInitials(weekStart: 0 | 1): string[] {

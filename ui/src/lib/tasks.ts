@@ -6,7 +6,10 @@ import { t } from './i18n';
 export type TaskView = 'all' | 'today' | 'upcoming' | 'nodate' | 'completed';
 export const TASK_VIEWS: TaskView[] = ['all', 'today', 'upcoming', 'nodate', 'completed'];
 
-type TaskLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
+type TaskLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null; start?: string | null };
+
+/** True when the task has a start date after today (local): it is not started yet. */
+const notStarted = (t: TaskLike, now: Date) => !!t.start && startOfDay(new Date(t.start)) > startOfDay(now);
 
 export interface TaskGroup<T> {
   key: string;
@@ -39,7 +42,7 @@ export function filterTasks<T extends TaskLike>(tasks: T[], view: TaskView, now:
     switch (view) {
       case 'all': return true;
       case 'nodate': return !due;
-      case 'today': return !!due && (isOverdue(t, now) || sameDay(due, now));
+      case 'today': return !!due && !notStarted(t, now) && (isOverdue(t, now) || sameDay(due, now));
       case 'upcoming': return !!due && startOfDay(due) > today;
     }
   };
@@ -131,7 +134,7 @@ export function sidebarSections<T extends TaskLike>(tasks: T[], now: Date): { ke
   const today = startOfDay(now);
   return [
     { key: 'overdue', tasks: open.filter((t) => isOverdue(t, now)).sort(byDue) },
-    { key: 'today', tasks: open.filter((t) => t.due && !isOverdue(t, now) && sameDay(new Date(t.due), now)).sort(byDue) },
+    { key: 'today', tasks: open.filter((t) => t.due && !notStarted(t, now) && !isOverdue(t, now) && sameDay(new Date(t.due), now)).sort(byDue) },
     { key: 'upcoming', tasks: open.filter((t) => t.due && startOfDay(new Date(t.due)) > today).sort(byDue) },
     { key: 'nodate', tasks: open.filter((t) => !t.due).sort((a, b) => a.id - b.id) },
     { key: 'completed', tasks: filterTasks(tasks, 'completed', now).slice(0, DONE_SHOWN) },

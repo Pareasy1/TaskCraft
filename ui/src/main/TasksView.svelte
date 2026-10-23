@@ -1,18 +1,25 @@
+<script lang="ts" module>
+  import { SvelteSet } from 'svelte/reactivity';
+  /** List parents whose subtasks are hidden, remembered for the session. */
+  const collapsed = new SvelteSet<number>();
+</script>
+
 <script lang="ts">
   import { t } from '../lib/i18n';
   import { Rows3, Columns3, ChevronDown } from 'lucide-svelte';
-  import type { Bucket, ParsedItem, Plan, Task, TaskLabel, TaskStatus } from '../lib/types';
+  import { PRIORITIES, type Bucket, type ParsedItem, type Plan, type Priority, type Task, type TaskLabel, type TaskStatus } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
-  import { describeParsed, fmtDayHeading, fmtShortDate, fmtTime } from '../lib/format';
+  import { describeParsed, dueInGroup, fmtDayHeading } from '../lib/format';
   import {
     applyFilters, boardColumns, filterTasks, isOverdue, STATUSES, STATUS_LABEL, taskCounts, taskPageGroups,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
-  import { dueColumns, labelColumns, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
+  import { dueColumns, labelColumns, lastTopLevelIn, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
   import { PopupMenu } from '../lib/menu.svelte';
   import Menu from './Menu.svelte';
   import HighlightInput from '../quick/HighlightInput.svelte';
-  import { changeStatus } from '../lib/actions';
+  import { changePriority, changeStatus } from '../lib/actions';
+  import { flattenRows, nestGroups, priorityColumns, statusCtx, topLevel } from '../lib/subtasks';
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard, { type BoardColumn } from './tasks/TaskBoard.svelte';
   import BucketBoard from './tasks/BucketBoard.svelte';
@@ -26,6 +33,7 @@
     plans,
     buckets,
     weekStart,
+    children,
     onopen,
     onerror,
     onreload,
@@ -41,6 +49,8 @@
     buckets: Bucket[];
     /** First day of the week: 0 = Sunday, 1 = Monday. */
     weekStart: 0 | 1;
+    /** Subtasks by parent id (every plan). */
+    children: Map<number, Task[]>;
     onopen: (t: Task) => void;
     onerror: (msg: string) => void;
     /** Re-reads tasks and buckets from the store. */
@@ -71,6 +81,7 @@
   // Group by (Board inside a plan), remembered per plan.
   const GROUPS: [GroupBy, string][] = [
     ['bucket', t('groupBy.bucket')], ['status', t('groupBy.status')], ['due', t('groupBy.due')], ['label', t('groupBy.label')],
+    ['priority', t('groupBy.priority')],
   ];
   const groupKey = (id: number) => `taskcraft.groupBy.${id}`;
   function storedGroup(id: number): GroupBy {
@@ -102,16 +113,21 @@
 
   // Re-evaluated on every data refresh so "overdue" follows the clock.
   let now = $derived.by(() => (void tasks, new Date()));
-  let labelled = $derived(applyFilters(tasks, { status: 'any', labels: active }));
+  // Boards show top-level tasks (subtasks expand on their cards); the list nests subtasks under their parent.
+  let top = $derived(topLevel(tasks));
+  let labelled = $derived(applyFilters(top, { status: 'any', labels: active }));
   // Inside a plan, the "No date" group follows the board's order.
   let groups = $derived.by(() => {
     const gs = taskPageGroups(tasks, { view, status, labels: active }, now);
-    if (!plan) return gs;
+    if (!plan) return nestGroups(gs, tasks);
     const order = planOrder(buckets);
-    return gs.map((g) => (g.kind === 'nodate' ? { ...g, tasks: [...g.tasks].sort(order) } : g));
+    return nestGroups(gs.map((g) => (g.kind === 'nodate' ? { ...g, tasks: [...g.tasks].sort(order) } : g)), tasks);
   });
   // Date-tab counts follow the status filter, except Done (which has no date tabs).
-  let counts = $derived(taskCounts(layout === 'list' && status !== 'done' ? applyFilters(tasks, { status, labels: active }) : labelled, now));
+  let counts = $derived(taskCounts(
+    // Open-task counts are top-level only, like the store's plan counts.
+    layout === 'board' ? labelled : applyFilters(top, { status: status === 'done' ? 'any' : status, labels: active }), now,
+  ));
   // The board shows open tasks for the date filter plus every finished one.
   let boardTasks = $derived([...filterTasks(labelled, view, now), ...labelled.filter((t) => t.completedAt)]);
   // Four date tabs; finished tasks live under the Done status (or the board's Done column).
@@ -133,6 +149,13 @@
         tasks: c.key === 'nodate' ? c.tasks.sort(order) : c.tasks,
       }));
     }
+    if (mode === 'priority') {
+      // Open tasks, like the Label board.
+      return priorityColumns(boardTasks.filter((x) => !x.completedAt)).map((c) => ({
+        key: c.key, title: t(`priority.${c.key}`), empty: t('board.emptyGroup'), tasks: c.tasks,
+        color: c.key === 'urgent' ? 'var(--danger)' : c.key === 'important' ? 'var(--warning)' : undefined,
+      }));
+    }
     if (mode === 'label') {
       const order = planOrder(buckets);
       // Only labels in use here (plus "No label"), open tasks like the Due board.
@@ -152,6 +175,25 @@
     }));
   });
   let statusBoard = $derived(!plan || groupBy === 'status');
+  let priorityBoard = $derived(!!plan && groupBy === 'priority');
+
+  /** Priority board: a card dropped on another column, or moved with the arrow keys. */
+  function dropOnPriority(task: Task, key: string) {
+    setPriority(task, key as Priority);
+  }
+  function stepPriority(task: Task, by: -1 | 1): boolean {
+    const next = PRIORITIES[PRIORITIES.indexOf(task.priority) + by];
+    if (!next) return false;
+    setPriority(task, next);
+    return true;
+  }
+  async function setPriority(task: Task, p: Priority) {
+    try {
+      await changePriority(task, p);
+    } catch (err) {
+      onerror(errorMessage(err));
+    }
+  }
 
   /** Status board: a card dropped on another column, or moved with the arrow keys. */
   function dropOnStatus(task: Task, key: string) {
@@ -210,7 +252,7 @@
       // Inside a plan, a task without its own plan hint goes to the end of this plan's first bucket.
       const [created, defaultPlanId] = await Promise.all([api.getTask(ref.id), api.getDefaultPlan()]);
       if (quickAddNeedsMove({ hint, taskPlanId: created.planId, scopePlanId: scopePlan.id, defaultPlanId })) {
-        const last = tasks.filter((x) => x.bucketId === first.id).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).at(-1);
+        const last = lastTopLevelIn(tasks, first.id);
         await api.moveTask(ref.id, first.id, last?.id ?? null, null);
       }
     } catch (err) {
@@ -220,7 +262,7 @@
 
   async function setStatus(t: Task, s: TaskStatus) {
     try {
-      await changeStatus(t, s);
+      await changeStatus(t, s, statusCtx(t, tasks));
     } catch (err) {
       onerror(errorMessage(err));
     }
@@ -233,13 +275,8 @@
   const heading = (g: TaskGroup<Task>) =>
     g.kind === 'overdue' ? t('group.overdue') : g.kind === 'nodate' ? t('view.nodate') : g.kind === 'completed' ? t('view.completed') : fmtDayHeading(g.day!, now);
 
-  const dueLabel = (t: Task, g: TaskGroup<Task>) => {
-    if (!t.due) return '';
-    const d = new Date(t.due);
-    // Inside a day group the date is in the heading; show only the time.
-    if (g.kind === 'day') return t.dueHasTime ? fmtTime(d) : '';
-    return `${fmtShortDate(d)}${t.dueHasTime ? ` ${fmtTime(d)}` : ''}`;
-  };
+  // Inside a day group the date is in the heading (time only), unless a nested subtask is due on another day.
+  const dueLabel = (t: Task, g: TaskGroup<Task>) => (t.due ? dueInGroup(new Date(t.due), t.dueHasTime, g.kind === 'day' ? g.day : null) : '');
 
   const emptyText = () =>
     active.length || (status !== 'any' && status !== 'done')
@@ -298,17 +335,23 @@
   <div class="content">
     {#if layout === 'board'}
       {#if plan && groupBy === 'bucket'}
-        <BucketBoard {plan} {buckets} tasks={boardTasks} {now} activeLabels={active} onstatus={setStatus} {onopen} onlabel={toggleLabel} {onerror} {onreload} />
+        <BucketBoard {plan} {buckets} tasks={boardTasks} {now} activeLabels={active} onstatus={setStatus} {onopen} onlabel={toggleLabel} {onerror} {onreload}
+          {children} onpriority={setPriority} />
       {:else}
-        <TaskBoard {columns} {now} activeLabels={active} plans={plan ? [] : plans} onstatus={setStatus} {onopen} onlabel={toggleLabel}
-          ondrop={statusBoard ? dropOnStatus : undefined} onkeymove={statusBoard ? stepStatus : undefined} />
+        <TaskBoard {columns} {now} activeLabels={active} plans={plan ? [] : plans} onstatus={setStatus} {onopen} onlabel={toggleLabel} {children}
+          ondrop={statusBoard ? dropOnStatus : priorityBoard ? dropOnPriority : undefined}
+          onkeymove={statusBoard ? stepStatus : priorityBoard ? stepPriority : undefined}
+          stateOf={priorityBoard ? (x) => t(`priority.${x.priority}`) : undefined} />
       {/if}
     {:else}
       {#each groups as g (g.key)}
         <section>
-          <h2 class:danger={g.kind === 'overdue'}>{heading(g)}<span class="n">{g.tasks.length}</span></h2>
-          {#each g.tasks as t (t.id)}
-            <TaskRow task={t} due={dueLabel(t, g)} late={isOverdue(t, now)} activeLabels={active} plan={plan ? undefined : planOf(t)}
+          <h2 class:danger={g.kind === 'overdue'}>{heading(g)}<span class="n">{g.rows.filter((r) => !r.dimmed).length}</span></h2>
+          {#each flattenRows(g.rows, collapsed) as r (r.task.id)}
+            {@const t = r.task}
+            <TaskRow task={t} due={dueLabel(t, g)} late={isOverdue(t, now)} activeLabels={active} plan={plan || r.sub ? undefined : planOf(t)}
+              sub={r.sub} dimmed={r.dimmed} kids={r.kids} collapsed={collapsed.has(t.id)}
+              ontoggle={() => (collapsed.has(t.id) ? collapsed.delete(t.id) : collapsed.add(t.id))}
               onstatus={(s) => setStatus(t, s)} onopen={() => onopen(t)} onlabel={toggleLabel} />
           {/each}
         </section>

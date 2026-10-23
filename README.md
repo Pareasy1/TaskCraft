@@ -37,6 +37,7 @@ Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
   - **Plans:** group tasks into plans (listed in the sidebar), each with buckets shown as
     draggable columns. Type `/planname` in quick entry to file a task in a plan, e.g.
     `todo ship Rafael friday /3dprint`.
+  - **Subtasks, checklists and priority:** open a task's details (double-click) to add subtasks, a checklist and a start date. Set priority in quick entry with `!urgent` / `!urgente`, e.g. `todo ship Rafael friday /3dprint !urgente`.
 
 ## Install / update
 

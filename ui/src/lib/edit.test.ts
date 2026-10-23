@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formToTask, taskToForm } from './edit';
+import { formToTask, taskInput, taskToForm } from './edit';
 import type { TaskInput } from './types';
 
 describe('task form', () => {
@@ -61,7 +61,6 @@ describe('mergeTaskSave', () => {
   });
 });
 
-import { taskInput } from './edit';
 import type { Task } from './types';
 
 describe('taskInput', () => {
@@ -70,10 +69,90 @@ describe('taskInput', () => {
       id: 7, calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
       completedAt: null, recurring: false, rrule: null, notes: 'n', color: '#fff', alerts: [], status: 'inProgress',
       labels: [{ id: 1, name: 'home', color: '#000' }], planId: 3, bucketId: 8, sortOrder: 20,
+      parentId: null, priority: 'medium', start: null, startHasTime: false,
+      subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
     };
     expect(taskInput(t)).toEqual({
       calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
       rrule: null, notes: 'n', alerts: [], status: 'inProgress', labels: ['home'], planId: 3, bucketId: 8,
+      parentId: null, priority: 'medium', start: null, startHasTime: false,
     });
+  });
+});
+
+describe('subtask fields', () => {
+  const t: Task = {
+    id: 8, calendarId: 1, title: 'Sub', due: null, dueHasTime: false, tz: 'Europe/Rome',
+    completedAt: null, recurring: false, rrule: null, notes: null, color: '#fff', alerts: [], status: 'todo',
+    labels: [], planId: 1, bucketId: 1, sortOrder: 10,
+    parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true,
+    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+  };
+  it('taskInput carries priority, start and parent', () => {
+    expect(taskInput(t)).toMatchObject({ parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true });
+  });
+  it('mergeTaskSave keeps the latest parent when the dialog didn’t change it', () => {
+    const original = taskInput(t);
+    const edited = formToTask({ ...taskToForm(original), notes: 'x' });
+    const latest = { ...original, parentId: 9, priority: 'low' as const, start: null };
+    expect(mergeTaskSave(original, edited, latest)).toMatchObject({ notes: 'x', parentId: 9, priority: 'low', start: null });
+  });
+});
+
+import { startAfterDue } from './edit';
+
+describe('start and priority in the form', () => {
+  const base: TaskInput = {
+    calendarId: 1, title: 'Ship', due: '2026-10-28T15:30:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
+    rrule: null, notes: null, alerts: [], status: 'todo', labels: [], priority: 'important',
+    start: '2026-10-24T07:00:00.000Z', startHasTime: true,
+  };
+  it('splits the start into date and time fields and back', () => {
+    const f = taskToForm(base);
+    expect(f.startDate).toBe(new Date('2026-10-24T07:00:00.000Z').toLocaleDateString('sv'));
+    expect(f.startTime).toMatch(/^\d\d:\d\d$/);
+    expect(f.priority).toBe('important');
+    const out = formToTask(f);
+    expect(new Date(out.start!).getTime()).toBe(new Date('2026-10-24T07:00:00.000Z').getTime());
+    expect(out.startHasTime).toBe(true);
+    expect(out.priority).toBe('important');
+  });
+  it('a date-only start is local midnight; no start date means no start', () => {
+    const f = { ...taskToForm(base), startDate: '2026-10-24', startTime: '' };
+    expect(formToTask(f)).toMatchObject({ start: new Date(2026, 9, 24).toISOString(), startHasTime: false });
+    expect(formToTask({ ...f, startDate: '' })).toMatchObject({ start: null, startHasTime: false });
+  });
+  it('a task without priority edits as Medium', () => {
+    const { priority: _p, ...rest } = base;
+    void _p;
+    expect(taskToForm(rest).priority).toBe('medium');
+  });
+  it('startAfterDue compares instants only when both are set', () => {
+    expect(startAfterDue({ start: '2026-10-29T00:00:00.000Z', due: '2026-10-28T15:30:00.000Z' })).toBe(true);
+    expect(startAfterDue({ start: '2026-10-28T15:30:00.000Z', due: '2026-10-28T15:30:00.000Z' })).toBe(false);
+    expect(startAfterDue({ start: '2026-10-29T00:00:00.000Z', due: null })).toBe(false);
+    expect(startAfterDue({ start: null, due: '2026-10-28T15:30:00.000Z' })).toBe(false);
+  });
+});
+
+import { taskFormDirty } from './edit';
+
+describe('taskFormDirty', () => {
+  const original: TaskInput = {
+    calendarId: 1, title: 'Ship', due: '2026-10-28T15:30:00Z', dueHasTime: true, tz: 'Europe/Rome',
+    rrule: null, notes: null, alerts: [], status: 'todo', labels: ['a'], priority: 'low', parentId: 4,
+    start: '2026-10-24T22:00:00Z', startHasTime: false, planId: 1, bucketId: 2,
+  };
+  it('an untouched form is clean, whatever the stored formats', () => {
+    expect(taskFormDirty(original, taskToForm(original), 4)).toBe(false);
+  });
+  it('any edited field, or another parent, makes it dirty', () => {
+    expect(taskFormDirty(original, { ...taskToForm(original), notes: 'x' }, 4)).toBe(true);
+    expect(taskFormDirty(original, { ...taskToForm(original), priority: 'urgent' }, 4)).toBe(true);
+    expect(taskFormDirty(original, { ...taskToForm(original), startDate: '' }, 4)).toBe(true);
+    expect(taskFormDirty(original, taskToForm(original), null)).toBe(true);
+  });
+  it('trailing spaces in the title are not an edit', () => {
+    expect(taskFormDirty(original, { ...taskToForm(original), title: 'Ship  ' }, 4)).toBe(false);
   });
 });

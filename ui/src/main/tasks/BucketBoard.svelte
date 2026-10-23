@@ -7,7 +7,7 @@
   import { api, errorMessage } from '../../lib/api';
   import { bucketColumns, dropIndex, dropNeighbours, insertAt, uniqueName } from '../../lib/plans';
   import { PopupMenu } from '../../lib/menu.svelte';
-  import type { Bucket, DeleteMode, Plan, Task, TaskStatus } from '../../lib/types';
+  import { PRIORITIES, type Bucket, type DeleteMode, type Plan, type Priority, type Task, type TaskStatus } from '../../lib/types';
   import BoardCard from './BoardCard.svelte';
   import Doodle from './Doodle.svelte';
   import Menu from '../Menu.svelte';
@@ -24,6 +24,8 @@
     onlabel,
     onerror,
     onreload,
+    children,
+    onpriority,
   }: {
     plan: Plan;
     /** The plan's buckets (Main loads them and reloads on every change). */
@@ -38,6 +40,9 @@
     onerror: (msg: string) => void;
     /** Re-reads tasks and buckets from the store (after a failed move). */
     onreload: () => void;
+    /** Subtasks by parent id, shown on expandable cards. */
+    children?: Map<number, Task[]>;
+    onpriority: (t: Task, p: Priority) => void;
   } = $props();
 
   let columns = $derived(bucketColumns(buckets, tasks));
@@ -310,6 +315,7 @@
           >
             <BoardCard task={t} {now} {activeLabels} struck
               onstatus={(s) => onstatus(t, s)} onopen={() => onopen(t)} {onlabel}
+              children={children?.get(t.id)} onchildstatus={onstatus} onchildopen={onopen}
               ontitlekey={(e) => cardMenu.openFromKey(e, t, boardEl?.querySelector<HTMLElement>(`[data-card-menu="${t.id}"]`) ?? undefined)}
               oncontextmenu={(e) => { e.preventDefault(); cardMenu.open(t, e.clientX, e.clientY, boardEl?.querySelector<HTMLElement>(`[data-card-menu="${t.id}"]`) ?? (e.currentTarget as HTMLElement)); }}>
               {#snippet actions()}
@@ -355,6 +361,13 @@
     {/if}
     <button role="menuitem" disabled={ids.indexOf(t.id) <= 0} onclick={() => cardMenu.act((x) => shiftCard(x, -1))}>{tr('task.moveUp')}</button>
     <button role="menuitem" disabled={ids.indexOf(t.id) >= ids.length - 1} onclick={() => cardMenu.act((x) => shiftCard(x, 1))}>{tr('task.moveDown')}</button>
+    <div class="sep" role="separator"></div>
+    <div class="sub" aria-hidden="true">{tr('priority.title')} ▸</div>
+    {#each PRIORITIES as p (p)}
+      <button role="menuitemradio" class="indent" aria-checked={t.priority === p}
+        aria-label={`${tr('priority.title')}: ${tr(`priority.${p}`)}`}
+        onclick={() => cardMenu.act((x) => onpriority(x, p))}><span class="check" aria-hidden="true">{t.priority === p ? '✓' : ''}</span>{tr(`priority.${p}`)}</button>
+    {/each}
   </Menu>
 {/if}
 
@@ -451,5 +464,6 @@
   .sub { font-size: 12px; color: var(--muted); padding: 6px 8px 2px; }
   /* Doubled class: outranks the shared menu's button padding. */
   .indent.indent { padding-left: 18px; }
+  .check { display: inline-block; width: 14px; margin-left: -12px; color: var(--accent); }
   @media (max-width: 720px) { .board { grid-auto-columns: minmax(240px, 85vw); } }
 </style>
