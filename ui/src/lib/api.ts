@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { t } from './i18n';
 import type {
-  Bucket, Calendar, ChecklistItem, CalendarInput, DeleteMode, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
-  Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus,
+  AddFilesResult, Attachment, Bucket, Calendar, ChecklistItem, CalendarInput, DeleteMode, DuplicateResult, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
+  Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus, TemplateInfo,
 } from './types';
 
 export const api = {
@@ -59,6 +59,23 @@ export const api = {
   reorderChecklist: (taskId: number, ids: number[]) => invoke<void>('reorder_checklist', { taskId, ids }),
   deleteChecklistItem: (id: number) => invoke<void>('delete_checklist_item', { id }),
   checklistItemToSubtask: (id: number) => invoke<number>('checklist_item_to_subtask', { id }),
+  listAttachments: (taskId: number) => invoke<Attachment[]>('list_attachments', { taskId }),
+  pickAndAddFiles: (taskId: number) => invoke<AddFilesResult>('pick_and_add_files', { taskId }),
+  addLinkAttachment: (taskId: number, url: string, name: string | null = null) =>
+    invoke<Attachment>('add_link_attachment', { taskId, url, name }),
+  renameAttachment: (id: number, name: string) => invoke<void>('rename_attachment', { id, name }),
+  reorderAttachments: (taskId: number, ids: number[]) => invoke<void>('reorder_attachments', { taskId, ids }),
+  removeAttachment: (id: number) => invoke<Attachment>('remove_attachment', { id }),
+  restoreFileAttachment: (taskId: number, name: string, stored: string, size: number) =>
+    invoke<Attachment>('restore_file_attachment', { taskId, name, stored, size }),
+  openAttachment: (id: number) => invoke<void>('open_attachment', { id }),
+  revealAttachment: (id: number) => invoke<void>('reveal_attachment', { id }),
+  duplicateTask: (id: number) => invoke<DuplicateResult>('duplicate_task', { id }),
+  saveTemplate: (taskId: number, name: string, replace = false) => invoke<number>('save_template', { taskId, name, replace }),
+  listTemplates: () => invoke<TemplateInfo[]>('list_templates'),
+  renameTemplate: (id: number, name: string) => invoke<void>('rename_template', { id, name }),
+  deleteTemplate: (id: number) => invoke<void>('delete_template', { id }),
+  createFromTemplate: (templateId: number, input: TaskInput) => invoke<number>('create_from_template', { templateId, input }),
   getDefaultPlan: () => invoke<number>('get_default_plan'),
   setDefaultPlan: (id: number) => invoke<void>('set_default_plan', { id }),
   exportIcs: (path: string) => invoke<void>('export_ics', { path }),
@@ -73,7 +90,8 @@ export function onItemsChanged(cb: () => void): Promise<UnlistenFn> {
 }
 
 const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable', 'duplicate', 'last_plan', 'last_bucket',
-  'parent_is_subtask', 'has_subtasks', 'repeating_subtask', 'start_after_due', 'checklist_text'] as const;
+  'parent_is_subtask', 'has_subtasks', 'repeating_subtask', 'start_after_due', 'checklist_text',
+  'attachment_too_large', 'attachment_url', 'template_name'] as const;
 
 /** A user-facing message for an error from a command, in the app language when known. */
 export function errorMessage(e: unknown): string {

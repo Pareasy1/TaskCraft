@@ -2,7 +2,7 @@
 
 export type Label =
   | 'title' | 'taskPrefix' | 'date' | 'time' | 'duration' | 'recurrence'
-  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag' | 'plan' | 'priority';
+  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag' | 'plan' | 'priority' | 'template';
 
 export type Priority = 'urgent' | 'important' | 'medium' | 'low';
 export const PRIORITIES: Priority[] = ['urgent', 'important', 'medium', 'low'];
@@ -29,6 +29,7 @@ export interface ParsedItem {
   tags: string[];
   plan: string | null;
   priority: Priority | null;
+  template: string | null;
   spans: Span[];
 }
 
@@ -103,6 +104,7 @@ export interface Task {
   subtaskTotal: number;
   checklistDone: number;
   checklistTotal: number;
+  attachmentCount: number;
 }
 
 export interface Occurrence {
@@ -136,3 +138,18 @@ export interface CmdError { code: string; message: string }
 export interface Plan { id: number; name: string; color: string; sort: number; openCount: number }
 export interface Bucket { id: number; planId: number; name: string; sort: number }
 export type DeleteMode = { moveTo: number } | 'deleteTasks';
+
+export interface Attachment {
+  id: number;
+  taskId: number;
+  kind: 'file' | 'link';
+  name: string;
+  stored: string | null;
+  url: string | null;
+  size: number | null;
+  createdAt: string;
+  sort: number;
+}
+export interface AddFilesResult { added: Attachment[]; errors: { name: string; code: string }[] }
+export interface DuplicateResult { id: number; skipped: string[] }
+export interface TemplateInfo { id: number; name: string; subtaskCount: number }

@@ -22,7 +22,7 @@ const mk = (id: number, parentId: number | null, title = `T${id}`): Task => ({
   id, calendarId: 1, title, due: null, dueHasTime: false, tz: 'UTC', completedAt: null,
   recurring: false, rrule: null, notes: null, color: '#000', alerts: [], status: 'todo', labels: [],
   planId: 1, bucketId: 1, sortOrder: id, parentId, priority: 'medium', start: null, startHasTime: false,
-  subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+  subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
 });
 const item = (id: number, taskId: number, text: string, done: boolean): ChecklistItem => ({ id, taskId, text, done, sort: id });
 const lists: Record<number, ChecklistItem[]> = {

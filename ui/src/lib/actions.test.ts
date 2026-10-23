@@ -19,7 +19,7 @@ const mk = (id: number, parentId: number | null, done = false, title = `T${id}`)
   id, calendarId: 1, title, due: null, dueHasTime: false, tz: 'UTC', completedAt: done ? '2026-10-23T10:00:00Z' : null,
   recurring: false, rrule: null, notes: null, color: '#000', alerts: [], status: done ? 'done' : 'todo', labels: [],
   planId: 1, bucketId: 1, sortOrder: id, parentId, priority: 'medium', start: null, startHasTime: false,
-  subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+  subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
 });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 

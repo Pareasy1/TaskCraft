@@ -36,7 +36,7 @@ export function installMock() {
     alerts: []; status: 'todo' | 'inProgress' | 'done'; labels: { id: number; name: string; color: string }[];
     planId: number; bucketId: number; sortOrder: number;
     parentId: number | null; priority: 'urgent' | 'important' | 'medium' | 'low'; start: string | null; startHasTime: boolean;
-    subtaskOpen: number; subtaskTotal: number; checklistDone: number; checklistTotal: number;
+    subtaskOpen: number; subtaskTotal: number; checklistDone: number; checklistTotal: number; attachmentCount: number;
   };
   type MockItem = { id: number; taskId: number; text: string; done: boolean; sort: number };
   const task = (id: number, title: string, due: string | null, dueHasTime: boolean, status: MockTask['status'] = 'todo', lbl: number[] = []): MockTask => ({
@@ -44,7 +44,7 @@ export function installMock() {
     recurring: false, rrule: null, notes: null, color: '#3b82f6', alerts: [], status, labels: L(...lbl),
     planId: 1, bucketId: 1, sortOrder: id * 10,
     parentId: null, priority: 'medium', start: null, startHasTime: false,
-    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
   });
   let all: MockTask[] = [
     task(10, 'Pay electricity bill', midnight(-2), false, 'todo', [1]),
@@ -89,6 +89,19 @@ export function installMock() {
     { id: 2, taskId: 17, text: 'Pick images', done: false, sort: 1 },
     { id: 3, taskId: 17, text: 'Rehearse', done: false, sort: 2 },
   ];
+  type MockAtt = { id: number; taskId: number; kind: 'file' | 'link'; name: string; stored: string | null; url: string | null; size: number | null; createdAt: string; sort: number };
+  let atts: MockAtt[] = [];
+  let templates: { id: number; name: string; subtaskCount: number; source: number }[] = [];
+  const cleanName = (n: unknown, max: number, code: string) => {
+    const v = String(n ?? '').trim();
+    if (!v || [...v].length > max) throw { code, message: code };
+    return v;
+  };
+  const attOf = (id: number) => {
+    const a = atts.find((x) => x.id === id);
+    if (!a) throw { code: 'not_found', message: 'not_found' };
+    return a;
+  };
   let defaultPlan = 1;
   let nextId = 1000;
   const openCount = (planId: number) => all.filter((t) => t.planId === planId && !t.completedAt && t.parentId == null).length;
@@ -119,6 +132,7 @@ export function installMock() {
     return Object.assign(t, {
       subtaskTotal: kids.length, subtaskOpen: kids.filter((k) => !k.completedAt).length,
       checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
+      attachmentCount: atts.filter((a) => a.taskId === t.id).length,
     });
   };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
@@ -305,6 +319,72 @@ export function installMock() {
         changed();
         return t.id;
       }
+      case 'list_attachments': return atts.filter((a) => a.taskId === args.taskId).sort((a, b) => a.sort - b.sort);
+      case 'pick_and_add_files': {
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: 'notes.pdf', stored: 'mock-notes.pdf', url: null, size: 1_250_000, createdAt: new Date().toISOString(), sort: atts.length };
+        atts.push(a);
+        changed();
+        return { added: [a], errors: [] };
+      }
+      case 'add_link_attachment': {
+        const url = String(args.url).trim();
+        if (!/^https?:\/\/\S+/i.test(url)) throw { code: 'attachment_url', message: 'attachment_url' };
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'link', name: args.name?.trim() || new URL(url).hostname.replace(/^www\./, ''), stored: null, url, size: null, createdAt: new Date().toISOString(), sort: atts.length };
+        atts.push(a);
+        changed();
+        return a;
+      }
+      case 'rename_attachment': attOf(args.id).name = cleanName(args.name, 200, 'empty'); changed(); return null;
+      case 'reorder_attachments': reorder(atts.filter((a) => a.taskId === args.taskId), args.ids); changed(); return null;
+      case 'remove_attachment': { const a = attOf(args.id); atts = atts.filter((x) => x.id !== a.id); changed(); return a; }
+      case 'restore_file_attachment': {
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: args.name, stored: args.stored, url: null, size: args.size, createdAt: new Date().toISOString(), sort: atts.length };
+        atts.push(a);
+        changed();
+        return a;
+      }
+      case 'open_attachment': attOf(args.id); return null;
+      case 'reveal_attachment': attOf(args.id); return null;
+      case 'duplicate_task': {
+        const src = all.find((t) => t.id === args.id);
+        if (!src) throw { code: 'not_found', message: 'not_found' };
+        const copy = { ...src, id: nextId++, title: `${src.title} (copy)`, completedAt: null, status: 'todo' as const, sortOrder: src.sortOrder + 1 };
+        all = [...all, copy];
+        atts.filter((a) => a.taskId === src.id).forEach((a) => atts.push({ ...a, id: nextId++, taskId: copy.id }));
+        changed();
+        return { id: copy.id, skipped: [] };
+      }
+      case 'save_template': {
+        const name = cleanName(args.name, 60, 'template_name');
+        const dup = templates.find((x) => x.name.toLowerCase() === name.toLowerCase());
+        if (dup && !args.replace) throw { code: 'duplicate', message: 'duplicate' };
+        const subtaskCount = all.filter((t) => t.parentId === args.taskId).length;
+        if (dup) { Object.assign(dup, { subtaskCount, source: args.taskId }); changed(); return dup.id; }
+        const id = nextId++;
+        templates.push({ id, name, subtaskCount, source: args.taskId });
+        changed();
+        return id;
+      }
+      case 'list_templates': return templates.map(({ id, name, subtaskCount }) => ({ id, name, subtaskCount })).sort((a, b) => a.name.localeCompare(b.name));
+      case 'rename_template': {
+        const name = cleanName(args.name, 60, 'template_name');
+        if (templates.some((x) => x.id !== args.id && x.name.toLowerCase() === name.toLowerCase())) throw { code: 'duplicate', message: 'duplicate' };
+        const tpl = templates.find((x) => x.id === args.id);
+        if (!tpl) throw { code: 'not_found', message: 'not_found' };
+        tpl.name = name;
+        changed();
+        return null;
+      }
+      case 'delete_template': templates = templates.filter((x) => x.id !== args.id); changed(); return null;
+      case 'create_from_template': {
+        if (!templates.some((x) => x.id === args.templateId)) throw { code: 'not_found', message: 'not_found' };
+        const i = args.input;
+        const t = task(nextId++, i.title, i.due, i.dueHasTime, i.status, labels.filter((l) => i.labels.includes(l.name)).map((l) => l.id));
+        place(t, i.planId ?? defaultPlan, i.bucketId);
+        all = [...all, t];
+        changed();
+        return t.id;
+      }
       case 'get_default_plan': return defaultPlan;
       case 'set_default_plan': defaultPlan = args.id; changed(); return null;
       case 'local_time_zone': return 'Europe/Rome';
@@ -316,7 +396,7 @@ export function installMock() {
         return {
           kind: 'event', title: i > 0 ? t.slice(0, i) : t, start: { date: '2026-10-21', time: '13:00:00' },
           end: { date: '2026-10-21', time: '14:00:00' }, allDay: false, location: null, attendees: ['Sam'],
-          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null,
+          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null, template: null,
           spans: i > 0 ? [{ start: 0, end: i, label: 'title' }, { start: i + 1, end: i + 9, label: 'date' }, { start: i + 10, end: i + 12, label: 'separator' }, { start: i + 13, end: i + 14, label: 'time' }] : [],
         };
       }
