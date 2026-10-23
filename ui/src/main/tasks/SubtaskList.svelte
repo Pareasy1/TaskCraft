@@ -11,6 +11,7 @@
   import { focusAfterRemoval, shiftId } from '../../lib/subtasks';
   import { notify } from '../../lib/toast.svelte';
   import { restoreSubtask, snapshotSubtask } from '../../lib/restore';
+  import { duplicate } from '../../lib/taskCommands.svelte';
   import type { Task } from '../../lib/types';
   import Menu from '../Menu.svelte';
   import LabelChip from './LabelChip.svelte';
@@ -102,6 +103,8 @@
     const el = next == null ? null : listEl?.querySelector<HTMLElement>(`[data-sub-menu="${next}"]`);
     (el ?? addEl)?.focus();
   }
+  /** The copy goes right after it; focus stays on this row's "…". */
+  const duplicateRow = (x: Task) => run(() => duplicate(x, (id) => api.getTask(id).then(onopen)));
   const makeNormal = (x: Task) => leave(x, () => api.setTaskParent(x.id, null));
   const remove = (x: Task) =>
     leave(x, async () => {
@@ -197,6 +200,7 @@
   {@const i = subtasks.findIndex((s) => s.id === x.id)}
   <Menu {menu} label={x.title}>
     <button role="menuitem" onclick={() => menu.act(onopen, false)}>{tr('subtasks.open')}</button>
+    <button role="menuitem" onclick={() => menu.act(duplicateRow)}>{tr('task.duplicate')}</button>
     <div class="sep" role="separator"></div>
     <button role="menuitem" disabled={i <= 0} onclick={() => menu.act((y) => shift(y, -1))}>{tr('task.moveUp')}</button>
     <button role="menuitem" disabled={i < 0 || i >= subtasks.length - 1} onclick={() => menu.act((y) => shift(y, 1))}>{tr('task.moveDown')}</button>

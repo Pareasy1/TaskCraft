@@ -19,6 +19,8 @@
   import SettingsDialog from './SettingsDialog.svelte';
   import CompleteDialog from './CompleteDialog.svelte';
   import { pending } from '../lib/complete.svelte';
+  import TemplateNameDialog from './tasks/TemplateNameDialog.svelte';
+  import { closeSaveTemplate, templateSave } from '../lib/taskCommands.svelte';
   import { childrenByParent, statusCtx, topLevel } from '../lib/subtasks';
   import { notify } from '../lib/toast.svelte';
   import { changeStatus } from '../lib/actions';
@@ -375,6 +377,8 @@
 <Toast />
 
 {#if pending.current}<CompleteDialog task={pending.current.task} openChildren={pending.current.openChildren} />{/if}
+
+{#if templateSave.current}<TemplateNameDialog task={templateSave.current} onclose={closeSaveTemplate} />{/if}
 
 {#if settingsOpen}<SettingsDialog onclose={() => (settingsOpen = false)} />{/if}
 

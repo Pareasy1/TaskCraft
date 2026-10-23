@@ -22,7 +22,12 @@
   import { t as tr } from '../../lib/i18n';
   import { flip } from 'svelte/animate';
   import { tick } from 'svelte';
+  import { Ellipsis } from 'lucide-svelte';
   import type { Plan } from '../../lib/types';
+  import { api, errorMessage } from '../../lib/api';
+  import { PopupMenu } from '../../lib/menu.svelte';
+  import { askSaveTemplate, duplicate } from '../../lib/taskCommands.svelte';
+  import Menu from '../Menu.svelte';
   import { STATUS_LABEL } from '../../lib/tasks';
   import StatusGlyph from './StatusGlyph.svelte';
   import BoardCard from './BoardCard.svelte';
@@ -36,6 +41,7 @@
     onstatus,
     onopen,
     onlabel,
+    onerror,
     ondrop,
     onkeymove,
     children,
@@ -49,6 +55,7 @@
     onstatus: (t: Task, s: TaskStatus) => void;
     onopen: (t: Task) => void;
     onlabel: (id: number) => void;
+    onerror: (msg: string) => void;
     /** A card dropped on a column; without it the board has no drag and drop. */
     ondrop?: (t: Task, key: string) => void;
     /** Left/Right arrow on a card's title; return true if it moved the card. */
@@ -72,8 +79,21 @@
     if (t && ondrop) ondrop(t, key);
   }
 
+  // ── Card menu (Duplicate, Save as template…) ──
+  let boardEl = $state<HTMLDivElement | undefined>();
+  const cardMenu = new PopupMenu<Task>();
+  const menuButton = (t: Task) => boardEl?.querySelector<HTMLElement>(`[data-card-menu="${t.id}"]`) ?? undefined;
+  async function duplicateCard(t: Task) {
+    try {
+      await duplicate(t, (id) => api.getTask(id).then(onopen));
+    } catch (e) {
+      onerror(errorMessage(e));
+    }
+  }
+
   let refocus: number | null = null;
   function keys(e: KeyboardEvent, t: Task) {
+    if (cardMenu.openFromKey(e, t, menuButton(t))) return;
     if (!onkeymove || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
     if (!onkeymove(t, e.key === 'ArrowRight' ? 1 : -1)) return;
     e.preventDefault();
@@ -94,7 +114,7 @@
   });
 </script>
 
-<div class="board" class:wide={columns.length > 3}>
+<div class="board" bind:this={boardEl} class:wide={columns.length > 3}>
   {#each columns as col (col.key)}
     <section
       class="col"
@@ -123,7 +143,16 @@
             <BoardCard task={t} {now} {activeLabels} plan={planOf(t)}
               titleLabel={onkeymove ? tr('board.cardAria', { title: t.title, status: stateOf(t) }) : undefined}
               onstatus={(s) => onstatus(t, s)} onopen={() => onopen(t)} {onlabel} ontitlekey={(e) => keys(e, t)}
-              children={children?.get(t.id)} onchildstatus={onstatus} onchildopen={onopen} />
+              children={children?.get(t.id)} onchildstatus={onstatus} onchildopen={onopen}
+              oncontextmenu={(e) => { e.preventDefault(); cardMenu.open(t, e.clientX, e.clientY, menuButton(t) ?? (e.currentTarget as HTMLElement)); }}>
+              {#snippet actions()}
+                <button class="icon-btn more" data-card-menu={t.id} class:open={cardMenu.current?.target.id === t.id}
+                  aria-label={tr('task.options', { title: t.title })} title={tr('task.options', { title: t.title })}
+                  aria-haspopup="menu" aria-expanded={cardMenu.current?.target.id === t.id}
+                  onclick={(e) => { e.stopPropagation(); cardMenu.openBelow(t, e.currentTarget, (x) => x.id === t.id); }}
+                  onkeydown={(e) => cardMenu.openFromKey(e, t)}><Ellipsis size={14} aria-hidden="true" /></button>
+              {/snippet}
+            </BoardCard>
           </div>
         {:else}
           <div class="empty"><Doodle size={34} /><p>{col.empty}</p></div>
@@ -135,6 +164,13 @@
     </section>
   {/each}
 </div>
+
+{#if cardMenu.current}
+  <Menu menu={cardMenu} label={cardMenu.current.target.title}>
+    <button role="menuitem" onclick={() => cardMenu.act(duplicateCard)}>{tr('task.duplicate')}</button>
+    <button role="menuitem" onclick={() => cardMenu.act(askSaveTemplate)}>{tr('template.save')}</button>
+  </Menu>
+{/if}
 
 <style>
   .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; height: 100%; padding-bottom: 16px; }
@@ -157,6 +193,8 @@
   .n { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .cards { flex: 1; overflow-y: auto; padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 6px; }
   .slot.dragging { opacity: 0.45; }
+  .more { padding: 2px; opacity: 0; flex: none; }
+  .slot:hover .more, .more:focus-visible, .more.open { opacity: 1; }
   .empty { color: var(--muted); font-size: 12px; text-align: center; margin: 18px 8px; }
   .empty p { margin: 0; }
   .more { border: none; background: none; color: var(--accent); font-size: 12px; padding: 6px; border-radius: 6px; }

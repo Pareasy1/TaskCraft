@@ -5,7 +5,7 @@ import { STATUS_LABEL } from './tasks';
 import { notify } from './toast.svelte';
 import { requestComplete } from './complete.svelte';
 import { completeUndo, completionAsk, offerParentAfter } from './subtasks';
-import type { Priority, Task, TaskStatus } from './types';
+import type { Priority, Task, TaskInput, TaskStatus } from './types';
 import { t } from './i18n';
 
 /** A task's subtasks, its siblings (itself included) and its parent; see `statusCtx`. */
@@ -51,4 +51,16 @@ export async function changePriority(task: Task, p: Priority): Promise<void> {
   const before = taskInput(task);
   await api.updateTask(task.id, { ...before, priority: p });
   notify(t('msg.movedTo', { title: task.title, where: t(`priority.${p}`) }), () => api.updateTask(task.id, before));
+}
+
+/**
+ * A new task's input with the app's defaults: the default calendar, the local time zone, no date.
+ * Without a plan the store uses the default plan; without a bucket, the plan's first bucket.
+ */
+export async function newTaskInput(title: string, planId: number | null = null, bucketId: number | null = null): Promise<TaskInput> {
+  const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
+  return {
+    calendarId: s.defaultCalendarId, title, due: null, dueHasTime: false, tz, rrule: null, notes: null,
+    alerts: [], status: 'todo', labels: [], planId, bucketId,
+  };
 }
