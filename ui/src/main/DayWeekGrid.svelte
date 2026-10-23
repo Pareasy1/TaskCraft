@@ -4,7 +4,7 @@
   import type { Occurrence, Task, TaskStatus } from '../lib/types';
   import { addDays, layoutDay, nudgeEvent, sameDay, snap15 } from '../lib/layout';
   import { fmtHour, fmtShortDate, fmtTime, fmtWeekdayShort } from '../lib/format';
-  import { movedSpan, shiftStart, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
+  import { calTaskTitle, movedSpan, shiftStart, tasksForDay, TASK_SLOT_MIN, type DayTask } from '../lib/calendarTasks';
   import { nextStatus, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { activate, isSelected, select } from '../lib/selection.svelte';
@@ -205,8 +205,7 @@
       }
     });
   });
-  const titleOf = (task: Task) =>
-    task.parentId != null ? t('subtasks.calTitle', { parent: parentTitles.get(task.parentId) ?? '' }) + ` — ${task.title}` : task.title;
+  const titleOf = (task: Task) => calTaskTitle(task, parentTitles);
   const MARK = { start: '↦', middle: '→', end: '⇥' } as const;
   const taskAria = (x: DayTask<Task>) => {
     const due = new Date(x.task.due!);

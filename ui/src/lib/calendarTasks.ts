@@ -1,8 +1,11 @@
 // Which tasks the Day/Week/Month views show, and how a keyboard move changes a due date.
 import { addDays, sameDay, startOfDay } from './layout';
+import { t } from './i18n';
 import { isOverdue } from './tasks';
 
-type TaskLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null; start?: string | null };
+type TaskLike = {
+  id: number; due: string | null; dueHasTime: boolean; completedAt: string | null; start?: string | null; startHasTime?: boolean;
+};
 
 export type SpanRole = 'start' | 'middle' | 'end';
 
@@ -25,6 +28,12 @@ export interface DayTask<T> {
 const byDue = <T extends TaskLike>(a: DayTask<T>, b: DayTask<T>) =>
   new Date(a.task.due!).getTime() - new Date(b.task.due!).getTime() || a.task.id - b.task.id;
 
+/** A task's title on the calendar: "Subtask · Parent — title" for a subtask whose parent is known, else the plain title. */
+export function calTaskTitle(task: { title: string; parentId: number | null }, parentTitles: Map<number, string>): string {
+  const parent = task.parentId == null ? undefined : parentTitles.get(task.parentId);
+  return parent == null ? task.title : `${t('subtasks.calTitle', { parent })} — ${task.title}`;
+}
+
 /** Where `day` falls in the task's start-to-due span; null without a start or when both are the same day. */
 export function spanRole(task: TaskLike, day: Date): SpanRole | null {
   if (!task.start || !task.due) return null;
@@ -38,15 +47,17 @@ export function spanRole(task: TaskLike, day: Date): SpanRole | null {
 
 /**
  * The start moved with the due date: by the same number of local calendar days
- * (so DST never shifts the day) plus the same change in local clock time.
+ * (so DST never shifts the day) plus, for a timed start, the same change in
+ * local clock time. A date-only start stays at local midnight.
  */
 export function shiftStart(task: TaskLike, newDue: string): string | null {
   if (!task.start || !task.due) return null;
   const oldDue = new Date(task.due);
   const nd = new Date(newDue);
   const days = Math.round((startOfDay(nd).getTime() - startOfDay(oldDue).getTime()) / 86_400_000);
-  const minutes = nd.getHours() * 60 + nd.getMinutes() - (oldDue.getHours() * 60 + oldDue.getMinutes());
   const moved = addDays(new Date(task.start), days);
+  if (!task.startHasTime) return moved.toISOString();
+  const minutes = nd.getHours() * 60 + nd.getMinutes() - (oldDue.getHours() * 60 + oldDue.getMinutes());
   moved.setMinutes(moved.getMinutes() + minutes);
   return moved.toISOString();
 }

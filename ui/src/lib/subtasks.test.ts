@@ -35,6 +35,11 @@ describe('groupWithParents', () => {
     const g = groupWithParents([all[1], all[0], all[2], all[3]], all);
     expect(g.map((x) => [x.parent.id, x.dimmed, ids(x.children)])).toEqual([[1, false, [2, 3]], [4, false, []]]);
   });
+  it('child whose parent is not in `all` (hidden calendar) is a plain row, not dropped', () => {
+    const orphan = task(7, 99, 10);
+    const g = groupWithParents([all[3], orphan], [...all, orphan]);
+    expect(g.map((x) => [x.parent.id, x.dimmed, ids(x.children)])).toEqual([[4, false, []], [7, false, []]]);
+  });
 });
 
 describe('labels', () => {

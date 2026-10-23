@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import type { Occurrence, Task, TaskStatus } from '../lib/types';
-  import { tasksForDay } from '../lib/calendarTasks';
+  import { calTaskTitle, tasksForDay } from '../lib/calendarTasks';
   import { STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import { activate, isSelected, select } from '../lib/selection.svelte';
@@ -77,7 +77,7 @@
             </button>
           {/each}
           {#each dayTasks.slice(0, taskRoom) as x (x.task.id)}
-            {@const label = (x.task.parentId != null ? t('subtasks.calTitle', { parent: parentTitles.get(x.task.parentId) ?? '' }) + ' — ' : '') + x.task.title}
+            {@const label = calTaskTitle(x.task, parentTitles)}
             <div class="titem" class:span-start={x.span === 'start'} class:span-middle={x.span === 'middle'} class:span-end={x.span === 'end'} class:is-selected={isSelected('task', x.task.id)} class:done={x.task.status === 'done'} class:overdue={x.overdue}>
               <StatusGlyph status={x.task.status} size={12} onchange={(st) => ontaskstatus(x.task, st)} />
               <button class="t" onclick={(e) => activate(e, () => ontaskopen(x.task), () => select({ kind: 'task', id: x.task.id }))}

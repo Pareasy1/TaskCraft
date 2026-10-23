@@ -24,7 +24,8 @@ export function topLevel<T extends Child>(tasks: T[]): T[] {
 
 /**
  * Each shown top-level task with its shown children. A shown subtask whose parent
- * is not shown appears under that parent (taken from `all`), which is `dimmed`.
+ * is not shown appears under that parent (taken from `all`), which is `dimmed`. A subtask whose
+ * parent is not in `all` either (e.g. on a hidden calendar) is a plain row of its own.
  */
 export function groupWithParents<T extends Child>(shown: T[], all: T[]): { parent: T; dimmed: boolean; children: T[] }[] {
   const byId = new Map(all.map((x) => [x.id, x]));
@@ -36,7 +37,10 @@ export function groupWithParents<T extends Child>(shown: T[], all: T[]): { paren
       continue;
     }
     const parent = byId.get(x.parentId);
-    if (!parent) continue;
+    if (!parent) {
+      if (!out.has(x.id)) out.set(x.id, { parent: x, dimmed: false, children: [] });
+      continue;
+    }
     if (!out.has(parent.id)) out.set(parent.id, { parent, dimmed: !shownIds.has(parent.id), children: [] });
     out.get(parent.id)!.children.push(x);
   }
