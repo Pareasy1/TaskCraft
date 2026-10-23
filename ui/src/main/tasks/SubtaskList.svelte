@@ -9,7 +9,7 @@
   import { fmtShortDate, fmtTime } from '../../lib/format';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { dropIndex, insertAt } from '../../lib/plans';
-  import { shiftId } from '../../lib/subtasks';
+  import { focusAfterRemoval, shiftId } from '../../lib/subtasks';
   import { notify } from '../../lib/toast.svelte';
   import type { Task } from '../../lib/types';
   import Menu from '../Menu.svelte';
@@ -24,6 +24,7 @@
   }: { parent: Task; subtasks: Task[]; onopen: (t: Task) => void; onerror: (m: string) => void } = $props();
 
   let listEl = $state<HTMLUListElement | undefined>();
+  let addEl = $state<HTMLInputElement | undefined>();
 
   /** Runs a store command; the dialog reloads the list on the change event. */
   async function run(fn: () => Promise<unknown>) {
@@ -87,33 +88,64 @@
   const restIndex = (x: Task) => subtasks.filter((s) => s.id !== dragId).indexOf(x);
 
   // ── Row commands ──
-  function makeNormal(x: Task) {
-    run(() => api.setTaskParent(x.id, null));
-  }
-  async function remove(x: Task) {
+  /** The row leaves the list: focus moves to its neighbour (or the add field), never to <body>. */
+  async function leave(x: Task, fn: () => Promise<unknown>) {
+    const next = focusAfterRemoval(subtasks.map((s) => s.id), x.id);
     try {
+      await fn();
+    } catch (e) {
+      onerror(errorMessage(e));
+      listEl?.querySelector<HTMLElement>(`[data-sub-menu="${x.id}"]`)?.focus();
+      return;
+    }
+    // The neighbour's row stays when the list reloads (keyed), so it can take focus now.
+    const el = next == null ? null : listEl?.querySelector<HTMLElement>(`[data-sub-menu="${next}"]`);
+    (el ?? addEl)?.focus();
+  }
+  const makeNormal = (x: Task) => leave(x, () => api.setTaskParent(x.id, null));
+  const remove = (x: Task) =>
+    leave(x, async () => {
       const saved = taskInput(await api.getTask(x.id));
       await api.deleteTask(x.id);
       notify(tr('msg.deleted', { title: saved.title }), () => api.createTask(saved).then(() => {}));
-    } catch (e) {
-      onerror(errorMessage(e));
-    }
-  }
+    });
 
   // ── Adding ──
   let text = $state('');
-  async function add() {
+  let pending: Promise<void> = Promise.resolve();
+  function add(): Promise<void> {
     const title = text.trim();
-    if (!title) return;
+    if (!title) return pending;
     text = ''; // the field keeps focus for the next one
-    try {
-      const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
-      await api.createTask({
-        calendarId: s.defaultCalendarId, title, due: null, dueHasTime: false, tz, rrule: null, notes: null,
-        alerts: [], status: 'todo', labels: [], parentId: parent.id,
-      });
-    } catch (e) {
-      onerror(errorMessage(e));
+    const job = (async () => {
+      try {
+        const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
+        await api.createTask({
+          calendarId: s.defaultCalendarId, title, due: null, dueHasTime: false, tz, rrule: null, notes: null,
+          alerts: [], status: 'todo', labels: [], parentId: parent.id,
+        });
+      } catch (e) {
+        if (!text) text = title; // give the typed text back
+        onerror(errorMessage(e));
+        throw e;
+      }
+    })();
+    pending = pending.then(() => job).catch(() => {});
+    return job;
+  }
+  /** Adds any typed but not yet added subtask (the dialog calls this before saving or closing). */
+  export async function flush(): Promise<void> {
+    await pending;
+    await add();
+  }
+  function addKeys(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      add().catch(() => {});
+    } else if (e.key === 'Escape' && text) {
+      e.stopPropagation(); // clears the field; Esc on an empty field closes the dialog
+      e.preventDefault();
+      text = '';
     }
   }
 
@@ -154,8 +186,8 @@
   {/if}
   <label class="add">
     <Plus size={13} aria-hidden="true" />
-    <input bind:value={text} placeholder={tr('subtasks.add')} aria-label={tr('subtasks.add')} maxlength="500"
-      onkeydown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); add(); } }} />
+    <input bind:this={addEl} bind:value={text} placeholder={tr('subtasks.add')} aria-label={tr('subtasks.add')} maxlength="500"
+      onkeydown={addKeys} onblur={() => add().catch(() => {})} />
   </label>
 </section>
 
@@ -168,8 +200,8 @@
     <button role="menuitem" disabled={i <= 0} onclick={() => menu.act((y) => shift(y, -1))}>{tr('task.moveUp')}</button>
     <button role="menuitem" disabled={i < 0 || i >= subtasks.length - 1} onclick={() => menu.act((y) => shift(y, 1))}>{tr('task.moveDown')}</button>
     <div class="sep" role="separator"></div>
-    <button role="menuitem" onclick={() => menu.act(makeNormal)}>{tr('subtasks.makeTask')}</button>
-    <button role="menuitem" class="danger" onclick={() => menu.act(remove)}>{tr('common.delete')}</button>
+    <button role="menuitem" onclick={() => menu.act(makeNormal, false)}>{tr('subtasks.makeTask')}</button>
+    <button role="menuitem" class="danger" onclick={() => menu.act(remove, false)}>{tr('common.delete')}</button>
   </Menu>
 {/if}
 

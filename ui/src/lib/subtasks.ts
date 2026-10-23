@@ -92,3 +92,10 @@ export function shiftId(ids: number[], id: number, by: -1 | 1): number[] | null 
   [out[i], out[j]] = [out[j], out[i]];
   return out;
 }
+
+/** Row to focus after `id` leaves the list: the next one, else the previous one, else none. */
+export function focusAfterRemoval(ids: number[], id: number): number | null {
+  const i = ids.indexOf(id);
+  if (i < 0) return null;
+  return ids[i + 1] ?? ids[i - 1] ?? null;
+}

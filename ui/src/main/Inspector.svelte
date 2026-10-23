@@ -9,7 +9,7 @@
   import SubtaskList from './tasks/SubtaskList.svelte';
   import Checklist from './tasks/Checklist.svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
+  import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { parentCandidates } from '../lib/subtasks';
   import { ymd } from '../lib/format';
   import { notify } from '../lib/toast.svelte';
@@ -171,15 +171,42 @@
     }
   }
 
+  // ── Saving, closing and moving to another task never drop what was typed ──
+  let subtaskList = $state<SubtaskList | undefined>();
+  let checklist = $state<Checklist | undefined>();
+  /** Adds the text still sitting in the "Add subtask" / "Add item" fields; false if that failed (the error shows). */
+  async function flushAdds(): Promise<boolean> {
+    try {
+      await subtaskList?.flush();
+      await checklist?.flush();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   async function save() {
+    if ((await flushAdds()) && (await persist())) onsaved();
+  }
+  async function close() {
+    if (await flushAdds()) onclose();
+  }
+  /** Opens a subtask or the parent; unsaved edits to this task are saved first (and on failure it stays). */
+  async function openOther(id: number) {
+    if (!(await flushAdds())) return;
+    if (target.kind === 'task' && target.id != null && task && taskFormDirty(target.input, task, parentPick) && !(await persist())) return;
+    onopentask?.(id);
+  }
+
+  /** Writes the form to the store; false (with the error shown) when it didn't. */
+  async function persist(): Promise<boolean> {
     try {
       if (ev && target.kind === 'event') {
         const input = formToEvent(ev);
-        if (!input.title) return (error = t('inspector.titleRequired'));
+        if (!input.title) { error = t('inspector.titleRequired'); return false; }
         if (target.id == null) await api.createEvent(input);
         else if (target.recurring && target.occurrence) {
           const scope = await askScope(t('scope.change'), true);
-          if (!scope) return;
+          if (!scope) return false;
           if (scope === 'this') {
             // Detach this occurrence, then apply every edited field to the copy.
             const newId = await api.moveEvent(target.id, target.occurrence, input.start, input.end, 'this');
@@ -198,8 +225,8 @@
         } else await api.updateEvent(target.id, input);
       } else if (task && target.kind === 'task') {
         const input = formToTask(task);
-        if (!input.title) return (error = t('inspector.titleRequired'));
-        if (startAfterDue(input)) return (error = t('error.start_after_due'));
+        if (!input.title) { error = t('inspector.titleRequired'); return false; }
+        if (startAfterDue(input)) { error = t('error.start_after_due'); return false; }
         if (target.id == null) await api.createTask(input);
         else {
           // The parent goes first: its rules (no nesting, no repeat) may refuse it.
@@ -211,9 +238,10 @@
           await api.updateTask(target.id, out);
         }
       }
-      onsaved();
+      return true;
     } catch (e) {
       error = errorMessage(e);
+      return false;
     }
   }
 
@@ -262,7 +290,7 @@
   }
 
   function keys(e: KeyboardEvent) {
-    if (e.key === 'Escape') onclose();
+    if (e.key === 'Escape') close();
     if (e.key === 'Enter' && isMod(e)) save();
   }
 </script>
@@ -270,11 +298,11 @@
 <svelte:window onkeydown={keys} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (backdrop click closes; Esc is the keyboard path) -->
-<div class="scrim" onclick={(e) => e.target === e.currentTarget && onclose()}>
+<div class="scrim" onclick={(e) => e.target === e.currentTarget && close()}>
 <div class="panel" role="dialog" aria-modal="true" aria-label={t('inspector.label')} tabindex="-1" bind:this={panelEl} onkeydown={trapTab}>
   <div class="top">
     <span class="kind">{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
-    <button class="icon-btn" aria-label={t('common.close')} onclick={onclose}><X size={16} /></button>
+    <button class="icon-btn" aria-label={t('common.close')} onclick={close}><X size={16} /></button>
   </div>
   {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
 
@@ -324,7 +352,7 @@
   {:else if task}
     <input class="field title" bind:value={task.title} onblur={reparseTitle} placeholder={t('inspector.taskPlaceholder')} />
     {#if isSubtask && parentTask}
-      <button class="btn link part-of" onclick={() => parentTask && onopentask?.(parentTask.id)}>
+      <button class="btn link part-of" onclick={() => parentTask && openOther(parentTask.id)}>
         <CornerLeftUp size={13} aria-hidden="true" />{t('subtasks.partOf', { title: parentTask.title })}
       </button>
     {/if}
@@ -394,9 +422,9 @@
     <textarea class="field notes" bind:value={task.notes} placeholder={t('inspector.notes')}></textarea>
     {#if stored}
       {#if !isSubtask}
-        <SubtaskList parent={stored} {subtasks} onopen={(x) => onopentask?.(x.id)} onerror={(m) => (error = m)} />
+        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} />
       {/if}
-      <Checklist task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
+      <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
     {/if}
   {/if}
 
@@ -406,7 +434,7 @@
       {#if confirmDelete && subtasks.length}<span class="warn">{t('delete.withSubtasks', { n: subtasks.length })}</span>{/if}
     {/if}
     <span class="spacer"></span>
-    <button class="btn" onclick={onclose}>{t('common.cancel')}</button>
+    <button class="btn" onclick={close}>{t('common.cancel')}</button>
     <button class="btn primary" onclick={save} disabled={startInvalid}>{t('common.save')}</button>
   </div>
 </div>

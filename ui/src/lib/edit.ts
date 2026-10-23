@@ -202,3 +202,10 @@ export function recurrenceToRrule(r: NonNullable<import('./types').ParsedItem['r
 
 /** True when two ISO strings denote the same instant (formats differ between Rust and JS). */
 export const sameInstant = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime();
+
+/** True when the dialog's task form (or its picked parent) differs from the task it opened. */
+export function taskFormDirty(original: TaskInput, form: TaskForm, parentPick: number | null): boolean {
+  if (parentPick !== (original.parentId ?? null)) return true;
+  // Both sides go through the form, so formatting differences don't count as edits.
+  return JSON.stringify(formToTask(taskToForm(original))) !== JSON.stringify(formToTask(form));
+}

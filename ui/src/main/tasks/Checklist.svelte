@@ -5,7 +5,7 @@
   import { api, errorMessage, onItemsChanged } from '../../lib/api';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { dropIndex, insertAt } from '../../lib/plans';
-  import { shiftId } from '../../lib/subtasks';
+  import { focusAfterRemoval, shiftId } from '../../lib/subtasks';
   import { notify } from '../../lib/toast.svelte';
   import type { ChecklistItem, Task } from '../../lib/types';
   import Menu from '../Menu.svelte';
@@ -14,6 +14,7 @@
 
   let items = $state<ChecklistItem[]>([]);
   let listEl = $state<HTMLUListElement | undefined>();
+  let addEl = $state<HTMLInputElement | undefined>();
 
   async function load() {
     const id = task.id;
@@ -102,14 +103,26 @@
   const restIndex = (item: ChecklistItem) => items.filter((i) => i.id !== dragId).indexOf(item);
 
   // ── Row commands ──
+  /** The row leaves the list: focus moves to its neighbour (or the add field), never to <body>. */
+  async function leave(item: ChecklistItem, fn: () => Promise<unknown>): Promise<boolean> {
+    const next = focusAfterRemoval(items.map((i) => i.id), item.id);
+    try {
+      await fn();
+    } catch (e) {
+      onerror(errorMessage(e));
+      listEl?.querySelector<HTMLElement>(`[data-check-menu="${item.id}"]`)?.focus();
+      return false;
+    }
+    // The neighbour's row stays when the list reloads (keyed), so it can take focus now.
+    const el = next == null ? null : listEl?.querySelector<HTMLElement>(`[data-check-menu="${next}"]`);
+    (el ?? addEl)?.focus();
+    return true;
+  }
+  const convert = (item: ChecklistItem) => leave(item, () => api.checklistItemToSubtask(item.id));
   async function remove(item: ChecklistItem) {
     const order = items.map((i) => i.id);
     const taskId = task.id;
-    try {
-      await api.deleteChecklistItem(item.id);
-    } catch (e) {
-      return onerror(errorMessage(e));
-    }
+    if (!(await leave(item, () => api.deleteChecklistItem(item.id)))) return;
     notify(t('msg.deleted', { title: item.text }), async () => {
       // Back with its tick and in its old place.
       const id = await api.addChecklistItem(taskId, item.text);
@@ -122,11 +135,36 @@
 
   // ── Adding ──
   let text = $state('');
-  async function add() {
+  let pending: Promise<void> = Promise.resolve();
+  function add(): Promise<void> {
     const value = text.trim();
-    if (!value) return;
+    if (!value) return pending;
     text = ''; // the field keeps focus for the next one
-    await run(() => api.addChecklistItem(task.id, value));
+    const job = api.addChecklistItem(task.id, value).then(
+      () => {},
+      (e) => {
+        if (!text) text = value; // give the typed text back
+        onerror(errorMessage(e));
+        throw e;
+      },
+    );
+    pending = pending.then(() => job).catch(() => {});
+    return job;
+  }
+  /** Adds any typed but not yet added item (the dialog calls this before saving or closing). */
+  export async function flush(): Promise<void> {
+    await pending;
+    await add();
+  }
+  function addKeys(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      add().catch(() => {});
+    } else if (e.key === 'Escape' && text) {
+      e.stopPropagation(); // clears the field; Esc on an empty field closes the dialog
+      e.preventDefault();
+      text = '';
+    }
   }
 
   const menu = new PopupMenu<ChecklistItem>();
@@ -166,8 +204,8 @@
   {/if}
   <label class="add">
     <Plus size={13} aria-hidden="true" />
-    <input bind:value={text} placeholder={t('checklist.add')} aria-label={t('checklist.add')} maxlength="200"
-      onkeydown={(e) => { if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); add(); } }} />
+    <input bind:this={addEl} bind:value={text} placeholder={t('checklist.add')} aria-label={t('checklist.add')} maxlength="200"
+      onkeydown={addKeys} onblur={() => add().catch(() => {})} />
   </label>
 </section>
 
@@ -179,7 +217,7 @@
     <button role="menuitem" disabled={i < 0 || i >= items.length - 1} onclick={() => menu.act((y) => shift(y, 1, 'menu'))}>{t('task.moveDown')}</button>
     <div class="sep" role="separator"></div>
     {#if canConvert}
-      <button role="menuitem" onclick={() => menu.act((y) => run(() => api.checklistItemToSubtask(y.id)), false)}>{t('checklist.toSubtask')}</button>
+      <button role="menuitem" onclick={() => menu.act(convert, false)}>{t('checklist.toSubtask')}</button>
     {/if}
     <button role="menuitem" class="danger" onclick={() => menu.act(remove, false)}>{t('common.delete')}</button>
   </Menu>

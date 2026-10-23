@@ -247,6 +247,13 @@ export function installMock() {
         changed();
         return null;
       }
+      case 'delete_task': {
+        const gone = new Set(all.filter((t) => t.id === args.id || t.parentId === args.id).map((t) => t.id));
+        all = all.filter((t) => !gone.has(t.id));
+        items = items.filter((i) => !gone.has(i.taskId));
+        changed();
+        return null;
+      }
       case 'list_subtasks': return all.filter((t) => t.parentId === args.parentId).sort((a, b) => a.sortOrder - b.sortOrder).map(withCounts);
       case 'reorder_subtasks': args.ids.forEach((id: number, i: number) => { const x = all.find((y) => y.id === id); if (x) x.sortOrder = (i + 1) * 10; }); changed(); return null;
       case 'set_task_parent': {

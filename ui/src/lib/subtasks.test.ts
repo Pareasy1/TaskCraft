@@ -98,3 +98,14 @@ describe('shiftId', () => {
     expect(shiftId([1, 2, 3], 9, 1)).toBeNull();
   });
 });
+
+import { focusAfterRemoval } from './subtasks';
+
+describe('focusAfterRemoval', () => {
+  it('picks the next row, else the previous one, else none', () => {
+    expect(focusAfterRemoval([1, 2, 3], 2)).toBe(3);
+    expect(focusAfterRemoval([1, 2, 3], 3)).toBe(2);
+    expect(focusAfterRemoval([1], 1)).toBeNull();
+    expect(focusAfterRemoval([1, 2], 9)).toBeNull();
+  });
+});

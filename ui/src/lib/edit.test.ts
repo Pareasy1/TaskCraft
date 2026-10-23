@@ -134,3 +134,25 @@ describe('start and priority in the form', () => {
     expect(startAfterDue({ start: null, due: '2026-10-28T15:30:00.000Z' })).toBe(false);
   });
 });
+
+import { taskFormDirty } from './edit';
+
+describe('taskFormDirty', () => {
+  const original: TaskInput = {
+    calendarId: 1, title: 'Ship', due: '2026-10-28T15:30:00Z', dueHasTime: true, tz: 'Europe/Rome',
+    rrule: null, notes: null, alerts: [], status: 'todo', labels: ['a'], priority: 'low', parentId: 4,
+    start: '2026-10-24T22:00:00Z', startHasTime: false, planId: 1, bucketId: 2,
+  };
+  it('an untouched form is clean, whatever the stored formats', () => {
+    expect(taskFormDirty(original, taskToForm(original), 4)).toBe(false);
+  });
+  it('any edited field, or another parent, makes it dirty', () => {
+    expect(taskFormDirty(original, { ...taskToForm(original), notes: 'x' }, 4)).toBe(true);
+    expect(taskFormDirty(original, { ...taskToForm(original), priority: 'urgent' }, 4)).toBe(true);
+    expect(taskFormDirty(original, { ...taskToForm(original), startDate: '' }, 4)).toBe(true);
+    expect(taskFormDirty(original, taskToForm(original), null)).toBe(true);
+  });
+  it('trailing spaces in the title are not an edit', () => {
+    expect(taskFormDirty(original, { ...taskToForm(original), title: 'Ship  ' }, 4)).toBe(false);
+  });
+});
