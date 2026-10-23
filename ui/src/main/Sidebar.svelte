@@ -1,11 +1,12 @@
 <script lang="ts">
   import { modLabel } from '../lib/platform';
   import { t } from '../lib/i18n';
-  import type { Calendar, Task, TaskLabel, TaskStatus } from '../lib/types';
+  import type { Calendar, Plan, Task, TaskLabel, TaskStatus } from '../lib/types';
   import { Settings as SettingsIcon, Tags } from 'lucide-svelte';
   import LabelManager from './tasks/LabelManager.svelte';
   import MiniMonth from '../quick/MiniMonth.svelte';
   import TaskList from './TaskList.svelte';
+  import PlanList from './plans/PlanList.svelte';
 
   let {
     calendars,
@@ -24,6 +25,9 @@
     activeLabels = $bindable<number[]>([]),
     onerror = () => {},
     onopensettings = () => {},
+    plans = [],
+    scope = 'all',
+    onselectscope = () => {},
   }: {
     calendars: Calendar[];
     month?: Date;
@@ -42,9 +46,15 @@
     activeLabels?: number[];
     onerror?: (m: string) => void;
     onopensettings?: () => void;
+    plans?: Plan[];
+    /** The plan the Tasks view shows ('all' = every plan); highlighted only on the Tasks view. */
+    scope?: number | 'all';
+    onselectscope?: (s: number | 'all') => void;
   } = $props();
 
   let managing = $state(false);
+  let manageBtn = $state<HTMLButtonElement | undefined>();
+  let openCount = $derived(tasks.filter((x) => !x.completedAt).length);
   let usage = $derived(new Map(labels.map((l) => [l.id, tasks.filter((x) => !x.completedAt && x.labels.some((y) => y.id === l.id)).length])));
   const toggle = (id: number) => (activeLabels = activeLabels.includes(id) ? activeLabels.filter((x) => x !== id) : [...activeLabels, id]);
 </script>
@@ -59,14 +69,15 @@
       <span>{c.name}</span>
     </label>
   {/each}
+  <PlanList {plans} scope={tasksMode ? scope : -1} allCount={openCount} onselect={onselectscope} {onerror} />
   {#if tasksMode}
     <div class="label row">
       <span>{t('labels.title')}</span>
       <span class="mgr">
         {#if activeLabels.length}<button class="clear" onclick={() => (activeLabels = [])}>{t('tasks.clear')}</button>{/if}
-        <button class="icon-btn" title={t('tasks.manageLabels')} aria-label={t('tasks.manageLabels')} aria-expanded={managing}
+        <button class="icon-btn" title={t('tasks.manageLabels')} aria-label={t('tasks.manageLabels')} aria-expanded={managing} bind:this={manageBtn}
           onclick={() => (managing = !managing)}><Tags size={14} aria-hidden="true" /></button>
-        {#if managing}<LabelManager {labels} onclose={() => (managing = false)} {onerror} />{/if}
+        {#if managing}<LabelManager {labels} anchor={manageBtn} onclose={() => (managing = false)} {onerror} />{/if}
       </span>
     </div>
     <div class="lbls" role="group" aria-label={t('labels.title')}>
@@ -113,9 +124,7 @@
     padding: 14px 8px 4px;
   }
   .row { display: flex; align-items: center; justify-content: space-between; }
-  .mgr { position: relative; display: flex; align-items: center; gap: 4px; }
-  /* The sidebar is narrower than the popover: open it towards the content. */
-  .mgr :global(.pop) { right: auto; left: 0; }
+  .mgr { display: flex; align-items: center; gap: 4px; }
   .clear { border: none; background: none; color: var(--accent); font-size: 12px; padding: 2px 4px; }
   .lbls { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
   .lbl { display: flex; align-items: baseline; gap: 2px; border: none; background: none; text-align: left; padding: 4px 8px; border-radius: 6px; color: var(--text); }

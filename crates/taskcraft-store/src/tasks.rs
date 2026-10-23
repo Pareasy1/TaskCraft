@@ -1,10 +1,11 @@
 use crate::model::*;
+use crate::plans::{first_bucket, next_sort};
 use crate::{fmt_ts, parse_ts, Store};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
 
 pub(crate) const TASK_COLS: &str =
-    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status";
+    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status, t.plan_id, t.bucket_id, t.sort_order";
 
 pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
     let rrule: Option<String> = r.get(7)?;
@@ -23,6 +24,9 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         alerts: vec![],
         status: TaskStatus::from_sql(&r.get::<_, String>(10)?),
         labels: vec![],
+        plan_id: r.get(11)?,
+        bucket_id: r.get(12)?,
+        sort_order: r.get(13)?,
     })
 }
 
@@ -30,12 +34,15 @@ impl Store {
     pub fn insert_task(&self, t: &TaskInput) -> Result<i64> {
         self.in_tx(|tx| {
         let now = fmt_ts(Utc::now());
+        let (plan_id, bucket_id) = self.placement(tx, t.plan_id, t.bucket_id)?;
+        let sort = next_sort(tx, bucket_id)?;
         tx.execute(
-            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, status, completed_at, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, status, completed_at, created_at, updated_at, plan_id, bucket_id, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13)",
             params![
                 t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
-                t.status.as_sql(), (t.status == TaskStatus::Done).then(|| now.clone()), now
+                t.status.as_sql(), (t.status == TaskStatus::Done).then(|| now.clone()), now,
+                plan_id, bucket_id, sort
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -54,13 +61,32 @@ impl Store {
             .optional()?;
         let newly_done = t.status == TaskStatus::Done
             && was.as_deref().map(TaskStatus::from_sql) != Some(TaskStatus::Done);
+        let cur: Option<(i64, i64)> = tx
+            .query_row("SELECT plan_id, bucket_id FROM tasks WHERE id = ?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .optional()?;
+        let cur = cur.ok_or(StoreError::NotFound)?;
+        let (plan_id, bucket_id, sort) = if t.bucket_id.is_none()
+            && t.plan_id.is_none_or(|p| p == cur.0)
+        {
+            (cur.0, cur.1, None)
+        } else {
+            let (p, b) = self.placement(tx, t.plan_id, t.bucket_id)?;
+            if b == cur.1 {
+                (p, b, None)
+            } else {
+                (p, b, Some(next_sort(tx, b)?))
+            }
+        };
         let n = tx.execute(
             "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7,
-               status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9
+               status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9,
+               plan_id=?11, bucket_id=?12, sort_order=COALESCE(?13, sort_order)
              WHERE id=?10",
             params![
                 t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
-                t.status.as_sql(), fmt_ts(Utc::now()), id
+                t.status.as_sql(), fmt_ts(Utc::now()), id, plan_id, bucket_id, sort
             ],
         )?;
         if n == 0 {
@@ -72,6 +98,128 @@ impl Store {
             self.set_task_completed(id, true, Utc::now())?;
         }
         Ok(())
+        })
+    }
+
+    /// Resolves (plan, bucket): a bucket decides its plan, a plan alone its
+    /// first bucket, neither the default plan's first bucket.
+    fn placement(
+        &self,
+        conn: &rusqlite::Connection,
+        plan_id: Option<i64>,
+        bucket_id: Option<i64>,
+    ) -> Result<(i64, i64)> {
+        match (plan_id, bucket_id) {
+            (p, Some(b)) => {
+                let bp: i64 = conn
+                    .query_row("SELECT plan_id FROM buckets WHERE id = ?1", [b], |r| {
+                        r.get(0)
+                    })
+                    .optional()?
+                    .ok_or_else(|| StoreError::Invalid("bucket does not exist".into()))?;
+                if p.is_some_and(|p| p != bp) {
+                    return Err(StoreError::Invalid("bucket is not in that plan".into()));
+                }
+                Ok((bp, b))
+            }
+            (Some(p), None) => {
+                let exists: bool = conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM plans WHERE id = ?1)",
+                    [p],
+                    |r| r.get(0),
+                )?;
+                if !exists {
+                    return Err(StoreError::Invalid("plan does not exist".into()));
+                }
+                Ok((p, first_bucket(conn, p)?))
+            }
+            (None, None) => {
+                let p = self.default_plan_id_in(conn)?;
+                Ok((p, first_bucket(conn, p)?))
+            }
+        }
+    }
+
+    /// Drops a card into `bucket_id` between the neighbours `before` (above)
+    /// and `after` (below), keeping a stable order via fractional sort keys.
+    pub fn move_task(
+        &self,
+        task_id: i64,
+        bucket_id: i64,
+        before: Option<i64>,
+        after: Option<i64>,
+    ) -> Result<()> {
+        self.in_tx(|tx| {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?1)",
+                [task_id],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                return Err(StoreError::NotFound);
+            }
+            let plan_id: i64 = tx
+                .query_row("SELECT plan_id FROM buckets WHERE id = ?1", [bucket_id], |r| r.get(0))
+                .optional()?
+                .ok_or(StoreError::NotFound)?;
+            let neighbour = |n: Option<i64>| -> Result<Option<f64>> {
+                let Some(n) = n else { return Ok(None) };
+                if n == task_id {
+                    return Err(StoreError::Invalid("neighbour is the moved task".into()));
+                }
+                tx.query_row(
+                    "SELECT sort_order FROM tasks WHERE id = ?1 AND bucket_id = ?2",
+                    params![n, bucket_id],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .map(Some)
+                .ok_or_else(|| StoreError::Invalid("neighbour is not in the target bucket".into()))
+            };
+            let (b_sort, a_sort) = (neighbour(before)?, neighbour(after)?);
+            let (new, near): (f64, Vec<f64>) = match (b_sort, a_sort) {
+                (Some(b), Some(a)) => ((a + b) / 2.0, vec![a, b]),
+                (None, Some(a)) => (a - 1.0, vec![a]),
+                (Some(b), None) => (b + 1.0, vec![b]),
+                (None, None) => {
+                    // The task may already be the last one; exclude it from the max.
+                    let m: f64 = tx.query_row(
+                        "SELECT coalesce(max(sort_order), 0.0) FROM tasks WHERE bucket_id = ?1 AND id <> ?2",
+                        params![bucket_id, task_id],
+                        |r| r.get(0),
+                    )?;
+                    (m + 1.0, vec![])
+                }
+            };
+            let crowded = near.iter().any(|n| (new - n).abs() < 1e-6);
+            let now = fmt_ts(Utc::now());
+            if !crowded {
+                tx.execute(
+                    "UPDATE tasks SET plan_id = ?1, bucket_id = ?2, sort_order = ?3, updated_at = ?4 WHERE id = ?5",
+                    params![plan_id, bucket_id, new, now, task_id],
+                )?;
+                return Ok(());
+            }
+            let mut st = tx.prepare(
+                "SELECT id FROM tasks WHERE bucket_id = ?1 AND id <> ?2 ORDER BY sort_order, id",
+            )?;
+            let mut ids: Vec<i64> = st
+                .query_map(params![bucket_id, task_id], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?;
+            drop(st);
+            let at = match (before, after) {
+                (Some(b), _) => ids.iter().position(|i| *i == b).map_or(ids.len(), |p| p + 1),
+                (None, Some(a)) => ids.iter().position(|i| *i == a).unwrap_or(ids.len()),
+                (None, None) => ids.len(),
+            };
+            ids.insert(at, task_id);
+            for (i, id) in ids.iter().enumerate() {
+                tx.execute(
+                    "UPDATE tasks SET plan_id = ?1, bucket_id = ?2, sort_order = ?3, updated_at = ?4 WHERE id = ?5",
+                    params![plan_id, bucket_id, (i + 1) as f64, now, id],
+                )?;
+            }
+            Ok(())
         })
     }
 
@@ -142,15 +290,18 @@ impl Store {
     }
 
     pub fn delete_task(&self, id: i64) -> Result<()> {
-        self.in_tx(|tx| {
-            if tx.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
-                return Err(StoreError::NotFound);
-            }
-            tx.execute(
-                "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
-                [id],
-            )?;
-            Ok(())
-        })
+        self.in_tx(|tx| delete_task_row(tx, id))
     }
+}
+
+/// Deletes a task row and its alerts (task_labels cascade).
+pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()> {
+    if conn.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
+        return Err(StoreError::NotFound);
+    }
+    conn.execute(
+        "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
+        [id],
+    )?;
+    Ok(())
 }

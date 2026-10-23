@@ -21,7 +21,7 @@
   const LABEL_VAR: Record<string, string> = {
     date: '--label-date', time: '--label-time', duration: '--label-duration', location: '--label-location',
     attendees: '--label-attendees', recurrence: '--label-recurrence', alert: '--label-alert',
-    calendar: '--label-calendar', url: '--label-url', taskPrefix: '--label-prefix', tag: '--label-tag',
+    calendar: '--label-calendar', url: '--label-url', taskPrefix: '--label-prefix', tag: '--label-tag', plan: '--label-calendar',
   };
 
   // Split the text into plain and highlighted segments.

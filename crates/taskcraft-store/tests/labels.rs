@@ -137,3 +137,14 @@ fn blank_and_overlong_names_dropped() {
     let a = task(&s, "A", &["  ", "#", &long, " ok "]);
     assert_eq!(names(&s.get_task(a).unwrap().labels), ["ok"]);
 }
+
+#[test]
+fn label_names_unicode_case_reuse() {
+    let s = Store::open_in_memory().unwrap();
+    let a = task(&s, "A", &["Città"]);
+    let b = task(&s, "B", &["CITTÀ"]);
+    let all = s.list_labels().unwrap();
+    assert_eq!(names(&all), ["Città"]);
+    assert_eq!(s.get_task(a).unwrap().labels[0].id, all[0].id);
+    assert_eq!(s.get_task(b).unwrap().labels[0].id, all[0].id);
+}

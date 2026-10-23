@@ -2,7 +2,7 @@
 
 export type Label =
   | 'title' | 'taskPrefix' | 'date' | 'time' | 'duration' | 'recurrence'
-  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag';
+  | 'alert' | 'location' | 'attendees' | 'calendar' | 'url' | 'separator' | 'tag' | 'plan';
 
 export interface When { date: string; time: string | null }
 export interface Span { start: number; end: number; label: Label }
@@ -22,6 +22,7 @@ export interface ParsedItem {
   alerts: AlertSpec[];
   url: string | null;
   tags: string[];
+  plan: string | null;
   spans: Span[];
 }
 
@@ -62,6 +63,8 @@ export interface TaskInput {
   status: TaskStatus;
   /** Label names; missing labels are created on save. */
   labels: string[];
+  planId?: number | null;
+  bucketId?: number | null;
 }
 
 export interface Task {
@@ -79,6 +82,9 @@ export interface Task {
   alerts: AlertSpecUtc[];
   status: TaskStatus;
   labels: TaskLabel[];
+  planId: number;
+  bucketId: number;
+  sortOrder: number;
 }
 
 export interface Occurrence {
@@ -108,3 +114,7 @@ export interface Settings {
 }
 
 export interface CmdError { code: string; message: string }
+
+export interface Plan { id: number; name: string; color: string; sort: number; openCount: number }
+export interface Bucket { id: number; planId: number; name: string; sort: number }
+export type DeleteMode = { moveTo: number } | 'deleteTasks';

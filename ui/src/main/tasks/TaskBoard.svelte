@@ -1,56 +1,75 @@
+<script lang="ts" module>
+  import type { Task, TaskStatus } from '../../lib/types';
+
+  /** One board column: Status columns pass `status` (header glyph); others may pass a colour dot. */
+  export interface BoardColumn {
+    key: string;
+    title: string;
+    tasks: Task[];
+    status?: TaskStatus;
+    color?: string;
+    danger?: boolean;
+    empty: string;
+    /** Header count when it differs from the cards shown (Done hides older ones). */
+    count?: number;
+    /** Footer link, e.g. Done's "Show 12 older". */
+    more?: { label: string; onclick: () => void };
+  }
+</script>
+
 <script lang="ts">
-  import { activate, isSelected, select } from '../../lib/selection.svelte';
   // `t` names a task throughout this component, so the translator is `tr`.
   import { t as tr } from '../../lib/i18n';
-  import { Repeat } from 'lucide-svelte';
   import { flip } from 'svelte/animate';
   import { tick } from 'svelte';
-  import type { Task, TaskStatus } from '../../lib/types';
-  import { boardColumns, isOverdue, STATUSES, STATUS_LABEL } from '../../lib/tasks';
-  import { fmtShortDate, fmtTime } from '../../lib/format';
+  import type { Plan } from '../../lib/types';
+  import { STATUS_LABEL } from '../../lib/tasks';
   import StatusGlyph from './StatusGlyph.svelte';
-  import LabelChip from './LabelChip.svelte';
+  import BoardCard from './BoardCard.svelte';
   import Doodle from './Doodle.svelte';
 
   let {
-    tasks,
+    columns,
     now,
     activeLabels,
+    plans = [],
     onstatus,
     onopen,
     onlabel,
+    ondrop,
+    onkeymove,
   }: {
-    tasks: Task[];
+    columns: BoardColumn[];
     now: Date;
     activeLabels: number[];
+    /** Given in All tasks: each card shows its plan's dot. */
+    plans?: Plan[];
     onstatus: (t: Task, s: TaskStatus) => void;
     onopen: (t: Task) => void;
     onlabel: (id: number) => void;
+    /** A card dropped on a column; without it the board has no drag and drop. */
+    ondrop?: (t: Task, key: string) => void;
+    /** Left/Right arrow on a card's title; return true if it moved the card. */
+    onkeymove?: (t: Task, by: -1 | 1) => boolean;
   } = $props();
 
-  let showAllDone = $state(false);
   let dragging = $state<number | null>(null);
-  let over = $state<TaskStatus | null>(null);
-  let columns = $derived(boardColumns(tasks, { showAllDone }));
+  let over = $state<string | null>(null);
   const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const planOf = (t: Task) => (plans.length ? plans.find((p) => p.id === t.planId) : undefined);
 
-  const due = (t: Task) =>
-    t.due ? `${fmtShortDate(new Date(t.due))}${t.dueHasTime ? `, ${fmtTime(new Date(t.due))}` : ''}` : '';
-
-  function drop(e: DragEvent, status: TaskStatus) {
+  function drop(e: DragEvent, key: string) {
     e.preventDefault();
     over = null;
     const id = Number(e.dataTransfer?.getData('text/plain'));
-    const t = tasks.find((x) => x.id === id);
-    if (t && t.status !== status) onstatus(t, status);
+    const t = columns.flatMap((c) => c.tasks).find((x) => x.id === id);
+    if (t && ondrop) ondrop(t, key);
   }
 
   let refocus: number | null = null;
   function keys(e: KeyboardEvent, t: Task) {
-    const i = STATUSES.indexOf(t.status);
-    if (e.key === 'ArrowRight' && i < STATUSES.length - 1) onstatus(t, STATUSES[i + 1]);
-    else if (e.key === 'ArrowLeft' && i > 0) onstatus(t, STATUSES[i - 1]);
-    else return;
+    if (!onkeymove || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+    if (!onkeymove(t, e.key === 'ArrowRight' ? 1 : -1)) return;
     e.preventDefault();
     refocus = t.id;
   }
@@ -69,60 +88,41 @@
   });
 </script>
 
-<div class="board">
-  {#each columns as col (col.status)}
+<div class="board" class:wide={columns.length > 3}>
+  {#each columns as col (col.key)}
     <section
       class="col"
-      class:over={over === col.status}
-      aria-label={STATUS_LABEL[col.status]}
-      ondragover={(e) => { e.preventDefault(); over = col.status; }}
+      class:over={over === col.key}
+      aria-label={col.title}
+      ondragover={(e) => { if (!ondrop) return; e.preventDefault(); over = col.key; }}
       ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) over = null; }}
-      ondrop={(e) => drop(e, col.status)}
+      ondrop={(e) => drop(e, col.key)}
     >
       <header>
-        <StatusGlyph status={col.status} size={15} />
-        <h2>{STATUS_LABEL[col.status]}</h2>
-        <span class="n">{col.tasks.length + col.hidden}</span>
+        {#if col.status}<StatusGlyph status={col.status} size={15} />{:else if col.color}<span class="dot" style="background:{col.color}" aria-hidden="true"></span>{/if}
+        <h2 class:danger={col.danger}>{col.title}</h2>
+        <span class="n">{col.count ?? col.tasks.length}</span>
       </header>
       <div class="cards">
         {#each col.tasks as t (t.id)}
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (mouse convenience: the card's open button is the keyboard path) -->
+          <!-- svelte-ignore a11y_no_static_element_interactions (drag is a mouse shortcut; the status menu and arrow keys are the keyboard path) -->
           <div
-            class="card"
+            class="slot"
             class:dragging={dragging === t.id}
-            draggable="true"
+            draggable={ondrop ? 'true' : undefined}
             animate:flip={{ duration: reduce ? 0 : 180 }}
             ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
             ondragend={() => { dragging = null; over = null; }}
-            class:is-selected={isSelected('task', t.id)}
-            onclick={() => select({ kind: 'task', id: t.id })}
-            ondblclick={() => onopen(t)}
           >
-            <div class="top">
-              <StatusGlyph status={t.status} size={16} onchange={(s) => onstatus(t, s)} />
-              <button class="open-btn title" data-card={t.id}
-                aria-label={tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] })}
-                onclick={(e) => { e.stopPropagation(); activate(e, () => onopen(t), () => select({ kind: 'task', id: t.id })); }} onkeydown={(e) => keys(e, t)}>{t.title}</button>
-            </div>
-            {#if t.labels.length || t.due || t.recurring}
-              <div class="meta">
-                {#each t.labels as l (l.id)}
-                  <LabelChip name={l.name} color={l.color} active={activeLabels.includes(l.id)} onclick={() => onlabel(l.id)} />
-                {/each}
-                <span class="spacer"></span>
-                {#if t.recurring}<Repeat size={11} class="rep" aria-label={tr('common.repeats')} />{/if}
-                {#if t.due && t.status !== 'done'}<span class="due" class:late={isOverdue(t, now)}>{due(t)}</span>{/if}
-                <span class="cal" style="background:{t.color}"></span>
-              </div>
-            {/if}
+            <BoardCard task={t} {now} {activeLabels} plan={planOf(t)}
+              titleLabel={onkeymove ? tr('board.cardAria', { title: t.title, status: STATUS_LABEL[t.status] }) : undefined}
+              onstatus={(s) => onstatus(t, s)} onopen={() => onopen(t)} {onlabel} ontitlekey={(e) => keys(e, t)} />
           </div>
         {:else}
-          <div class="empty"><Doodle size={34} /><p>{col.status === 'inProgress' ? tr('board.emptyProgress') : col.status === 'done' ? tr('board.emptyDone') : tr('board.emptyTodo')}</p></div>
+          <div class="empty"><Doodle size={34} /><p>{col.empty}</p></div>
         {/each}
-        {#if col.status === 'done' && (col.hidden || showAllDone)}
-          <button class="more" onclick={() => (showAllDone = !showAllDone)}>
-            {showAllDone ? tr('board.showRecent') : tr('board.showOlder', { n: col.hidden })}
-          </button>
+        {#if col.more}
+          <button class="more" onclick={col.more.onclick}>{col.more.label}</button>
         {/if}
       </div>
     </section>
@@ -131,6 +131,8 @@
 
 <style>
   .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; height: 100%; padding-bottom: 16px; }
+  /* More than three columns (due dates, labels): fixed width, scroll sideways. */
+  .board.wide { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); overflow-x: auto; }
   .col {
     background: var(--bg-sunken);
     border-radius: 12px;
@@ -143,31 +145,11 @@
   .col.over { box-shadow: inset 0 0 0 2px var(--accent); }
   header { display: flex; align-items: center; gap: 7px; padding: 11px 12px 6px; }
   h2 { margin: 0; font-size: 13px; font-weight: 600; }
+  h2.danger { color: var(--danger); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
   .n { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .cards { flex: 1; overflow-y: auto; padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-  .card {
-    background: var(--surface-strong);
-    border-radius: 9px;
-    padding: 9px 10px;
-    box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-  .card:hover { box-shadow: 0 0 0 1px var(--border), 0 3px 10px rgba(0, 0, 0, 0.08); }
-  .card:has(.title:focus-visible) { box-shadow: 0 0 0 2px var(--accent); }
-  .card .title:focus-visible { outline: none; }
-  .card.dragging { opacity: 0.45; }
-  @media (prefers-reduced-motion: no-preference) {
-    .card { transition: box-shadow 0.15s, transform 0.15s, opacity 0.15s; }
-    .card:active { transform: scale(1.015) rotate(-0.4deg); box-shadow: 0 0 0 1px var(--border), 0 10px 24px rgba(0, 0, 0, 0.16); }
-  }
-  .top { display: flex; align-items: flex-start; gap: 8px; }
-  .top :global(.btn-glyph) { margin-top: -1px; }
-  .title { flex: 1; min-width: 0; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
-  .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 24px; }
-  .spacer { flex: 1; }
-  .meta :global(.rep) { color: var(--faint); }
-  .due { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .due.late { color: var(--danger); }
-  .cal { width: 6px; height: 6px; border-radius: 50%; opacity: 0.8; }
+  .slot.dragging { opacity: 0.45; }
   .empty { color: var(--muted); font-size: 12px; text-align: center; margin: 18px 8px; }
   .empty p { margin: 0; }
   .more { border: none; background: none; color: var(--accent); font-size: 12px; padding: 6px; border-radius: 6px; }

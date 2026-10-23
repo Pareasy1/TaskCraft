@@ -1,11 +1,16 @@
 <script lang="ts">
   import { t } from '../../lib/i18n';
   import { Trash2 } from 'lucide-svelte';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import type { TaskLabel } from '../../lib/types';
   import { api, errorMessage } from '../../lib/api';
 
-  let { labels, onclose, onerror }: { labels: TaskLabel[]; onclose: () => void; onerror: (m: string) => void } = $props();
+  let {
+    labels,
+    anchor,
+    onclose,
+    onerror,
+  }: { labels: TaskLabel[]; anchor?: HTMLElement; onclose: () => void; onerror: (m: string) => void } = $props();
 
   const PALETTE = ['#3b82f6', '#f97316', '#10b981', '#a855f7', '#ef4444', '#eab308', '#06b6d4', '#ec4899'];
   let picking = $state<number | null>(null);
@@ -13,7 +18,28 @@
   // Focus moves into the popover when it opens and back to its button when it closes.
   const opener = document.activeElement as HTMLElement | null;
   let popEl = $state<HTMLDivElement | undefined>();
-  onMount(() => popEl?.querySelector<HTMLElement>('input, button')?.focus());
+  onMount(() => {
+    place();
+    popEl?.querySelector<HTMLElement>('input, button')?.focus();
+  });
+
+  // Fixed to the window, under its button, so the narrow sidebar never clips it.
+  let pos = $state('');
+  function place() {
+    if (!anchor || !popEl) return;
+    const a = anchor.getBoundingClientRect();
+    const w = popEl.offsetWidth, h = popEl.offsetHeight, gap = 6, m = 8;
+    const left = Math.max(m, Math.min(a.left, innerWidth - w - m));
+    const below = a.bottom + gap;
+    const top = below + h <= innerHeight - m ? below : Math.max(m, Math.min(a.top - gap - h, innerHeight - h - m));
+    pos = `left:${left}px; top:${top}px`;
+  }
+  // Labels added or recoloured change its height.
+  $effect(() => {
+    void labels;
+    void picking;
+    tick().then(place);
+  });
   onDestroy(() => {
     if (opener?.isConnected) opener.focus();
   });
@@ -36,9 +62,9 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} onresize={place} />
 
-<div class="pop" role="dialog" aria-label={t('labels.title')} bind:this={popEl}>
+<div class="pop" class:fixed={!!anchor} style={pos} role="dialog" aria-label={t('labels.title')} bind:this={popEl}>
   <p class="intro">{t('labels.intro')}</p>
   {#each labels as l (l.id)}
     <div class="item">
@@ -77,6 +103,7 @@
     box-shadow: var(--shadow);
     padding: 10px;
   }
+  .pop.fixed { position: fixed; right: auto; max-height: calc(100vh - 16px); overflow-y: auto; }
   .intro { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.4; }
   .item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
   .item input { flex: 1; min-width: 0; border: 1px solid transparent; background: none; border-radius: 6px; padding: 4px 6px; }

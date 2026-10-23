@@ -36,19 +36,26 @@ fn alerts_utc(alerts: &[AlertSpec], tz: Tz) -> Vec<AlertSpecUtc> {
 }
 
 /// Maps a parsed sentence to a store input. `/name` picks a calendar by
-/// name; otherwise `default_calendar_id` is used.
+/// name; otherwise `default_calendar_id` is used. A task's `plan` is matched
+/// by exact name; no match leaves the store to pick the default plan.
 pub fn from_parsed(
     p: &ParsedItem,
     tz: Tz,
     default_calendar_id: i64,
     calendars: &[Calendar],
     default_event_minutes: u32,
+    plans: &[Plan],
 ) -> NewItem {
     let calendar_id = p
         .calendar
         .as_ref()
         .and_then(|name| calendars.iter().find(|c| c.name.eq_ignore_ascii_case(name)))
         .map_or(default_calendar_id, |c| c.id);
+    let plan_id = p
+        .plan
+        .as_ref()
+        .and_then(|name| plans.iter().find(|pl| &pl.name == name))
+        .map(|pl| pl.id);
     let rrule = p.recurrence.as_ref().map(|r| r.to_rrule());
     let alerts = alerts_utc(&p.alerts, tz);
 
@@ -63,6 +70,7 @@ pub fn from_parsed(
             notes: None,
             alerts,
             labels: p.tags.clone(),
+            plan_id,
             ..Default::default()
         }),
         ItemKind::Event => {

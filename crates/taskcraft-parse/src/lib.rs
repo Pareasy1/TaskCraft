@@ -56,6 +56,11 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
     } else {
         Vec::new()
     };
+    let plan = if kind == ItemKind::Task {
+        mark_plan(&toks, &mut tags, opts)
+    } else {
+        None
+    };
     let ctx = Ctx { now, opts };
     rules::run_rules(&toks, rules::RULES, &ctx, &mut tags);
     let attendees = rules::fields::attendees(&toks, &mut tags);
@@ -78,6 +83,7 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
         alerts: r.alerts,
         url: r.url,
         tags: tags_found,
+        plan,
         spans,
     }
 }
@@ -105,6 +111,41 @@ fn mark_tags(toks: &[Token], tags: &mut [Tagged]) -> Vec<String> {
         }
     }
     out
+}
+
+/// Lowercased alphanumeric characters only, so "3D print" and "/3dprint" match.
+pub fn plan_key(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Labels the first `/plan` token matching a known plan and returns the
+/// plan's exact name (a token that is also a calendar name is left to the
+/// calendar rule). Other `/word` tokens are left for the title.
+fn mark_plan(toks: &[Token], tags: &mut [Tagged], opts: &ParseOptions) -> Option<String> {
+    for (t, tag) in toks.iter().zip(tags.iter_mut()) {
+        if tag.label.is_some() {
+            continue;
+        }
+        let Some(word) = t.text.strip_prefix('/') else {
+            continue;
+        };
+        if !word.chars().any(char::is_alphabetic) {
+            continue;
+        }
+        let key = plan_key(word);
+        if let Some(name) = opts.plans.iter().find(|p| plan_key(p) == key) {
+            // A name that is also a calendar stays unlabelled so the calendar
+            // rule claims the token; the plan is still reported.
+            if !opts.calendars.iter().any(|c| c.eq_ignore_ascii_case(word)) {
+                tag.label = Some(Label::Plan);
+            }
+            return Some(name.clone());
+        }
+    }
+    None
 }
 
 /// Words dropped from the end of a title ("Lunch at", "Call with").

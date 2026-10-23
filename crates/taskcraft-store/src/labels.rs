@@ -1,8 +1,8 @@
 //! Task labels: created on demand from names, linked through `task_labels`.
 
 use crate::model::*;
-use crate::Store;
-use rusqlite::{params, Connection, OptionalExtension};
+use crate::{name_key, Store};
+use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
 const PALETTE: [&str; 8] = [
@@ -20,22 +20,33 @@ pub(crate) fn normalize_labels(names: &[String]) -> Vec<String> {
         if n.is_empty() || n.chars().count() > MAX_LEN {
             continue;
         }
-        if !out.iter().any(|o| o.to_lowercase() == n.to_lowercase()) {
+        if !out.iter().any(|o| name_key(o) == name_key(n)) {
             out.push(n.to_string());
         }
     }
     out
 }
 
+/// Id of the label whose name matches `name` (Unicode case-insensitive),
+/// ignoring `except`.
+fn label_id_by_name(conn: &Connection, name: &str, except: Option<i64>) -> Result<Option<i64>> {
+    let key = name_key(name);
+    let mut st = conn.prepare("SELECT id, name FROM labels ORDER BY id")?;
+    let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+    for row in rows {
+        let (id, n) = row?;
+        if Some(id) != except && name_key(&n) == key {
+            return Ok(Some(id));
+        }
+    }
+    Ok(None)
+}
+
 /// Replaces the task's labels with `names`, creating missing labels.
 pub(crate) fn write_task_labels(conn: &Connection, task_id: i64, names: &[String]) -> Result<()> {
     conn.execute("DELETE FROM task_labels WHERE task_id = ?1", [task_id])?;
     for name in normalize_labels(names) {
-        let existing: Option<i64> = conn
-            .query_row("SELECT id FROM labels WHERE name = ?1", [&name], |r| {
-                r.get(0)
-            })
-            .optional()?;
+        let existing = label_id_by_name(conn, &name, None)?;
         let id = match existing {
             Some(id) => id,
             None => {
@@ -125,13 +136,7 @@ impl Store {
             )));
         };
         self.in_tx(|tx| {
-            let other: Option<i64> = tx
-                .query_row(
-                    "SELECT id FROM labels WHERE name = ?1 AND id <> ?2",
-                    params![name, id],
-                    |r| r.get(0),
-                )
-                .optional()?;
+            let other = label_id_by_name(tx, &name, Some(id))?;
             if let Some(keep) = other {
                 tx.execute(
                     "INSERT OR IGNORE INTO task_labels(task_id, label_id)
