@@ -5,12 +5,12 @@
   import { t as tr } from '../../lib/i18n';
   import { api, errorMessage } from '../../lib/api';
   import { changeStatus } from '../../lib/actions';
-  import { taskInput } from '../../lib/edit';
   import { fmtShortDate, fmtTime } from '../../lib/format';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { dropIndex, insertAt } from '../../lib/plans';
   import { focusAfterRemoval, shiftId } from '../../lib/subtasks';
   import { notify } from '../../lib/toast.svelte';
+  import { restoreSubtask, snapshotSubtask } from '../../lib/restore';
   import type { Task } from '../../lib/types';
   import Menu from '../Menu.svelte';
   import LabelChip from './LabelChip.svelte';
@@ -105,9 +105,10 @@
   const makeNormal = (x: Task) => leave(x, () => api.setTaskParent(x.id, null));
   const remove = (x: Task) =>
     leave(x, async () => {
-      const saved = taskInput(await api.getTask(x.id));
+      const saved = await snapshotSubtask(x.id, subtasks.map((s) => s.id));
       await api.deleteTask(x.id);
-      notify(tr('msg.deleted', { title: saved.title }), () => api.createTask(saved).then(() => {}));
+      // Undo brings back its checklist and its place in the list.
+      notify(tr('msg.deleted', { title: saved.task.input.title }), () => restoreSubtask(saved).then(() => {}));
     });
 
   // ── Adding ──
@@ -119,9 +120,9 @@
     text = ''; // the field keeps focus for the next one
     const job = (async () => {
       try {
-        const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
+        // A subtask lives in its parent's calendar and time zone (as checklist-to-subtask does).
         await api.createTask({
-          calendarId: s.defaultCalendarId, title, due: null, dueHasTime: false, tz, rrule: null, notes: null,
+          calendarId: parent.calendarId, title, due: null, dueHasTime: false, tz: parent.tz, rrule: null, notes: null,
           alerts: [], status: 'todo', labels: [], parentId: parent.id,
         });
       } catch (e) {

@@ -13,6 +13,7 @@
   import { parentCandidates } from '../lib/subtasks';
   import { ymd } from '../lib/format';
   import { notify } from '../lib/toast.svelte';
+  import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
 
   export type Target =
     | { kind: 'event'; id: number | null; occurrence: string | null; recurring: boolean; input: EventInput }
@@ -258,18 +259,10 @@
         notify(t('msg.deleted', { title: saved.title }), target.recurring ? undefined : () => api.createEvent(saved).then(() => {}));
       } else if (target.kind === 'task' && target.id != null) {
         const id = target.id;
-        const [me, subs, list] = await Promise.all([api.getTask(id), api.listSubtasks(id), api.listChecklist(id)]);
-        const saved = taskInput(me);
+        const saved = await snapshotWithSubtasks(id);
         await api.deleteTask(id);
-        // Undo brings back its subtasks and checklist too (they went with it).
-        notify(t('msg.deleted', { title: saved.title }), async () => {
-          const newId = await api.createTask(saved);
-          for (const s of subs) await api.createTask({ ...taskInput(s), parentId: newId });
-          for (const item of list) {
-            const itemId = await api.addChecklistItem(newId, item.text);
-            if (item.done) await api.updateChecklistItem(itemId, { done: true });
-          }
-        });
+        // Undo brings back its checklist, its subtasks and their checklists too (they went with it).
+        notify(t('msg.deleted', { title: saved.task.input.title }), () => restoreWithSubtasks(saved).then(() => {}));
       }
       onsaved();
     } catch (e) {
