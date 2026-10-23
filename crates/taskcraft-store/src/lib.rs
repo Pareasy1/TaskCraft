@@ -10,6 +10,7 @@ mod plans;
 mod query;
 mod recur;
 mod schema;
+mod subtasks;
 mod tasks;
 mod time;
 

@@ -7,7 +7,7 @@ impl Store {
     pub fn list_plans(&self) -> Result<Vec<Plan>> {
         let mut st = self.conn.prepare(
             "SELECT p.id, p.name, p.color, p.sort,
-               (SELECT count(*) FROM tasks t WHERE t.plan_id = p.id AND t.completed_at IS NULL)
+               (SELECT count(*) FROM tasks t WHERE t.plan_id = p.id AND t.completed_at IS NULL AND t.parent_id IS NULL)
              FROM plans p ORDER BY p.sort, p.id",
         )?;
         let rows = st.query_map([], |r| {
@@ -105,7 +105,7 @@ impl Store {
             }
             let mut st = tx.prepare(
                 "SELECT t.id FROM tasks t LEFT JOIN buckets b ON b.id = t.bucket_id
-                 WHERE t.plan_id = ?1 ORDER BY b.sort, t.bucket_id, t.sort_order, t.id",
+                 WHERE t.plan_id = ?1 AND t.parent_id IS NULL ORDER BY b.sort, t.bucket_id, t.sort_order, t.id",
             )?;
             let task_ids: Vec<i64> = st
                 .query_map([id], |r| r.get(0))?
@@ -201,7 +201,7 @@ impl Store {
                 return Err(StoreError::LastBucket);
             }
             let mut st =
-                tx.prepare("SELECT id FROM tasks WHERE bucket_id = ?1 ORDER BY sort_order, id")?;
+                tx.prepare("SELECT id FROM tasks WHERE bucket_id = ?1 AND parent_id IS NULL ORDER BY sort_order, id")?;
             let task_ids: Vec<i64> = st
                 .query_map([id], |r| r.get(0))?
                 .collect::<std::result::Result<_, _>>()?;
@@ -277,7 +277,7 @@ impl Store {
 /// Next `sort_order` that places a task after all others in the bucket.
 pub(crate) fn next_sort(conn: &Connection, bucket_id: i64) -> Result<f64> {
     Ok(conn.query_row(
-        "SELECT coalesce(max(sort_order), 0.0) + 1.0 FROM tasks WHERE bucket_id = ?1",
+        "SELECT coalesce(max(sort_order), 0.0) + 1.0 FROM tasks WHERE bucket_id = ?1 AND parent_id IS NULL",
         [bucket_id],
         |r| r.get(0),
     )?)
@@ -290,6 +290,7 @@ fn move_tasks(conn: &Connection, task_ids: &[i64], plan_id: i64, bucket_id: i64)
             "UPDATE tasks SET plan_id = ?1, bucket_id = ?2, sort_order = ?3 WHERE id = ?4",
             params![plan_id, bucket_id, base + i as f64, t],
         )?;
+        crate::subtasks::sync_children_placement(conn, *t)?;
     }
     Ok(())
 }

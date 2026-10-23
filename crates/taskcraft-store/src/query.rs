@@ -144,7 +144,9 @@ impl Store {
                 _ if t.completed_at.is_some() => false,
                 TaskFilter::Overdue => overdue(t),
                 TaskFilter::Today => {
-                    !overdue(t) && t.due.is_some_and(|d| d >= day_start && d < next_start)
+                    !overdue(t)
+                        && t.due.is_some_and(|d| d >= day_start && d < next_start)
+                        && t.start.is_none_or(|s| s < next_start)
                 }
                 TaskFilter::Upcoming => t.due.is_none_or(|d| d >= next_start),
             })

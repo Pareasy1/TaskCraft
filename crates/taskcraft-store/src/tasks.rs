@@ -1,5 +1,6 @@
 use crate::model::*;
 use crate::plans::{first_bucket, next_sort};
+use crate::subtasks::{reset_for_next_occurrence, sync_children_placement};
 use crate::{fmt_ts, parse_ts, Store};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
@@ -102,6 +103,12 @@ impl Store {
                 (p, b, Some(next_sort(tx, b)?))
             }
         };
+        // Clearing a parent promotes the task like `set_task_parent(id, None)`.
+        let sort = if old_parent.is_some() && t.parent_id.is_none() {
+            Some(next_sort(tx, bucket_id)?)
+        } else {
+            sort
+        };
         let n = tx.execute(
             "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7,
                status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9,
@@ -117,6 +124,7 @@ impl Store {
         if n == 0 {
             return Err(StoreError::NotFound);
         }
+        sync_children_placement(tx, id)?;
         crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         if newly_done && t.rrule.is_some() && t.due.is_some() {
@@ -201,13 +209,15 @@ impl Store {
         after: Option<i64>,
     ) -> Result<()> {
         self.in_tx(|tx| {
-            let exists: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?1)",
-                [task_id],
-                |r| r.get(0),
-            )?;
-            if !exists {
-                return Err(StoreError::NotFound);
+            let parent: Option<Option<i64>> = tx
+                .query_row("SELECT parent_id FROM tasks WHERE id = ?1", [task_id], |r| r.get(0))
+                .optional()?;
+            match parent {
+                None => return Err(StoreError::NotFound),
+                Some(Some(_)) => {
+                    return Err(StoreError::Invalid("a subtask cannot be moved on its own".into()))
+                }
+                Some(None) => {}
             }
             let plan_id: i64 = tx
                 .query_row("SELECT plan_id FROM buckets WHERE id = ?1", [bucket_id], |r| r.get(0))
@@ -219,7 +229,7 @@ impl Store {
                     return Err(StoreError::Invalid("neighbour is the moved task".into()));
                 }
                 tx.query_row(
-                    "SELECT sort_order FROM tasks WHERE id = ?1 AND bucket_id = ?2",
+                    "SELECT sort_order FROM tasks WHERE id = ?1 AND bucket_id = ?2 AND parent_id IS NULL",
                     params![n, bucket_id],
                     |r| r.get(0),
                 )
@@ -235,7 +245,7 @@ impl Store {
                 (None, None) => {
                     // The task may already be the last one; exclude it from the max.
                     let m: f64 = tx.query_row(
-                        "SELECT coalesce(max(sort_order), 0.0) FROM tasks WHERE bucket_id = ?1 AND id <> ?2",
+                        "SELECT coalesce(max(sort_order), 0.0) FROM tasks WHERE bucket_id = ?1 AND id <> ?2 AND parent_id IS NULL",
                         params![bucket_id, task_id],
                         |r| r.get(0),
                     )?;
@@ -249,10 +259,10 @@ impl Store {
                     "UPDATE tasks SET plan_id = ?1, bucket_id = ?2, sort_order = ?3, updated_at = ?4 WHERE id = ?5",
                     params![plan_id, bucket_id, new, now, task_id],
                 )?;
-                return Ok(());
+                return sync_children_placement(tx, task_id);
             }
             let mut st = tx.prepare(
-                "SELECT id FROM tasks WHERE bucket_id = ?1 AND id <> ?2 ORDER BY sort_order, id",
+                "SELECT id FROM tasks WHERE bucket_id = ?1 AND id <> ?2 AND parent_id IS NULL ORDER BY sort_order, id",
             )?;
             let mut ids: Vec<i64> = st
                 .query_map(params![bucket_id, task_id], |r| r.get(0))?
@@ -269,6 +279,7 @@ impl Store {
                     "UPDATE tasks SET plan_id = ?1, bucket_id = ?2, sort_order = ?3, updated_at = ?4 WHERE id = ?5",
                     params![plan_id, bucket_id, (i + 1) as f64, now, id],
                 )?;
+                sync_children_placement(tx, *id)?;
             }
             Ok(())
         })
@@ -300,6 +311,7 @@ impl Store {
                             "UPDATE tasks SET due_utc = ?1, completed_at = NULL, status = 'todo', updated_at = ?2 WHERE id = ?3",
                             params![fmt_ts(next), fmt_ts(Utc::now()), id],
                         )?;
+                        reset_for_next_occurrence(tx, id)?;
                         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)
                     });
                 }
@@ -346,15 +358,26 @@ impl Store {
     }
 }
 
-/// Deletes a task row and its alerts (task_labels cascade).
+/// Deletes a task, its subtasks and their checklist items and alerts
+/// (task_labels cascade).
 pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()> {
+    let mut st = conn.prepare("SELECT id FROM tasks WHERE parent_id = ?1")?;
+    let mut all: Vec<i64> = st
+        .query_map([id], |r| r.get(0))?
+        .collect::<std::result::Result<_, _>>()?;
+    drop(st);
+    all.push(id);
     if conn.execute("DELETE FROM tasks WHERE id = ?1", [id])? == 0 {
         return Err(StoreError::NotFound);
     }
-    conn.execute(
-        "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
-        [id],
-    )?;
+    for t in all {
+        conn.execute("DELETE FROM tasks WHERE id = ?1", [t])?;
+        conn.execute("DELETE FROM checklist_items WHERE task_id = ?1", [t])?;
+        conn.execute(
+            "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
+            [t],
+        )?;
+    }
     Ok(())
 }
 
@@ -368,7 +391,7 @@ fn check_start(t: &TaskInput) -> Result<()> {
 }
 
 /// Validates `parent_id`; returns (parent id, its plan, its bucket).
-fn check_parent(
+pub(crate) fn check_parent(
     conn: &rusqlite::Connection,
     me: Option<i64>,
     t: &TaskInput,
@@ -408,7 +431,7 @@ fn check_parent(
     Ok(Some((pid, plan, bucket)))
 }
 
-fn next_child_sort(conn: &rusqlite::Connection, parent: i64) -> Result<f64> {
+pub(crate) fn next_child_sort(conn: &rusqlite::Connection, parent: i64) -> Result<f64> {
     Ok(conn.query_row(
         "SELECT coalesce(max(sort_order), 0.0) + 1.0 FROM tasks WHERE parent_id = ?1",
         [parent],
