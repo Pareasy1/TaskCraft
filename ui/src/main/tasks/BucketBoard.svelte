@@ -106,6 +106,8 @@
   let boardEl = $state<HTMLDivElement | undefined>();
 
   function dragOver(e: DragEvent, col: { bucket: Bucket; tasks: Task[] }, i: number) {
+    // Both drags allow only "move"; WebKit rejects the drop unless dropEffect matches.
+    if ((dragCard != null || dragBucket != null) && e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     if (dragCard != null) {
       e.preventDefault();
       const cards = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-slot]')].filter(

@@ -33,6 +33,9 @@ pub fn show_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             .title("TaskCraft")
             .inner_size(1100.0, 720.0)
             .min_inner_size(800.0, 560.0)
+            // Tauri's own file-drop handler swallows HTML5 drag events on
+            // Windows; the boards rely on those, and the app takes no file drops.
+            .disable_drag_drop_handler()
             .build_main_chrome()?,
     };
     w.show()?;

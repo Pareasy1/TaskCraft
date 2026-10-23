@@ -90,6 +90,7 @@
   function dragOver(e: DragEvent, index: number) {
     if (dragId == null) return;
     e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     dropAt = e.clientY < r.top + r.height / 2 ? index : index + 1;
   }

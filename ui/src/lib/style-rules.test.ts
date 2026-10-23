@@ -18,6 +18,16 @@ describe('house style', () => {
     expect(offenders.map((f) => f.slice(root.length))).toEqual([]);
   });
 
+  // WebKit (the macOS app's webview) rejects a drop when the drag allows only
+  // "move" but the drop target leaves dropEffect at its default.
+  it('drags limited to move set a matching dropEffect on their drop targets', () => {
+    const offenders = files(root).filter((f) => {
+      const src = readFileSync(f, 'utf8');
+      return /effectAllowed\s*=\s*'move'/.test(src) && !/dropEffect\s*=\s*'move'/.test(src);
+    });
+    expect(offenders.map((f) => f.slice(root.length))).toEqual([]);
+  });
+
   it('dates and times are formatted in the app language (lib/format.ts), not the raw system locale', () => {
     const offenders = files(root).filter((f) => /toLocale\w*String\(undefined/.test(readFileSync(f, 'utf8')));
     expect(offenders.map((f) => f.slice(root.length))).toEqual([]);
