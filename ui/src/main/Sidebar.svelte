@@ -54,7 +54,8 @@
 
   let managing = $state(false);
   let manageBtn = $state<HTMLButtonElement | undefined>();
-  let openCount = $derived(tasks.filter((x) => !x.completedAt).length);
+  // Top-level only, like the store's plan counts.
+  let openCount = $derived(tasks.filter((x) => !x.completedAt && x.parentId == null).length);
   let usage = $derived(new Map(labels.map((l) => [l.id, tasks.filter((x) => !x.completedAt && x.labels.some((y) => y.id === l.id)).length])));
   const toggle = (id: number) => (activeLabels = activeLabels.includes(id) ? activeLabels.filter((x) => x !== id) : [...activeLabels, id]);
 </script>

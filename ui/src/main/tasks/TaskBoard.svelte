@@ -100,7 +100,7 @@
       class="col"
       class:over={over === col.key}
       aria-label={col.title}
-      ondragover={(e) => { if (!ondrop) return; e.preventDefault(); over = col.key; }}
+      ondragover={(e) => { if (!ondrop) return; e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; over = col.key; }}
       ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) over = null; }}
       ondrop={(e) => drop(e, col.key)}
     >
@@ -117,7 +117,7 @@
             class:dragging={dragging === t.id}
             draggable={ondrop ? 'true' : undefined}
             animate:flip={{ duration: reduce ? 0 : 180 }}
-            ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); }}
+            ondragstart={(e) => { dragging = t.id; e.dataTransfer?.setData('text/plain', String(t.id)); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
             ondragend={() => { dragging = null; over = null; }}
           >
             <BoardCard task={t} {now} {activeLabels} plan={planOf(t)}

@@ -38,6 +38,12 @@ export function fmtSpan(start: Date, due: Date): string {
   return types.indexOf('day') < types.indexOf('month') ? `${start.getDate()} → ${b}` : `${a} → ${due.getDate()}`;
 }
 
+/** A due date in the Tasks list: time only (or nothing) inside its own day group, otherwise the full date. */
+export function dueInGroup(due: Date, hasTime: boolean, groupDay: Date | null): string {
+  if (groupDay && due.toDateString() === groupDay.toDateString()) return hasTime ? fmtTime(due) : '';
+  return `${fmtShortDate(due)}${hasTime ? ` ${fmtTime(due)}` : ''}`;
+}
+
 export const monthTitle = (d: Date) => d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 
 export function weekdayInitials(weekStart: 0 | 1): string[] {

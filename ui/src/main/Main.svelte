@@ -74,7 +74,7 @@
     if (view === 'tasks') {
       // The view switcher already says "Tasks"; the title says how many are open.
       if (scopePlan) return scopePlan.name;
-      const n = allTasks.filter((x) => !x.completedAt).length;
+      const n = allTasks.filter((x) => !x.completedAt && x.parentId == null).length; // top-level, like plan counts
       return n === 0 ? t('tasks.openNone') : n === 1 ? t('tasks.openOne') : t('tasks.openMany', { n });
     }
     if (view === 'month') return monthTitle(anchor);

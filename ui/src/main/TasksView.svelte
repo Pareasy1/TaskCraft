@@ -9,12 +9,12 @@
   import { Rows3, Columns3, ChevronDown } from 'lucide-svelte';
   import { PRIORITIES, type Bucket, type ParsedItem, type Plan, type Priority, type Task, type TaskLabel, type TaskStatus } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
-  import { describeParsed, fmtDayHeading, fmtShortDate, fmtTime } from '../lib/format';
+  import { describeParsed, dueInGroup, fmtDayHeading } from '../lib/format';
   import {
     applyFilters, boardColumns, filterTasks, isOverdue, STATUSES, STATUS_LABEL, taskCounts, taskPageGroups,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
-  import { dueColumns, labelColumns, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
+  import { dueColumns, labelColumns, lastTopLevelIn, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
   import { PopupMenu } from '../lib/menu.svelte';
   import Menu from './Menu.svelte';
   import HighlightInput from '../quick/HighlightInput.svelte';
@@ -125,7 +125,8 @@
   });
   // Date-tab counts follow the status filter, except Done (which has no date tabs).
   let counts = $derived(taskCounts(
-    layout === 'board' ? labelled : applyFilters(tasks, { status: status === 'done' ? 'any' : status, labels: active }), now,
+    // Open-task counts are top-level only, like the store's plan counts.
+    layout === 'board' ? labelled : applyFilters(top, { status: status === 'done' ? 'any' : status, labels: active }), now,
   ));
   // The board shows open tasks for the date filter plus every finished one.
   let boardTasks = $derived([...filterTasks(labelled, view, now), ...labelled.filter((t) => t.completedAt)]);
@@ -251,7 +252,7 @@
       // Inside a plan, a task without its own plan hint goes to the end of this plan's first bucket.
       const [created, defaultPlanId] = await Promise.all([api.getTask(ref.id), api.getDefaultPlan()]);
       if (quickAddNeedsMove({ hint, taskPlanId: created.planId, scopePlanId: scopePlan.id, defaultPlanId })) {
-        const last = tasks.filter((x) => x.bucketId === first.id).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).at(-1);
+        const last = lastTopLevelIn(tasks, first.id);
         await api.moveTask(ref.id, first.id, last?.id ?? null, null);
       }
     } catch (err) {
@@ -274,13 +275,8 @@
   const heading = (g: TaskGroup<Task>) =>
     g.kind === 'overdue' ? t('group.overdue') : g.kind === 'nodate' ? t('view.nodate') : g.kind === 'completed' ? t('view.completed') : fmtDayHeading(g.day!, now);
 
-  const dueLabel = (t: Task, g: TaskGroup<Task>) => {
-    if (!t.due) return '';
-    const d = new Date(t.due);
-    // Inside a day group the date is in the heading; show only the time.
-    if (g.kind === 'day') return t.dueHasTime ? fmtTime(d) : '';
-    return `${fmtShortDate(d)}${t.dueHasTime ? ` ${fmtTime(d)}` : ''}`;
-  };
+  // Inside a day group the date is in the heading (time only), unless a nested subtask is due on another day.
+  const dueLabel = (t: Task, g: TaskGroup<Task>) => (t.due ? dueInGroup(new Date(t.due), t.dueHasTime, g.kind === 'day' ? g.day : null) : '');
 
   const emptyText = () =>
     active.length || (status !== 'any' && status !== 'done')
@@ -350,7 +346,7 @@
     {:else}
       {#each groups as g (g.key)}
         <section>
-          <h2 class:danger={g.kind === 'overdue'}>{heading(g)}<span class="n">{g.tasks.length}</span></h2>
+          <h2 class:danger={g.kind === 'overdue'}>{heading(g)}<span class="n">{g.rows.filter((r) => !r.dimmed).length}</span></h2>
           {#each flattenRows(g.rows, collapsed) as r (r.task.id)}
             {@const t = r.task}
             <TaskRow task={t} due={dueLabel(t, g)} late={isOverdue(t, now)} activeLabels={active} plan={plan || r.sub ? undefined : planOf(t)}

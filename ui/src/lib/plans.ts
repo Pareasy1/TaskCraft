@@ -52,6 +52,11 @@ export function planOrder(buckets: Bucket[]) {
  * Quick entry inside a plan: the store files a task without a (resolved) plan hint
  * under the default plan; move it to the plan in view unless the text named a plan.
  */
+/** The last top-level task of a bucket (subtasks share it but sort among their siblings), or null. */
+export function lastTopLevelIn<T extends { id: number; bucketId: number; sortOrder: number; parentId: number | null }>(tasks: T[], bucketId: number): T | null {
+  return tasks.filter((x) => x.bucketId === bucketId && x.parentId == null).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).at(-1) ?? null;
+}
+
 export function quickAddNeedsMove(o: { hint: string | null; taskPlanId: number; scopePlanId: number; defaultPlanId: number }): boolean {
   return !o.hint && o.taskPlanId !== o.scopePlanId && o.taskPlanId === o.defaultPlanId;
 }

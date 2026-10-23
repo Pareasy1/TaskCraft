@@ -91,7 +91,7 @@ export function installMock() {
   ];
   let defaultPlan = 1;
   let nextId = 1000;
-  const openCount = (planId: number) => all.filter((t) => t.planId === planId && !t.completedAt).length;
+  const openCount = (planId: number) => all.filter((t) => t.planId === planId && !t.completedAt && t.parentId == null).length;
   const reorder = <T extends { id: number; sort: number }>(list: T[], ids: number[]) =>
     ids.forEach((id, i) => { const x = list.find((y) => y.id === id); if (x) x.sort = i; });
   // Removes a plan's/bucket's tasks per `mode`: moved to bucket `moveTo` (or that plan's first bucket) or deleted.
