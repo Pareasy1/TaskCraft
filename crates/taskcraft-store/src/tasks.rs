@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
 
 pub(crate) const TASK_COLS: &str =
-    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status, t.plan_id, t.bucket_id, t.sort_order";
+    "t.id, t.calendar_id, t.title, t.due_utc, t.due_has_time, t.tz, t.completed_at, t.rrule, t.notes, c.color, t.status, t.plan_id, t.bucket_id, t.sort_order, t.parent_id, t.priority, t.start_utc, t.start_has_time";
 
 pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
     let rrule: Option<String> = r.get(7)?;
@@ -27,6 +27,14 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         plan_id: r.get(11)?,
         bucket_id: r.get(12)?,
         sort_order: r.get(13)?,
+        parent_id: r.get(14)?,
+        priority: Priority::from_sql(&r.get::<_, String>(15)?),
+        start: r.get::<_, Option<String>>(16)?.map(|s| parse_ts(&s)),
+        start_has_time: r.get(17)?,
+        subtask_open: 0,
+        subtask_total: 0,
+        checklist_done: 0,
+        checklist_total: 0,
     })
 }
 
@@ -34,15 +42,23 @@ impl Store {
     pub fn insert_task(&self, t: &TaskInput) -> Result<i64> {
         self.in_tx(|tx| {
         let now = fmt_ts(Utc::now());
-        let (plan_id, bucket_id) = self.placement(tx, t.plan_id, t.bucket_id)?;
-        let sort = next_sort(tx, bucket_id)?;
+        check_start(t)?;
+        let parent = check_parent(tx, None, t)?;
+        let (plan_id, bucket_id, sort) = match parent {
+            Some((_, p, b)) => (p, b, next_child_sort(tx, t.parent_id.unwrap_or_default())?),
+            None => {
+                let (p, b) = self.placement(tx, t.plan_id, t.bucket_id)?;
+                (p, b, next_sort(tx, b)?)
+            }
+        };
         tx.execute(
-            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, status, completed_at, created_at, updated_at, plan_id, bucket_id, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13)",
+            "INSERT INTO tasks(calendar_id, title, due_utc, due_has_time, tz, rrule, notes, status, completed_at, created_at, updated_at, plan_id, bucket_id, sort_order, parent_id, priority, start_utc, start_has_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
                 t.status.as_sql(), (t.status == TaskStatus::Done).then(|| now.clone()), now,
-                plan_id, bucket_id, sort
+                plan_id, bucket_id, sort, t.parent_id, t.priority.as_sql(),
+                t.start.map(fmt_ts), t.start_has_time
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -67,7 +83,14 @@ impl Store {
             })
             .optional()?;
         let cur = cur.ok_or(StoreError::NotFound)?;
-        let (plan_id, bucket_id, sort) = if t.bucket_id.is_none()
+        check_start(t)?;
+        let old_parent: Option<i64> = tx.query_row("SELECT parent_id FROM tasks WHERE id = ?1", [id], |r| r.get(0))?;
+        let parent = check_parent(tx, Some(id), t)?;
+        let (plan_id, bucket_id, sort) = if let Some((pid, p, b)) = parent {
+            // Subtasks live where their parent lives.
+            let sort = (old_parent != Some(pid)).then(|| next_child_sort(tx, pid)).transpose()?;
+            (p, b, sort)
+        } else if t.bucket_id.is_none()
             && t.plan_id.is_none_or(|p| p == cur.0)
         {
             (cur.0, cur.1, None)
@@ -82,11 +105,13 @@ impl Store {
         let n = tx.execute(
             "UPDATE tasks SET calendar_id=?1, title=?2, due_utc=?3, due_has_time=?4, tz=?5, rrule=?6, notes=?7,
                status=?8, completed_at = CASE WHEN ?8 = 'done' THEN COALESCE(completed_at, ?9) END, updated_at=?9,
-               plan_id=?11, bucket_id=?12, sort_order=COALESCE(?13, sort_order)
+               plan_id=?11, bucket_id=?12, sort_order=COALESCE(?13, sort_order),
+               parent_id=?14, priority=?15, start_utc=?16, start_has_time=?17
              WHERE id=?10",
             params![
                 t.calendar_id, t.title, t.due.map(fmt_ts), t.due_has_time, t.tz, t.rrule, t.notes,
-                t.status.as_sql(), fmt_ts(Utc::now()), id, plan_id, bucket_id, sort
+                t.status.as_sql(), fmt_ts(Utc::now()), id, plan_id, bucket_id, sort,
+                t.parent_id, t.priority.as_sql(), t.start.map(fmt_ts), t.start_has_time
             ],
         )?;
         if n == 0 {
@@ -99,6 +124,32 @@ impl Store {
         }
         Ok(())
         })
+    }
+
+    /// Fills subtask and checklist counts with two grouped queries.
+    pub(crate) fn attach_counts(&self, tasks: &mut [Task]) -> Result<()> {
+        use std::collections::HashMap;
+        let mut subs: HashMap<i64, (i64, i64)> = HashMap::new();
+        let mut st = self.conn.prepare(
+            "SELECT parent_id, sum(completed_at IS NULL), count(*) FROM tasks WHERE parent_id IS NOT NULL GROUP BY parent_id",
+        )?;
+        for r in st.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))? {
+            let (k, v) = r?;
+            subs.insert(k, v);
+        }
+        let mut cl: HashMap<i64, (i64, i64)> = HashMap::new();
+        let mut st = self
+            .conn
+            .prepare("SELECT task_id, sum(done), count(*) FROM checklist_items GROUP BY task_id")?;
+        for r in st.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))? {
+            let (k, v) = r?;
+            cl.insert(k, v);
+        }
+        for t in tasks {
+            (t.subtask_open, t.subtask_total) = subs.get(&t.id).copied().unwrap_or((0, 0));
+            (t.checklist_done, t.checklist_total) = cl.get(&t.id).copied().unwrap_or((0, 0));
+        }
+        Ok(())
     }
 
     /// Resolves (plan, bucket): a bucket decides its plan, a plan alone its
@@ -232,6 +283,7 @@ impl Store {
             .ok_or(StoreError::NotFound)?;
         t.alerts = self.read_alerts(ItemKindDb::Task, id)?;
         t.labels = self.task_labels(id)?;
+        self.attach_counts(std::slice::from_mut(&mut t))?;
         Ok(t)
     }
 
@@ -304,4 +356,62 @@ pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()
         [id],
     )?;
     Ok(())
+}
+
+fn check_start(t: &TaskInput) -> Result<()> {
+    if let (Some(s), Some(d)) = (t.start, t.due) {
+        if s > d {
+            return Err(StoreError::Rule(Rule::StartAfterDue));
+        }
+    }
+    Ok(())
+}
+
+/// Validates `parent_id`; returns (parent id, its plan, its bucket).
+fn check_parent(
+    conn: &rusqlite::Connection,
+    me: Option<i64>,
+    t: &TaskInput,
+) -> Result<Option<(i64, i64, i64)>> {
+    let Some(pid) = t.parent_id else {
+        return Ok(None);
+    };
+    let row: Option<(Option<i64>, i64, i64)> = conn
+        .query_row(
+            "SELECT parent_id, plan_id, bucket_id FROM tasks WHERE id = ?1",
+            [pid],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let (pp, plan, bucket) = row.ok_or(StoreError::NotFound)?;
+    if pp.is_some() {
+        return Err(StoreError::Rule(Rule::ParentIsSubtask));
+    }
+    if me == Some(pid) {
+        return Err(StoreError::Invalid(
+            "a task cannot be its own parent".into(),
+        ));
+    }
+    if let Some(me) = me {
+        let has: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE parent_id = ?1)",
+            [me],
+            |r| r.get(0),
+        )?;
+        if has {
+            return Err(StoreError::Rule(Rule::HasSubtasks));
+        }
+    }
+    if t.rrule.is_some() {
+        return Err(StoreError::Rule(Rule::RepeatingSubtask));
+    }
+    Ok(Some((pid, plan, bucket)))
+}
+
+fn next_child_sort(conn: &rusqlite::Connection, parent: i64) -> Result<f64> {
+    Ok(conn.query_row(
+        "SELECT coalesce(max(sort_order), 0.0) + 1.0 FROM tasks WHERE parent_id = ?1",
+        [parent],
+        |r| r.get(0),
+    )?)
 }

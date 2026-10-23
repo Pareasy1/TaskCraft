@@ -124,6 +124,7 @@ impl Store {
         for t in &mut all {
             t.labels = labels.remove(&t.id).unwrap_or_default();
         }
+        self.attach_counts(&mut all)?;
 
         let today = now.with_timezone(&tz).date_naive();
         let day_start = crate::local_to_utc(today.and_hms_opt(0, 0, 0).unwrap_or_default(), tz);

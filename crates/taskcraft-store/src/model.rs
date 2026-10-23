@@ -17,6 +17,42 @@ pub enum StoreError {
     LastBucket,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Rule(Rule),
+}
+
+/// Business rules the store enforces on subtasks, dates and checklists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rule {
+    ParentIsSubtask,
+    HasSubtasks,
+    RepeatingSubtask,
+    StartAfterDue,
+    ChecklistText,
+}
+
+impl Rule {
+    pub fn code(self) -> &'static str {
+        match self {
+            Rule::ParentIsSubtask => "parent_is_subtask",
+            Rule::HasSubtasks => "has_subtasks",
+            Rule::RepeatingSubtask => "repeating_subtask",
+            Rule::StartAfterDue => "start_after_due",
+            Rule::ChecklistText => "checklist_text",
+        }
+    }
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Rule::ParentIsSubtask => "a subtask cannot have subtasks",
+            Rule::HasSubtasks => "a task with subtasks cannot become a subtask",
+            Rule::RepeatingSubtask => "a subtask cannot repeat",
+            Rule::StartAfterDue => "start date is after the due date",
+            Rule::ChecklistText => "checklist item text is empty or too long",
+        })
+    }
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
@@ -108,6 +144,44 @@ pub struct TaskInput {
     pub plan_id: Option<i64>,
     #[serde(default)]
     pub bucket_id: Option<i64>,
+    #[serde(default)]
+    pub parent_id: Option<i64>,
+    #[serde(default)]
+    pub priority: Priority,
+    #[serde(default)]
+    pub start: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub start_has_time: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Priority {
+    Urgent,
+    Important,
+    #[default]
+    Medium,
+    Low,
+}
+
+impl Priority {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            Priority::Urgent => "urgent",
+            Priority::Important => "important",
+            Priority::Medium => "medium",
+            Priority::Low => "low",
+        }
+    }
+
+    pub fn from_sql(s: &str) -> Priority {
+        match s {
+            "urgent" => Priority::Urgent,
+            "important" => Priority::Important,
+            "low" => Priority::Low,
+            _ => Priority::Medium,
+        }
+    }
 }
 
 /// Task workflow state. `Done` ⇔ `completed_at` is set.
@@ -166,6 +240,14 @@ pub struct Task {
     pub plan_id: i64,
     pub bucket_id: i64,
     pub sort_order: f64,
+    pub parent_id: Option<i64>,
+    pub priority: Priority,
+    pub start: Option<DateTime<Utc>>,
+    pub start_has_time: bool,
+    pub subtask_open: i64,
+    pub subtask_total: i64,
+    pub checklist_done: i64,
+    pub checklist_total: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

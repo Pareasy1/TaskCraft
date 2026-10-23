@@ -3,7 +3,7 @@
 use crate::model::Result;
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 3;
+pub const CURRENT_VERSION: i64 = 4;
 
 const V1: &str = "
 CREATE TABLE calendars(
@@ -82,6 +82,17 @@ ALTER TABLE tasks ADD COLUMN sort_order REAL NOT NULL DEFAULT 0;
 CREATE INDEX tasks_bucket ON tasks(bucket_id, sort_order);
 ";
 
+/// Subtasks, priority, start date and checklists.
+const V4: &str = "
+ALTER TABLE tasks ADD COLUMN parent_id INTEGER;
+ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('urgent','important','medium','low'));
+ALTER TABLE tasks ADD COLUMN start_utc TEXT;
+ALTER TABLE tasks ADD COLUMN start_has_time INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE checklist_items(id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, text TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, sort REAL NOT NULL);
+CREATE INDEX tasks_parent ON tasks(parent_id, sort_order);
+CREATE INDEX checklist_task ON checklist_items(task_id, sort);
+";
+
 pub fn version(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
 }
@@ -114,6 +125,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
                 rusqlite::params![(i + 1) as f64, id],
             )?;
         }
+    }
+    if v < 4 {
+        tx.execute_batch(V4)?;
     }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;

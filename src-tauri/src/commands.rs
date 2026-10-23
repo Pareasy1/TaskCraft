@@ -36,6 +36,7 @@ impl From<StoreError> for CmdError {
             StoreError::Duplicate => "duplicate",
             StoreError::LastPlan => "last_plan",
             StoreError::LastBucket => "last_bucket",
+            StoreError::Rule(r) => r.code(),
         };
         CmdError::new(code, e.to_string())
     }
@@ -747,6 +748,10 @@ mod tests {
         assert_eq!(CmdError::from(StoreError::Duplicate).code, "duplicate");
         assert_eq!(CmdError::from(StoreError::LastPlan).code, "last_plan");
         assert_eq!(CmdError::from(StoreError::LastBucket).code, "last_bucket");
+        assert_eq!(
+            CmdError::from(StoreError::Rule(taskcraft_store::Rule::StartAfterDue)).code,
+            "start_after_due"
+        );
     }
 
     #[test]
