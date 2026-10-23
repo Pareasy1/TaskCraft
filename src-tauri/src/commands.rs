@@ -90,6 +90,7 @@ fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
         calendars,
         date_order: settings.date_order,
         plans,
+        templates: vec![],
     })
 }
 
