@@ -101,3 +101,36 @@ fn v3_tasks_keep_everything() {
     }
     assert!(dir.path().join("taskcraft.db.bak-v3").exists());
 }
+
+/// Run manually against a copy of a real database:
+/// `TASKCRAFT_MIGRATE_CHECK=/path/to/copy.db cargo test -p taskcraft-store --test migrate_v4 -- --ignored`
+#[test]
+#[ignore]
+fn real_db_copy_v4() {
+    let path = std::env::var("TASKCRAFT_MIGRATE_CHECK").expect("TASKCRAFT_MIGRATE_CHECK not set");
+    let path = std::path::Path::new(&path);
+    let snapshot = |p: &std::path::Path| -> Vec<(i64, Option<i64>, Option<i64>)> {
+        let c = Connection::open(p).unwrap();
+        let mut st = c
+            .prepare("SELECT id, plan_id, bucket_id FROM tasks ORDER BY id")
+            .unwrap();
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    };
+    let before = snapshot(path);
+    let store = Store::open(path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 4);
+    drop(store);
+    assert_eq!(snapshot(path), before, "task count/plan/bucket changed");
+    let c = Connection::open(path).unwrap();
+    let n: i64 = c
+        .query_row(
+            "SELECT count(*) FROM tasks WHERE priority = 'medium' AND parent_id IS NULL AND start_utc IS NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n as usize, before.len());
+}
