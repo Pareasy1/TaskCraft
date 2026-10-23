@@ -345,7 +345,7 @@
           {/each}
         </div>
       {:else if view === 'tasks'}
-        <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+        <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if view === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus}

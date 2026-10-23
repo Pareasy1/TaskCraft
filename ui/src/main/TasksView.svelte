@@ -25,6 +25,7 @@
     scope,
     plans,
     buckets,
+    weekStart,
     onopen,
     onerror,
     onreload,
@@ -38,6 +39,8 @@
     plans: Plan[];
     /** The scoped plan's buckets (empty in All tasks). */
     buckets: Bucket[];
+    /** First day of the week: 0 = Sunday, 1 = Monday. */
+    weekStart: 0 | 1;
     onopen: (t: Task) => void;
     onerror: (msg: string) => void;
     /** Re-reads tasks and buckets from the store. */
@@ -124,7 +127,7 @@
     const mode = plan ? groupBy : 'status';
     if (mode === 'due') {
       const order = planOrder(buckets);
-      return dueColumns(boardTasks, now).map((c) => ({
+      return dueColumns(boardTasks, now, weekStart).map((c) => ({
         key: c.key, title: DUE_TITLE[c.key], danger: c.key === 'overdue', empty: t('board.emptyGroup'),
         // Dated columns run by due date; undated ones follow the board's order.
         tasks: c.key === 'nodate' ? c.tasks.sort(order) : c.tasks,

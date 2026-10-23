@@ -76,10 +76,26 @@ describe('dueColumns', () => {
         task(6, '2026-10-20T00:00:00', '2026-10-21T00:00:00'),
       ],
       now,
+      1,
     );
     const ids = Object.fromEntries(cols.map((c) => [c.key, c.tasks.map((x) => x.id)]));
     expect(cols.map((c) => c.key)).toEqual(['overdue', 'today', 'thisWeek', 'later', 'nodate']);
     expect(ids).toEqual({ overdue: [1], today: [2], thisWeek: [3], later: [4], nodate: [5] });
+  });
+  const weekOf = (d: Date, ws: 0 | 1, dues: string[]) => {
+    const cols = dueColumns(dues.map((x, i) => task(i + 1, x)), d, ws);
+    return Object.fromEntries(cols.map((c) => [c.key, c.tasks.map((x) => x.id)]));
+  };
+  it('ends the week on Saturday when the week starts Sunday', () => {
+    const dues = ['2026-10-24T00:00:00', '2026-10-25T00:00:00'];
+    expect(weekOf(now, 0, dues)).toMatchObject({ thisWeek: [1], later: [2] });
+    expect(weekOf(now, 1, dues)).toMatchObject({ thisWeek: [1, 2], later: [] });
+  });
+  it('on a Sunday the week ends today (Mon start) or next Saturday (Sun start)', () => {
+    const sun = new Date('2026-10-25T10:00:00');
+    const dues = ['2026-10-26T00:00:00', '2026-10-31T00:00:00', '2026-11-01T00:00:00'];
+    expect(weekOf(sun, 1, dues)).toMatchObject({ thisWeek: [], later: [1, 2, 3] });
+    expect(weekOf(sun, 0, dues)).toMatchObject({ thisWeek: [1, 2], later: [3] });
   });
 });
 

@@ -61,11 +61,11 @@ const DUE_KEYS: DueKey[] = ['overdue', 'today', 'thisWeek', 'later', 'nodate'];
 
 type DueLike = { id: number; due: string | null; dueHasTime: boolean; completedAt: string | null };
 
-/** Open tasks by due date; "this week" runs through the coming Sunday. */
-export function dueColumns<T extends DueLike>(tasks: T[], now: Date): { key: DueKey; tasks: T[] }[] {
+/** Open tasks by due date; "this week" runs through the day before the next week start (0 = Sunday, 1 = Monday). */
+export function dueColumns<T extends DueLike>(tasks: T[], now: Date, weekStart: 0 | 1): { key: DueKey; tasks: T[] }[] {
   const today = startOfDay(now);
   const endOfWeek = new Date(today);
-  endOfWeek.setDate(today.getDate() + ((7 - today.getDay()) % 7));
+  endOfWeek.setDate(today.getDate() + ((weekStart + 6 - today.getDay() + 7) % 7));
   const cols = new Map<DueKey, T[]>(DUE_KEYS.map((k) => [k, []]));
   for (const t of tasks) {
     if (t.completedAt) continue;
