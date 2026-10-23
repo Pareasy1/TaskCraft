@@ -53,14 +53,14 @@ fn duplicate_copies_everything() {
             ..input("Y")
         })
         .unwrap();
-    let c2 = s.duplicate_task(id2, " (copy)", data.path()).unwrap();
+    let c2 = s.duplicate_task(id2, " (copy)", data.path()).unwrap().id;
     let t2 = s.get_task(c2).unwrap();
     assert_eq!(
         (t2.title.as_str(), t2.status, t2.completed_at),
         ("Y (copy)", TaskStatus::Todo, None)
     );
 
-    let c = s.duplicate_task(id, " (copy)", data.path()).unwrap();
+    let c = s.duplicate_task(id, " (copy)", data.path()).unwrap().id;
     let (o, t) = (s.get_task(id).unwrap(), s.get_task(c).unwrap());
     assert_ne!(c, id);
     assert_eq!(t.title, "X (copy)");
@@ -108,9 +108,9 @@ fn duplicate_order() {
     let _b = s.insert_task(&input("b")).unwrap();
     let c = s.insert_task(&input("c")).unwrap();
     let bk = bucket_of(&s, a);
-    s.duplicate_task(a, "'", data.path()).unwrap();
+    s.duplicate_task(a, "'", data.path()).unwrap().id;
     assert_eq!(top_titles(&s, bk), ["a", "a'", "b", "c"]);
-    s.duplicate_task(c, "'", data.path()).unwrap();
+    s.duplicate_task(c, "'", data.path()).unwrap().id;
     assert_eq!(top_titles(&s, bk), ["a", "a'", "b", "c", "c'"]);
 }
 
@@ -124,7 +124,7 @@ fn duplicate_order_survives_crowding() {
     // Repeatedly duplicating `a` halves the gap each time.
     let mut want = vec!["a".to_string(), "z".to_string()];
     for _ in 0..60 {
-        s.duplicate_task(a, "+", data.path()).unwrap();
+        s.duplicate_task(a, "+", data.path()).unwrap().id;
         want.insert(1, "a+".into());
     }
     assert_eq!(top_titles(&s, bk), want);
@@ -153,7 +153,7 @@ fn duplicate_with_subtasks_and_checklists() {
     s.update_checklist_item(i1, None, Some(true)).unwrap();
     s.add_checklist_item(k2, "kid item").unwrap();
 
-    let c = s.duplicate_task(p, " (copy)", data.path()).unwrap();
+    let c = s.duplicate_task(p, " (copy)", data.path()).unwrap().id;
     let kids = s.list_subtasks(c).unwrap();
     assert_eq!(
         kids.iter().map(|k| k.title.as_str()).collect::<Vec<_>>(),
@@ -197,7 +197,7 @@ fn duplicate_copies_attachment_files() {
         .unwrap();
     let ka = s.add_file_attachment(kid, &f, data.path()).unwrap();
 
-    let c = s.duplicate_task(t, " (copy)", data.path()).unwrap();
+    let c = s.duplicate_task(t, " (copy)", data.path()).unwrap().id;
     let atts = s.list_attachments(c).unwrap();
     assert_eq!(atts.len(), 2);
     let file = atts
@@ -233,6 +233,55 @@ fn duplicate_copies_attachment_files() {
     );
 }
 
+fn all_count(s: &Store) -> usize {
+    s.list_tasks(TaskFilter::All, Utc::now(), chrono_tz::UTC)
+        .unwrap()
+        .len()
+}
+
+#[test]
+fn duplicate_skips_missing_files() {
+    let s = Store::open_in_memory().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let src = tempfile::tempdir().unwrap();
+    let t = s.insert_task(&input("t")).unwrap();
+    let kid = s
+        .insert_task(&TaskInput {
+            parent_id: Some(t),
+            ..input("kid")
+        })
+        .unwrap();
+    let mut gone = vec![];
+    for (task, ok, lost) in [(t, "ok.txt", "lost.txt"), (kid, "kok.txt", "klost.txt")] {
+        for name in [ok, lost] {
+            let f = src.path().join(name);
+            std::fs::write(&f, b"x").unwrap();
+            let a = s.add_file_attachment(task, &f, data.path()).unwrap();
+            if name == lost {
+                std::fs::remove_file(data.path().join(a.stored.unwrap())).unwrap();
+                gone.push(name.to_string());
+            }
+        }
+    }
+    let r = s.duplicate_task(t, "'", data.path()).unwrap();
+    let names = |id| -> Vec<String> {
+        s.list_attachments(id)
+            .unwrap()
+            .into_iter()
+            .map(|a| a.name)
+            .collect()
+    };
+    assert_eq!(names(r.id), ["ok.txt"]);
+    let ck = s.list_subtasks(r.id).unwrap()[0].id;
+    assert_eq!(names(ck), ["kok.txt"]);
+    let mut sk = r.skipped.clone();
+    sk.sort();
+    gone.sort();
+    assert_eq!(sk, gone);
+    // The original keeps its rows.
+    assert_eq!(names(t).len(), 2);
+}
+
 #[test]
 fn duplicate_failure_leaves_no_files() {
     let s = Store::open_in_memory().unwrap();
@@ -241,32 +290,39 @@ fn duplicate_failure_leaves_no_files() {
     let f = src.path().join("a.txt");
     std::fs::write(&f, b"1").unwrap();
     let t = s.insert_task(&input("t")).unwrap();
-    s.add_file_attachment(t, &f, data.path()).unwrap();
-    let g = src.path().join("b.txt");
-    std::fs::write(&g, b"2").unwrap();
-    let b = s.add_file_attachment(t, &g, data.path()).unwrap();
-    // The second stored file vanishes, so the copy fails midway.
-    std::fs::remove_file(data.path().join(b.stored.unwrap())).unwrap();
-    let before = s
-        .list_tasks(TaskFilter::All, Utc::now(), chrono_tz::UTC)
-        .unwrap()
-        .len();
+    let k1 = s
+        .insert_task(&TaskInput {
+            parent_id: Some(t),
+            ..input("k1")
+        })
+        .unwrap();
+    let k2 = s
+        .insert_task(&TaskInput {
+            parent_id: Some(t),
+            ..input("k2")
+        })
+        .unwrap();
+    s.add_file_attachment(k1, &f, data.path()).unwrap();
+    s.add_file_attachment(k2, &f, data.path()).unwrap();
+    // Copy ids will be t'=k2+1, k1'=k2+2, k2'=k2+3. A plain file where k2''s
+    // folder must go makes the destination unwritable, after k1' succeeded.
+    let blocked = data.path().join(format!("attachments/{}", k2 + 3));
+    std::fs::write(&blocked, b"in the way").unwrap();
+    let before = all_count(&s);
     assert!(s.duplicate_task(t, "'", data.path()).is_err());
-    assert_eq!(
-        s.list_tasks(TaskFilter::All, Utc::now(), chrono_tz::UTC)
-            .unwrap()
-            .len(),
-        before
-    );
-    let n = std::fs::read_dir(data.path().join("attachments"))
+    assert_eq!(all_count(&s), before);
+    let mut dirs: Vec<_> = std::fs::read_dir(data.path().join("attachments"))
         .unwrap()
-        .count();
-    assert_eq!(n, 1, "only the original task's folder remains");
-    let new_dirs: Vec<_> = std::fs::read_dir(data.path().join("attachments"))
-        .unwrap()
-        .map(|e| e.unwrap().file_name())
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(new_dirs, [std::ffi::OsString::from(t.to_string())]);
+    dirs.sort();
+    let mut want = vec![
+        k1.to_string(),
+        k2.to_string(),
+        (k2 + 3).to_string(), // the blocker itself
+    ];
+    want.sort();
+    assert_eq!(dirs, want, "no copied files or folders remain");
 }
 
 #[test]
@@ -285,7 +341,7 @@ fn duplicate_subtask_stays_under_parent() {
         ..input("k2")
     })
     .unwrap();
-    let c = s.duplicate_task(k1, " (copy)", data.path()).unwrap();
+    let c = s.duplicate_task(k1, " (copy)", data.path()).unwrap().id;
     assert_eq!(s.get_task(c).unwrap().parent_id, Some(p));
     let titles: Vec<_> = s
         .list_subtasks(p)

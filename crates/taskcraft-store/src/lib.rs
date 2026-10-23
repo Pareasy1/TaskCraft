@@ -22,6 +22,7 @@ pub use alerts::DueAlert;
 pub use attachments::sanitize_name;
 pub use attachments::{Attachment, AttachmentKind};
 pub use checklist::ChecklistItem;
+pub use duplicate::DuplicateResult;
 pub use model::*;
 pub use query::{Hit, Occurrence, Scope, TaskFilter};
 pub use time::{from_parsed, local_to_utc, to_utc};

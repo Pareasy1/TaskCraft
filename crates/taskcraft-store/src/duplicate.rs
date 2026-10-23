@@ -4,8 +4,18 @@ use crate::model::*;
 use crate::{fmt_ts, Store};
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+
+/// Outcome of `duplicate_task`: the new task and the display names of file
+/// attachments that could not be copied because their stored file is missing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateResult {
+    pub id: i64,
+    pub skipped: Vec<String>,
+}
 
 const COPY_COLS: &str = "calendar_id, due_utc, due_has_time, tz, rrule, notes, plan_id, bucket_id, priority, start_utc, start_has_time";
 
@@ -104,10 +114,17 @@ impl Store {
     /// Copies a task as a new `todo` task titled `<title><suffix>`, with its
     /// labels, alerts, checklist (unticked), subtasks and attachments (files
     /// become new stored files under `data_dir`). It lands right after the
-    /// original among its siblings. All-or-nothing: copied files are removed
-    /// if anything fails.
-    pub fn duplicate_task(&self, id: i64, suffix: &str, data_dir: &Path) -> Result<i64> {
+    /// original among its siblings. Attachments whose stored file is missing
+    /// are skipped (named in the result); any other failure removes the
+    /// copied files and rolls everything back.
+    pub fn duplicate_task(
+        &self,
+        id: i64,
+        suffix: &str,
+        data_dir: &Path,
+    ) -> Result<DuplicateResult> {
         let made: RefCell<Vec<PathBuf>> = RefCell::new(Vec::new());
+        let mut skipped = Vec::new();
         let res = self.in_tx(|tx| {
             let new = copy_row(self, tx, id, suffix, None)?;
             // The copy keeps the original's parent (a duplicated subtask).
@@ -116,7 +133,7 @@ impl Store {
                 params![id, new],
             )?;
             place_after(tx, id, new)?;
-            crate::attachments::copy_for_duplicate(tx, id, new, data_dir, &made)?;
+            crate::attachments::copy_for_duplicate(tx, id, new, data_dir, &made, &mut skipped)?;
             let mut st = tx.prepare("SELECT id FROM tasks WHERE parent_id = ?1 ORDER BY sort_order, id")?;
             let kids: Vec<i64> = st
                 .query_map([id], |r| r.get(0))?
@@ -128,10 +145,11 @@ impl Store {
                     "UPDATE tasks SET sort_order = ?1 WHERE id = ?2",
                     params![(i + 1) as f64, nk],
                 )?;
-                crate::attachments::copy_for_duplicate(tx, k, nk, data_dir, &made)?;
+                crate::attachments::copy_for_duplicate(tx, k, nk, data_dir, &made, &mut skipped)?;
             }
             Ok(new)
         });
+        let res = res.map(|id| DuplicateResult { id, skipped });
         if res.is_err() {
             for p in made.borrow().iter() {
                 let _ = std::fs::remove_file(p);

@@ -285,13 +285,15 @@ pub(crate) fn copy_into_store(
 
 /// Copies every attachment of `from` onto `to`: files become new stored
 /// files (paths (and a new task folder) pushed on `made` as soon as they exist, so the caller can
-/// remove them if the transaction fails), links are copied as rows.
+/// remove them if the transaction fails), links are copied as rows. A file whose stored source is missing on disk
+/// is skipped and its display name pushed on `skipped`.
 pub(crate) fn copy_for_duplicate(
     conn: &Connection,
     from: i64,
     to: i64,
     data_dir: &Path,
     made: &std::cell::RefCell<Vec<PathBuf>>,
+    skipped: &mut Vec<String>,
 ) -> Result<()> {
     let mut st = conn.prepare(&format!(
         "SELECT {COLS} FROM attachments WHERE task_id = ?1 ORDER BY sort, id"
@@ -304,6 +306,10 @@ pub(crate) fn copy_for_duplicate(
         let (stored, size) = match (&a.kind, &a.stored) {
             (AttachmentKind::File, Some(old)) => {
                 check_stored_shape(old)?;
+                if !data_dir.join(old).is_file() {
+                    skipped.push(a.name.clone());
+                    continue;
+                }
                 // Stored names are `<n>-<safe name>`; keep the safe part.
                 let file = Path::new(old)
                     .file_name()
