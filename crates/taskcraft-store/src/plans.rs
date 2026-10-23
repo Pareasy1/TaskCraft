@@ -294,10 +294,17 @@ fn move_tasks(conn: &Connection, task_ids: &[i64], plan_id: i64, bucket_id: i64)
     Ok(())
 }
 
+const MAX_NAME_CHARS: usize = 60;
+
 fn clean_name(name: &str) -> Result<&str> {
     let n = name.trim();
     if n.is_empty() {
         return Err(StoreError::Invalid("name is empty".into()));
+    }
+    if n.chars().count() > MAX_NAME_CHARS {
+        return Err(StoreError::Invalid(format!(
+            "name is longer than {MAX_NAME_CHARS} characters"
+        )));
     }
     Ok(n)
 }

@@ -317,3 +317,21 @@ fn duplicate_plan_name_unicode_case() {
     ));
     f.s.update_plan(citta, Some("CITTÀ"), None).unwrap();
 }
+
+#[test]
+fn names_capped_at_60_chars() {
+    let s = Store::open_in_memory().unwrap();
+    let ok = "é".repeat(60);
+    let long = "é".repeat(61);
+    s.create_plan(&ok, "#fff").unwrap();
+    assert!(matches!(
+        s.create_plan(&long, "#fff"),
+        Err(StoreError::Invalid(_))
+    ));
+    let b = first_bucket(&s, 1);
+    s.rename_bucket(b, &ok).unwrap();
+    assert!(matches!(
+        s.rename_bucket(b, &long),
+        Err(StoreError::Invalid(_))
+    ));
+}
