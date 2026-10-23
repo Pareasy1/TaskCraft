@@ -78,6 +78,7 @@ You'll also find TaskCraft in the **Start** menu.
   - `todo pay rent friday 9am #home` adds a task with a label.
   - `Gym every monday at 7am alert 15 min before` adds a repeating event with a reminder.
 - **Plans keep different projects apart.** Your plans are listed in the sidebar. Each plan shows its tasks as columns (buckets) that you can drag cards between. In quick entry, add `/planname` to put a task in a plan, for example `todo ship Rafael friday /3dprint`.
+- **Break big tasks into steps.** Double-click a task to open its details, where you can add subtasks and a checklist. You can also set a priority in quick entry with `!urgent` (or `!urgente`), for example `todo ship Rafael friday /3dprint !urgente`.
 - **Plan in the main window.** It has Day, Week, Month and Tasks views. **Double-click** anything to open its details.
 - **Settings:** the gear at the bottom-left of the main window, or **⌘,** on Mac and **Ctrl+,** on Windows and Linux. There you can change the shortcut, choose **Launch at login**, add calendars, and export everything.
 - **Language:** English or Italian, following your computer's language.
