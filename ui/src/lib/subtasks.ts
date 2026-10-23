@@ -1,6 +1,6 @@
 // Pure helpers for subtasks, checklists and priority columns.
 import { t } from './i18n';
-import { PRIORITIES, type Priority } from './types';
+import { PRIORITIES, type Priority, type TaskInput } from './types';
 
 type Child = { id: number; parentId: number | null; sortOrder: number };
 const bySort = (a: Child, b: Child) => a.sortOrder - b.sortOrder || a.id - b.id;
@@ -98,4 +98,51 @@ export function focusAfterRemoval(ids: number[], id: number): number | null {
   const i = ids.indexOf(id);
   if (i < 0) return null;
   return ids[i + 1] ?? ids[i - 1] ?? null;
+}
+
+/** What `changeStatus` needs to decide on prompts: the task's subtasks, its siblings (itself included) and its parent. */
+export function statusCtx<T extends Child>(task: T, all: T[]): { children: T[]; siblings: T[]; parent: T | null } {
+  const parent = task.parentId == null ? null : all.find((x) => x.id === task.parentId) ?? null;
+  return {
+    children: all.filter((x) => x.parentId === task.id).sort(bySort),
+    siblings: parent ? all.filter((x) => x.parentId === parent.id).sort(bySort) : [],
+    parent,
+  };
+}
+
+/**
+ * The updates that undo "Complete all": each subtask it closed back as it was, then the parent.
+ * `closed` holds only the subtasks that were open before.
+ */
+export function completeUndo(parentId: number, before: TaskInput, closed: { id: number; input: TaskInput }[]): { id: number; input: TaskInput }[] {
+  return [...closed, { id: parentId, input: before }];
+}
+
+/**
+ * The Tasks list: each date group's rows of parent + indented subtasks. A shown parent takes
+ * every shown subtask of its own, whichever group the subtask fell in; a subtask whose parent
+ * is not shown stays in its own group under a dimmed parent. Groups left empty are dropped.
+ */
+export function nestGroups<T extends Child, G extends { tasks: T[] }>(groups: G[], all: T[]): (G & { rows: { parent: T; dimmed: boolean; children: T[] }[] })[] {
+  const shown = groups.flatMap((g) => g.tasks);
+  const shownTop = new Set(shown.filter((x) => x.parentId == null).map((x) => x.id));
+  const kids = childrenByParent(shown);
+  return groups
+    .map((g) => ({
+      ...g,
+      rows: groupWithParents(g.tasks.filter((x) => x.parentId == null || !shownTop.has(x.parentId)), all)
+        .map((r) => (r.dimmed ? r : { ...r, children: kids.get(r.parent.id) ?? [] })),
+    }))
+    .filter((g) => g.rows.length);
+}
+
+/** Rows to draw: each parent, then its subtasks unless it is collapsed. `kids` = its subtasks in this group. */
+export function flattenRows<T extends { id: number }>(
+  groups: { parent: T; dimmed: boolean; children: T[] }[],
+  collapsed: Set<number>,
+): { task: T; sub: boolean; dimmed: boolean; kids: number }[] {
+  return groups.flatMap((g) => [
+    { task: g.parent, sub: false, dimmed: g.dimmed, kids: g.children.length },
+    ...(collapsed.has(g.parent.id) ? [] : g.children.map((c) => ({ task: c, sub: true, dimmed: false, kids: 0 }))),
+  ]);
 }

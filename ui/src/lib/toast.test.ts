@@ -49,3 +49,24 @@ describe('toast', () => {
     expect(toast.current?.canUndo).toBe(false);
   });
 });
+
+import { runAction } from './toast.svelte';
+
+describe('toast action', () => {
+  afterEach(() => dismiss());
+  it('shows an extra button that runs once and hides the message', async () => {
+    const run = vi.fn(async () => {});
+    notify('All subtasks of A are done', undefined, { label: 'Complete it', run });
+    expect(toast.current?.action).toBe('Complete it');
+    expect(toast.current?.canUndo).toBe(false);
+    await runAction();
+    await runAction();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(toast.current).toBeNull();
+  });
+  it('a failed action is reported', async () => {
+    notify('x', undefined, { label: 'Go', run: async () => { throw new Error('nope'); } });
+    await runAction();
+    expect(toast.current?.message).toContain('nope');
+  });
+});

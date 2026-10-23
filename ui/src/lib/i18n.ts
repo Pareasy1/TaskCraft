@@ -49,6 +49,7 @@ const en = {
   'msg.addedTask': 'Added task “{title}”',
   'msg.addedEvent': 'Added event “{title}”',
   'msg.undoFailed': 'Couldn’t undo: {reason}',
+  'msg.actionFailed': 'That didn’t work: {reason}',
 
   // toolbar and main window
   'toolbar.today': 'Today',
@@ -346,6 +347,7 @@ const it: Record<Key, string> = {
   'msg.addedTask': 'Aggiunta attività “{title}”',
   'msg.addedEvent': 'Aggiunto evento “{title}”',
   'msg.undoFailed': 'Impossibile annullare: {reason}',
+  'msg.actionFailed': 'Operazione non riuscita: {reason}',
 
   'toolbar.today': 'Oggi',
   'toolbar.day': 'Giorno',

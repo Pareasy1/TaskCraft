@@ -109,3 +109,70 @@ describe('focusAfterRemoval', () => {
     expect(focusAfterRemoval([1, 2], 9)).toBeNull();
   });
 });
+
+import { completeUndo, flattenRows, nestGroups, statusCtx } from './subtasks';
+import type { TaskInput } from './types';
+
+describe('completeUndo', () => {
+  const input = (title: string, status: TaskInput['status'] = 'todo'): TaskInput => ({
+    calendarId: 1, title, due: null, dueHasTime: false, tz: 'UTC', rrule: null, notes: null, alerts: [], status, labels: [],
+  });
+  it('completeUndoRestoresChildren: one update per closed child plus the parent', () => {
+    const calls = completeUndo(1, input('Parent', 'inProgress'), [{ id: 2, input: input('A') }, { id: 3, input: input('B', 'inProgress') }]);
+    expect(calls.map((c) => [c.id, c.input.title, c.input.status])).toEqual([
+      [2, 'A', 'todo'], [3, 'B', 'inProgress'], [1, 'Parent', 'inProgress'],
+    ]);
+  });
+  it('no closed children: only the parent', () => {
+    expect(completeUndo(1, input('P'), []).map((c) => c.id)).toEqual([1]);
+  });
+});
+
+describe('statusCtx', () => {
+  const all = [task(1, null), task(2, 1, 20), task(3, 1, 10), task(4, null)];
+  it('a parent gets its children in order, no parent or siblings', () => {
+    const c = statusCtx(all[0], all);
+    expect([ids(c.children), ids(c.siblings), c.parent]).toEqual([[3, 2], [], null]);
+  });
+  it('a subtask gets its parent and siblings (itself included)', () => {
+    const c = statusCtx(all[1], all);
+    expect([ids(c.children), ids(c.siblings), c.parent?.id]).toEqual([[], [3, 2], 1]);
+  });
+  it('a subtask whose parent is not loaded has no parent', () => {
+    expect(statusCtx(all[1], [all[1]]).parent).toBeNull();
+  });
+});
+
+describe('nestGroups (Tasks list)', () => {
+  // 1 ← 2, 3 ; 4 ; 5 ← 6
+  const all = [task(1, null), task(2, 1, 10), task(3, 1, 20), task(4, null), task(5, null), task(6, 5)];
+  const rows = (gs: ReturnType<typeof nestGroups<T>>) => gs.map((g) => [g.key, g.rows.map((r) => [r.parent.id, r.dimmed, ids(r.children)])]);
+  it('a shown parent takes its shown children, whatever group they fell in', () => {
+    const gs = nestGroups([{ key: 'a', tasks: [all[0], all[2]] }, { key: 'b', tasks: [all[1], all[3]] }], all);
+    expect(rows(gs)).toEqual([['a', [[1, false, [2, 3]]]], ['b', [[4, false, []]]]]);
+  });
+  it('a subtask without its shown parent sits under a dimmed parent in its own group', () => {
+    const gs = nestGroups([{ key: 'a', tasks: [all[3]] }, { key: 'b', tasks: [all[5]] }], all);
+    expect(rows(gs)).toEqual([['a', [[4, false, []]]], ['b', [[5, true, [6]]]]]);
+  });
+  it('a group left with no rows is dropped', () => {
+    const gs = nestGroups([{ key: 'a', tasks: [all[0]] }, { key: 'b', tasks: [all[1]] }], all);
+    expect(rows(gs)).toEqual([['a', [[1, false, [2]]]]]);
+  });
+});
+
+describe('flattenRows', () => {
+  const all = [task(1, null), task(2, 1, 10), task(3, 1, 20), task(4, null)];
+  const groups = groupWithParents(all, all);
+  it('lists each parent, then its children unless collapsed', () => {
+    expect(flattenRows(groups, new Set()).map((r) => [r.task.id, r.sub])).toEqual([[1, false], [2, true], [3, true], [4, false]]);
+  });
+  it('a collapsed parent keeps its header row and its child count', () => {
+    const rows = flattenRows(groups, new Set([1]));
+    expect(rows.map((r) => [r.task.id, r.sub, r.kids])).toEqual([[1, false, 2], [4, false, 0]]);
+  });
+  it('keeps dimmed parents dimmed', () => {
+    const rows = flattenRows(groupWithParents([all[1]], all), new Set());
+    expect(rows.map((r) => [r.task.id, r.dimmed])).toEqual([[1, true], [2, false]]);
+  });
+});
