@@ -69,28 +69,20 @@ pub fn local_now() -> DateTime<Tz> {
 
 fn parse_options(st: &AppState) -> CmdResult<ParseOptions> {
     let settings = st.settings.read().map_err(poisoned)?.clone();
-    let calendars = st
-        .store
-        .lock()
-        .map_err(poisoned)?
-        .calendars()?
+    let store = st.store.lock().map_err(poisoned)?;
+    let calendars = store.calendars()?.into_iter().map(|c| c.name).collect();
+    let plans = store.list_plans()?.into_iter().map(|p| p.name).collect();
+    let templates = store
+        .list_templates()?
         .into_iter()
-        .map(|c| c.name)
-        .collect();
-    let plans = st
-        .store
-        .lock()
-        .map_err(poisoned)?
-        .list_plans()?
-        .into_iter()
-        .map(|p| p.name)
+        .map(|t| t.name)
         .collect();
     Ok(ParseOptions {
         default_event_minutes: settings.default_event_minutes,
         calendars,
         date_order: settings.date_order,
         plans,
-        templates: vec![],
+        templates,
     })
 }
 
@@ -141,10 +133,20 @@ pub fn create_from_text_impl(
             kind: ItemKindDb::Event,
             id: store.insert_event(&e)?,
         },
-        NewItem::Task(t) => ItemRef {
-            kind: ItemKindDb::Task,
-            id: store.insert_task(&t)?,
-        },
+        NewItem::Task(t) => {
+            let template = match &p.template {
+                Some(name) => store.template_by_name(name)?,
+                None => None,
+            };
+            let id = match template {
+                Some(tpl) => store.create_from_template(tpl.id, &t)?,
+                None => store.insert_task(&t)?,
+            };
+            ItemRef {
+                kind: ItemKindDb::Task,
+                id,
+            }
+        }
     };
     tracing::info!(kind = ?r.kind, id = r.id, "created from text");
     Ok(r)
@@ -781,6 +783,340 @@ pub fn set_default_plan(app: AppHandle, st: State<AppState>, id: i64) -> CmdResu
     Ok(())
 }
 
+// ---------- attachments ----------
+
+/// What `open_attachment` hands to the system opener.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpenTarget {
+    Path(std::path::PathBuf),
+    Url(String),
+}
+
+fn is_http(url: &str) -> bool {
+    let u = url.trim().to_ascii_lowercase();
+    u.starts_with("http://") || u.starts_with("https://")
+}
+
+/// Resolves an attachment to a stored file inside `<data>/attachments`
+/// (missing → `not_found`, escaping → `invalid`) or an http(s) link.
+pub fn open_target(st: &AppState, id: i64) -> CmdResult<OpenTarget> {
+    let store = st.store.lock().map_err(poisoned)?;
+    let a = store.get_attachment(id)?;
+    match a.kind {
+        AttachmentKind::File => Ok(OpenTarget::Path(store.attachment_path(id, &st.data_dir)?)),
+        AttachmentKind::Link => match a.url {
+            Some(u) if is_http(&u) => Ok(OpenTarget::Url(u)),
+            _ => Err(CmdError::new(
+                "attachment_url",
+                "Only web links can be opened",
+            )),
+        },
+    }
+}
+
+/// Resolves the target first, then calls `open`; nothing is opened when the
+/// target cannot be resolved.
+pub fn open_attachment_impl(
+    st: &AppState,
+    id: i64,
+    open: impl FnOnce(OpenTarget) -> std::result::Result<(), String>,
+) -> CmdResult<()> {
+    let target = open_target(st, id)?;
+    open(target).map_err(|e| {
+        tracing::warn!(error = %e, id, "cannot open attachment");
+        CmdError::new("open", e)
+    })
+}
+
+/// Stored file to show in Finder/Explorer; links have none (`invalid`).
+pub fn reveal_target(st: &AppState, id: i64) -> CmdResult<std::path::PathBuf> {
+    match open_target(st, id)? {
+        OpenTarget::Path(p) => Ok(p),
+        OpenTarget::Url(_) => Err(CmdError::new("invalid", "A link has no file to show")),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileError {
+    pub name: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AddFilesResult {
+    pub added: Vec<Attachment>,
+    pub errors: Vec<FileError>,
+}
+
+/// Adds each file; a failing file is reported by name and does not stop
+/// the others.
+pub fn add_files_impl(st: &AppState, task_id: i64, paths: &[std::path::PathBuf]) -> AddFilesResult {
+    let mut out = AddFilesResult::default();
+    let store = match st.store.lock() {
+        Ok(s) => s,
+        Err(_) => {
+            out.errors = paths
+                .iter()
+                .map(|p| FileError {
+                    name: display_name(p),
+                    code: "internal".into(),
+                })
+                .collect();
+            return out;
+        }
+    };
+    for p in paths {
+        match store.add_file_attachment(task_id, p, &st.data_dir) {
+            Ok(a) => out.added.push(a),
+            Err(e) => out.errors.push(FileError {
+                name: display_name(p),
+                code: CmdError::from(e).code,
+            }),
+        }
+    }
+    out
+}
+
+fn display_name(p: &std::path::Path) -> String {
+    p.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn list_attachments(st: State<AppState>, task_id: i64) -> CmdResult<Vec<Attachment>> {
+    Ok(st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .list_attachments(task_id)?)
+}
+
+/// Opens the multi-select file dialog, then adds the picked files. Async so
+/// the dialog never blocks the main thread, and the store is only locked
+/// after the dialog has closed.
+#[tauri::command]
+pub async fn pick_and_add_files(
+    app: AppHandle,
+    st: State<'_, AppState>,
+    task_id: i64,
+) -> CmdResult<AddFilesResult> {
+    use tauri_plugin_dialog::DialogExt;
+    let builder = app.dialog().file();
+    let picked = tauri::async_runtime::spawn_blocking(move || builder.blocking_pick_files())
+        .await
+        .map_err(|e| CmdError::new("internal", e.to_string()))?;
+    let Some(picked) = picked else {
+        return Ok(AddFilesResult::default());
+    };
+    let mut paths = Vec::new();
+    let mut bad = Vec::new();
+    for f in picked {
+        let label = f.to_string();
+        match f.into_path() {
+            Ok(p) => paths.push(p),
+            Err(_) => bad.push(FileError {
+                name: label,
+                code: "not_found".into(),
+            }),
+        }
+    }
+    let mut r = add_files_impl(&st, task_id, &paths);
+    r.errors.extend(bad);
+    if !r.added.is_empty() {
+        changed(&app);
+    }
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn add_link_attachment(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    url: String,
+    name: Option<String>,
+) -> CmdResult<Attachment> {
+    let a =
+        st.store
+            .lock()
+            .map_err(poisoned)?
+            .add_link_attachment(task_id, &url, name.as_deref())?;
+    changed(&app);
+    Ok(a)
+}
+
+#[tauri::command]
+pub fn rename_attachment(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    name: String,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .rename_attachment(id, &name)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reorder_attachments(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    ids: Vec<i64>,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .reorder_attachments(task_id, &ids)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_attachment(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<Attachment> {
+    let a = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .remove_attachment(id, Utc::now())?;
+    changed(&app);
+    Ok(a)
+}
+
+#[tauri::command]
+pub fn restore_file_attachment(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    name: String,
+    stored: String,
+    size: i64,
+) -> CmdResult<Attachment> {
+    let a = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .restore_file_attachment(task_id, &name, &stored, size)?;
+    changed(&app);
+    Ok(a)
+}
+
+#[tauri::command]
+pub fn open_attachment(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    open_attachment_impl(&st, id, |t| {
+        let r = match t {
+            OpenTarget::Path(p) => app.opener().open_path(p.to_string_lossy(), None::<&str>),
+            OpenTarget::Url(u) => app.opener().open_url(u, None::<&str>),
+        };
+        r.map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+pub fn reveal_attachment(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = reveal_target(&st, id)?;
+    app.opener().reveal_item_in_dir(p).map_err(|e| {
+        tracing::warn!(error = %e, id, "cannot reveal attachment");
+        CmdError::new("open", e.to_string())
+    })
+}
+
+// ---------- duplicate & templates ----------
+
+/// Duplicates with the title suffix of the current UI language.
+pub fn duplicate_task_impl(st: &AppState, id: i64) -> CmdResult<DuplicateResult> {
+    let lang = *st.lang.read().map_err(poisoned)?;
+    let suffix = crate::i18n::text(lang).duplicate_suffix;
+    let r = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .duplicate_task(id, suffix, &st.data_dir)?;
+    if !r.skipped.is_empty() {
+        tracing::warn!(
+            id,
+            skipped = r.skipped.len(),
+            "duplicate skipped missing files"
+        );
+    }
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn duplicate_task(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<DuplicateResult> {
+    let r = duplicate_task_impl(&st, id)?;
+    changed(&app);
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn save_template(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    name: String,
+    replace: bool,
+) -> CmdResult<i64> {
+    let id = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .save_template(task_id, &name, replace)?;
+    changed(&app);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn list_templates(st: State<AppState>) -> CmdResult<Vec<TemplateInfo>> {
+    Ok(st.store.lock().map_err(poisoned)?.list_templates()?)
+}
+
+#[tauri::command]
+pub fn rename_template(
+    app: AppHandle,
+    st: State<AppState>,
+    id: i64,
+    name: String,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .rename_template(id, &name)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_template(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<()> {
+    st.store.lock().map_err(poisoned)?.delete_template(id)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_from_template(
+    app: AppHandle,
+    st: State<AppState>,
+    template_id: i64,
+    input: TaskInput,
+) -> CmdResult<i64> {
+    let id = st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .create_from_template(template_id, &input)?;
+    changed(&app);
+    Ok(id)
+}
+
 #[tauri::command]
 pub fn local_time_zone() -> String {
     local_tz().name().to_string()
@@ -1050,6 +1386,168 @@ mod tests {
         assert_eq!(
             set_settings_impl(&st, new, |_, _| Ok(())).unwrap_err().code,
             "invalid"
+        );
+    }
+
+    fn task(st: &AppState, title: &str, parent: Option<i64>) -> i64 {
+        st.store
+            .lock()
+            .unwrap()
+            .insert_task(&TaskInput {
+                calendar_id: 1,
+                title: title.into(),
+                tz: "Europe/Rome".into(),
+                parent_id: parent,
+                ..Default::default()
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn quick_entry_uses_template() {
+        let st = AppState::in_memory();
+        let src = task(&st, "Ship", None);
+        task(&st, "pack", Some(src));
+        task(&st, "label", Some(src));
+        st.store
+            .lock()
+            .unwrap()
+            .save_template(src, "name", false)
+            .unwrap();
+        let r = create_from_text_impl(&st, "ship Rafael friday +name", now(), true).unwrap();
+        let s = st.store.lock().unwrap();
+        let t = s.get_task(r.id).unwrap();
+        assert_eq!(t.title, "ship Rafael");
+        assert!(t.due.is_some(), "friday still sets the due date");
+        let subs: Vec<String> = s
+            .list_subtasks(r.id)
+            .unwrap()
+            .into_iter()
+            .map(|t| t.title)
+            .collect();
+        assert_eq!(subs, ["pack", "label"]);
+    }
+
+    #[test]
+    fn quick_entry_unknown_template_stays_in_title() {
+        let st = AppState::in_memory();
+        let r = create_from_text_impl(&st, "ship +nope", now(), true).unwrap();
+        let s = st.store.lock().unwrap();
+        assert_eq!(s.get_task(r.id).unwrap().title, "ship +nope");
+        assert!(s.list_subtasks(r.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn duplicate_suffix_follows_language() {
+        use crate::i18n::Lang;
+        let st = AppState::in_memory();
+        let id = task(&st, "Report", None);
+        *st.lang.write().unwrap() = Lang::It;
+        let r = duplicate_task_impl(&st, id).unwrap();
+        assert!(r.skipped.is_empty());
+        let s = st.store.lock().unwrap();
+        assert_eq!(s.get_task(r.id).unwrap().title, "Report (copia)");
+        drop(s);
+        *st.lang.write().unwrap() = Lang::En;
+        let r = duplicate_task_impl(&st, id).unwrap();
+        let s = st.store.lock().unwrap();
+        assert_eq!(s.get_task(r.id).unwrap().title, "Report (copy)");
+    }
+
+    #[test]
+    fn open_missing_file_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let st = AppState::in_memory_at(tmp.path());
+        let id = task(&st, "T", None);
+        let src = tmp.path().join("notes.txt");
+        std::fs::write(&src, b"hi").unwrap();
+        let a = st
+            .store
+            .lock()
+            .unwrap()
+            .add_file_attachment(id, &src, tmp.path())
+            .unwrap();
+        std::fs::remove_file(tmp.path().join(a.stored.as_deref().unwrap())).unwrap();
+        let mut called = false;
+        let err = open_attachment_impl(&st, a.id, |_| {
+            called = true;
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(err.code, "not_found");
+        assert!(!called, "the opener must not run for a missing file");
+    }
+
+    #[test]
+    fn open_resolves_files_and_links() {
+        let tmp = tempfile::tempdir().unwrap();
+        let st = AppState::in_memory_at(tmp.path());
+        let id = task(&st, "T", None);
+        let src = tmp.path().join("a.txt");
+        std::fs::write(&src, b"hi").unwrap();
+        let (f, l) = {
+            let s = st.store.lock().unwrap();
+            (
+                s.add_file_attachment(id, &src, tmp.path()).unwrap(),
+                s.add_link_attachment(id, "https://example.com/x", None)
+                    .unwrap(),
+            )
+        };
+        let mut seen = None;
+        open_attachment_impl(&st, f.id, |t| {
+            seen = Some(t);
+            Ok(())
+        })
+        .unwrap();
+        match seen.take() {
+            Some(OpenTarget::Path(p)) => assert!(p.ends_with(f.stored.as_deref().unwrap())),
+            other => panic!("expected a path, got {other:?}"),
+        }
+        open_attachment_impl(&st, l.id, |t| {
+            seen = Some(t);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(seen, Some(OpenTarget::Url("https://example.com/x".into())));
+        let err = open_attachment_impl(&st, f.id, |_| Err("boom".into())).unwrap_err();
+        assert_eq!(err.code, "open");
+        assert_eq!(reveal_target(&st, l.id).unwrap_err().code, "invalid");
+        assert!(reveal_target(&st, f.id).is_ok());
+    }
+
+    #[test]
+    fn add_files_reports_per_file_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let st = AppState::in_memory_at(tmp.path());
+        let id = task(&st, "T", None);
+        let ok = tmp.path().join("ok.txt");
+        std::fs::write(&ok, b"hi").unwrap();
+        let r = add_files_impl(&st, id, &[ok, tmp.path().join("gone.pdf")]);
+        assert_eq!(r.added.len(), 1);
+        assert_eq!(r.added[0].name, "ok.txt");
+        assert_eq!(
+            r.errors,
+            [FileError {
+                name: "gone.pdf".into(),
+                code: "not_found".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn rule_codes_for_attachments() {
+        use taskcraft_store::Rule;
+        assert_eq!(
+            CmdError::from(StoreError::Rule(Rule::AttachmentTooLarge)).code,
+            "attachment_too_large"
+        );
+        assert_eq!(
+            CmdError::from(StoreError::Rule(Rule::AttachmentUrl)).code,
+            "attachment_url"
+        );
+        assert_eq!(
+            CmdError::from(StoreError::Rule(Rule::TemplateName)).code,
+            "template_name"
         );
     }
 

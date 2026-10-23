@@ -5,6 +5,7 @@ use crate::i18n::Lang;
 use crate::state::AppState;
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
+use std::path::Path;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use taskcraft_store::{DueAlert, ItemKindDb, Store, StoreError};
@@ -42,18 +43,25 @@ fn body(store: &Store, a: &DueAlert, tz: Tz, lang: Lang) -> String {
     s
 }
 
-/// Notifies every due alert once and marks it fired.
+/// Notifies every due alert once and marks it fired, then deletes removed
+/// attachment files whose Undo delay has passed.
 pub fn tick(
     store: &Store,
     n: &dyn Notifier,
     now: DateTime<Utc>,
     tz: Tz,
     lang: Lang,
+    data_dir: &Path,
 ) -> Result<Vec<DueAlert>, StoreError> {
     let due = store.due_alerts(now)?;
     for a in &due {
         n.notify(&a.title, &body(store, a, tz, lang));
         store.mark_fired(a.alert_id, now)?;
+    }
+    match store.purge_pending_files(now, data_dir) {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, "purged removed attachment files"),
+        Err(e) => tracing::warn!(error = %e, "attachment purge failed"),
     }
     Ok(due)
 }
@@ -107,7 +115,14 @@ fn run_once(app: &AppHandle) {
         return;
     };
     let lang = *state.lang.read().unwrap_or_else(|e| e.into_inner());
-    match tick(&store, &AppNotifier(app), Utc::now(), local_tz(), lang) {
+    match tick(
+        &store,
+        &AppNotifier(app),
+        Utc::now(),
+        local_tz(),
+        lang,
+        &state.data_dir,
+    ) {
         Ok(fired) => {
             if let Some(last) = fired.last() {
                 tracing::info!(count = fired.len(), "alerts fired");
@@ -213,7 +228,15 @@ mod tests {
         add(&s, "Dentist", "2026-10-20T15:05:00Z", Some("Via Roma 12"));
         let fake = Fake::default();
         let now = utc("2026-10-20T14:58:00Z");
-        let fired = tick(&s, &fake, now, chrono_tz::Europe::Rome, Lang::En).unwrap();
+        let fired = tick(
+            &s,
+            &fake,
+            now,
+            chrono_tz::Europe::Rome,
+            Lang::En,
+            Path::new("/nonexistent"),
+        )
+        .unwrap();
         assert_eq!(fired.len(), 2);
         let calls = fake.0.borrow();
         assert_eq!(calls.len(), 2);
@@ -257,10 +280,45 @@ mod tests {
             utc("2026-10-20T23:00:00Z"),
             chrono_tz::Europe::Rome,
             Lang::It,
+            Path::new("/nonexistent"),
         )
         .unwrap();
         let mut bodies: Vec<String> = fake.0.borrow().iter().map(|c| c.1.clone()).collect();
         bodies.sort();
         assert_eq!(bodies, ["Scade alle 18:00", "Tutto il giorno"]);
+    }
+
+    #[test]
+    fn tick_purges_due_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = Store::open_in_memory().unwrap();
+        let task = s
+            .insert_task(&taskcraft_store::TaskInput {
+                calendar_id: 1,
+                title: "T".into(),
+                tz: "Europe/Rome".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        let src = tmp.path().join("a.txt");
+        std::fs::write(&src, b"hi").unwrap();
+        let a = s.add_file_attachment(task, &src, tmp.path()).unwrap();
+        let stored = tmp.path().join(a.stored.as_deref().unwrap());
+        let now = utc("2026-10-20T10:00:00Z");
+        s.remove_attachment(a.id, now).unwrap();
+        let fake = Fake::default();
+        let rome = chrono_tz::Europe::Rome;
+        tick(&s, &fake, now, rome, Lang::En, tmp.path()).unwrap();
+        assert!(stored.exists(), "still inside the Undo window");
+        tick(
+            &s,
+            &fake,
+            now + Duration::seconds(16),
+            rome,
+            Lang::En,
+            tmp.path(),
+        )
+        .unwrap();
+        assert!(!stored.exists(), "purged once the delay has passed");
     }
 }

@@ -17,6 +17,8 @@ pub fn run(text: &str, now: DateTime<Tz>) -> Result<String, CmdError> {
         settings: RwLock::new(Settings::default()),
         settings_path: None,
         lang: RwLock::default(),
+        // Never written: quick entry does not touch attachments.
+        data_dir: std::env::temp_dir().join("taskcraft-smoke"),
     };
     let r = create_from_text_impl(&st, text, now, false)?;
     let store = st

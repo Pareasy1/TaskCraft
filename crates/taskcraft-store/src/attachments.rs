@@ -316,7 +316,9 @@ pub(crate) fn copy_for_duplicate(
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 let safe = match file.split_once('-') {
-                    Some((n, rest)) if !rest.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => {
+                    Some((n, rest))
+                        if !rest.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) =>
+                    {
                         rest.to_string()
                     }
                     _ => sanitize_name(&a.name),
@@ -443,6 +445,10 @@ impl Store {
                 },
             )
         })
+    }
+
+    pub fn get_attachment(&self, id: i64) -> Result<Attachment> {
+        get(&self.conn, id)
     }
 
     pub fn list_attachments(&self, task_id: i64) -> Result<Vec<Attachment>> {

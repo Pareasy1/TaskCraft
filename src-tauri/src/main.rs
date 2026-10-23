@@ -92,6 +92,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -153,6 +154,21 @@ fn main() {
             commands::move_task,
             commands::get_default_plan,
             commands::set_default_plan,
+            commands::list_attachments,
+            commands::pick_and_add_files,
+            commands::add_link_attachment,
+            commands::rename_attachment,
+            commands::reorder_attachments,
+            commands::remove_attachment,
+            commands::restore_file_attachment,
+            commands::open_attachment,
+            commands::reveal_attachment,
+            commands::duplicate_task,
+            commands::save_template,
+            commands::list_templates,
+            commands::rename_template,
+            commands::delete_template,
+            commands::create_from_template,
             open_main,
             open_settings,
             open_item,
