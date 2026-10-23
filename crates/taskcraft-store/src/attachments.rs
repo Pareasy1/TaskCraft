@@ -223,6 +223,126 @@ fn http_host(url: &str) -> Option<String> {
     (!host.is_empty()).then(|| host.to_string())
 }
 
+/// Copies `src` to a fresh `attachments/<task_id>/<n>-<safe>` under
+/// `data_dir` (never replacing a file). Source read errors are NotFound,
+/// destination errors Io; a failed copy leaves no file behind.
+/// Returns (relative path, full path, size).
+pub(crate) fn copy_into_store(
+    src: &Path,
+    data_dir: &Path,
+    task_id: i64,
+    safe: &str,
+    limit: u64,
+) -> Result<(String, PathBuf, u64)> {
+    let rel_dir = format!("attachments/{task_id}");
+    let dir = data_dir.join(&rel_dir);
+    std::fs::create_dir_all(&dir)?;
+    use std::io::{Read, Write};
+    let mut input = std::fs::File::open(src).map_err(|_| StoreError::NotFound)?;
+    // create_new never replaces an existing file; retry with the next n.
+    let mut n = 1;
+    let (rel, full, mut out) = loop {
+        let file = format!("{n}-{safe}");
+        let full = dir.join(&file);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&full)
+        {
+            Ok(f) => break (format!("{rel_dir}/{file}"), full, f),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
+            Err(e) => return Err(e.into()),
+        }
+    };
+    // Source read errors are NotFound (unreadable); destination errors are Io.
+    let copy = (|| -> Result<u64> {
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut total: u64 = 0;
+        loop {
+            let k = input.read(&mut buf).map_err(|_| StoreError::NotFound)?;
+            if k == 0 {
+                break;
+            }
+            total += k as u64;
+            // The file may have grown between stat and copy.
+            if total > limit {
+                return Err(StoreError::Rule(Rule::AttachmentTooLarge));
+            }
+            out.write_all(&buf[..k])?;
+        }
+        out.flush()?;
+        Ok(total)
+    })();
+    drop(out);
+    match copy {
+        Ok(sz) => Ok((rel, full, sz)),
+        Err(e) => {
+            let _ = std::fs::remove_file(&full);
+            Err(e)
+        }
+    }
+}
+
+/// Copies every attachment of `from` onto `to`: files become new stored
+/// files (paths (and a new task folder) pushed on `made` as soon as they exist, so the caller can
+/// remove them if the transaction fails), links are copied as rows.
+pub(crate) fn copy_for_duplicate(
+    conn: &Connection,
+    from: i64,
+    to: i64,
+    data_dir: &Path,
+    made: &std::cell::RefCell<Vec<PathBuf>>,
+) -> Result<()> {
+    let mut st = conn.prepare(&format!(
+        "SELECT {COLS} FROM attachments WHERE task_id = ?1 ORDER BY sort, id"
+    ))?;
+    let rows: Vec<Attachment> = st
+        .query_map([from], from_row)?
+        .collect::<std::result::Result<_, _>>()?;
+    drop(st);
+    for a in rows {
+        let (stored, size) = match (&a.kind, &a.stored) {
+            (AttachmentKind::File, Some(old)) => {
+                check_stored_shape(old)?;
+                // Stored names are `<n>-<safe name>`; keep the safe part.
+                let file = Path::new(old)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let safe = match file.split_once('-') {
+                    Some((n, rest)) if !rest.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => {
+                        rest.to_string()
+                    }
+                    _ => sanitize_name(&a.name),
+                };
+                let dir = data_dir.join(format!("attachments/{to}"));
+                if !dir.exists() {
+                    // Listed so the caller can remove it again if empty.
+                    made.borrow_mut().push(dir);
+                }
+                let (rel, full, size) =
+                    copy_into_store(&data_dir.join(old), data_dir, to, &safe, u64::MAX)?;
+                made.borrow_mut().push(full);
+                conn.execute("DELETE FROM pending_file_deletes WHERE stored = ?1", [&rel])?;
+                (Some(rel), Some(size as i64))
+            }
+            _ => (None, a.size),
+        };
+        insert(
+            conn,
+            &Attachment {
+                id: 0,
+                task_id: to,
+                stored,
+                size,
+                created_at: Utc::now(),
+                ..a
+            },
+        )?;
+    }
+    Ok(())
+}
+
 impl Store {
     pub fn add_file_attachment(
         &self,
@@ -262,53 +382,7 @@ impl Store {
             display
         };
 
-        let rel_dir = format!("attachments/{task_id}");
-        let dir = data_dir.join(&rel_dir);
-        std::fs::create_dir_all(&dir)?;
-        use std::io::{Read, Write};
-        let mut input = std::fs::File::open(src).map_err(|_| StoreError::NotFound)?;
-        // create_new never replaces an existing file; retry with the next n.
-        let mut n = 1;
-        let (rel, full, mut out) = loop {
-            let file = format!("{n}-{safe}");
-            let full = dir.join(&file);
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&full)
-            {
-                Ok(f) => break (format!("{rel_dir}/{file}"), full, f),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
-                Err(e) => return Err(e.into()),
-            }
-        };
-        // Source read errors are NotFound (unreadable); destination errors are Io.
-        let copy = (|| -> Result<u64> {
-            let mut buf = vec![0u8; 64 * 1024];
-            let mut total: u64 = 0;
-            loop {
-                let k = input.read(&mut buf).map_err(|_| StoreError::NotFound)?;
-                if k == 0 {
-                    break;
-                }
-                total += k as u64;
-                // The file may have grown between stat and copy.
-                if total > limit {
-                    return Err(StoreError::Rule(Rule::AttachmentTooLarge));
-                }
-                out.write_all(&buf[..k])?;
-            }
-            out.flush()?;
-            Ok(total)
-        })();
-        drop(out);
-        let size = match copy {
-            Ok(sz) => sz,
-            Err(e) => {
-                let _ = std::fs::remove_file(&full);
-                return Err(e);
-            }
-        };
+        let (rel, full, size) = copy_into_store(src, data_dir, task_id, &safe, limit)?;
         let res = self.in_tx(|tx| {
             // A queued file at the same path (never reused: names are unique
             // on disk) would be a stale entry; drop it defensively.

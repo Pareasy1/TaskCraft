@@ -4,6 +4,7 @@ mod alerts;
 mod attachments;
 mod calendars;
 mod checklist;
+mod duplicate;
 mod events;
 mod ics;
 mod labels;
