@@ -106,3 +106,31 @@ fn v4_keeps_everything() {
     assert!(s.list_attachments(1).unwrap().is_empty());
     assert!(dir.path().join("taskcraft.db.bak-v4").exists());
 }
+
+/// Run manually against a COPY of a real database:
+/// `TASKCRAFT_MIGRATE_CHECK=/path/copy.db cargo test -p taskcraft-store --test migrate_v5 -- --ignored real_db_copy_v5 --nocapture`
+#[test]
+#[ignore]
+fn real_db_copy_v5() {
+    let path = std::env::var("TASKCRAFT_MIGRATE_CHECK").expect("set TASKCRAFT_MIGRATE_CHECK");
+    let path = std::path::PathBuf::from(path);
+    let (tasks, subs) = {
+        let c = Connection::open(&path).unwrap();
+        let n = |sql: &str| c.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        (
+            n("SELECT COUNT(*) FROM tasks"),
+            n("SELECT COUNT(*) FROM tasks WHERE parent_id IS NOT NULL"),
+        )
+    };
+    println!("before: tasks={tasks} subtasks={subs}");
+    let s = Store::open(&path).unwrap();
+    assert_eq!(s.schema_version().unwrap(), 5);
+    drop(s);
+    let c = Connection::open(&path).unwrap();
+    let n = |sql: &str| c.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+    assert_eq!(n("SELECT COUNT(*) FROM tasks"), tasks);
+    assert_eq!(n("SELECT COUNT(*) FROM tasks WHERE parent_id IS NOT NULL"), subs);
+    assert_eq!(n("SELECT COUNT(*) FROM attachments"), 0);
+    assert_eq!(n("SELECT COUNT(*) FROM templates"), 0);
+    println!("after: tasks={tasks} subtasks={subs}");
+}
