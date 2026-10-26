@@ -255,6 +255,7 @@ pub struct Task {
     pub start_has_time: bool,
     pub subtask_open: i64,
     pub subtask_total: i64,
+    pub subtask_in_progress: i64,
     pub checklist_done: i64,
     pub checklist_total: i64,
     pub attachment_count: i64,

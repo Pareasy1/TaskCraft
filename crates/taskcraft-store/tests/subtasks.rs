@@ -611,3 +611,102 @@ fn repeat_reset_rearms_future_subtask_alerts() {
         .unwrap();
     assert!(due.iter().any(|x| x.owner_id == a), "{due:?}");
 }
+
+// ---- Task 8b: in-progress subtasks ----
+
+fn status_of(s: &Store, id: i64) -> TaskStatus {
+    s.get_task(id).unwrap().status
+}
+
+#[test]
+fn subtask_in_progress_starts_parent() {
+    let (_d, _p, s) = store();
+    // Via set_task_status.
+    let p = s.insert_task(&input("p")).unwrap();
+    let a = s.insert_task(&child("a", p)).unwrap();
+    s.insert_task(&child("b", p)).unwrap();
+    s.set_task_status(a, TaskStatus::InProgress, Utc::now()).unwrap();
+    let pt = s.get_task(p).unwrap();
+    assert_eq!(pt.status, TaskStatus::InProgress);
+    assert_eq!(pt.completed_at, None);
+    // Via update_task.
+    let q = s.insert_task(&input("q")).unwrap();
+    let c = s.insert_task(&child("c", q)).unwrap();
+    s.update_task(
+        c,
+        &TaskInput {
+            status: TaskStatus::InProgress,
+            ..child("c", q)
+        },
+    )
+    .unwrap();
+    assert_eq!(status_of(&s, q), TaskStatus::InProgress);
+    assert_eq!(s.get_task(q).unwrap().completed_at, None);
+    // A subtask created already in progress starts its parent too.
+    let r = s.insert_task(&input("r")).unwrap();
+    s.insert_task(&TaskInput {
+        status: TaskStatus::InProgress,
+        ..child("d", r)
+    })
+    .unwrap();
+    assert_eq!(status_of(&s, r), TaskStatus::InProgress);
+}
+
+#[test]
+fn parent_already_done_or_in_progress_unchanged() {
+    let (_d, _p, s) = store();
+    let now = Utc::now();
+    let done = s.insert_task(&input("done")).unwrap();
+    let a = s.insert_task(&child("a", done)).unwrap();
+    s.set_task_completed(done, true, now).unwrap();
+    let before = s.get_task(done).unwrap();
+    s.set_task_status(a, TaskStatus::InProgress, now).unwrap();
+    let after = s.get_task(done).unwrap();
+    assert_eq!(after.status, TaskStatus::Done);
+    assert_eq!(after.completed_at, before.completed_at);
+
+    let started = s.insert_task(&input("started")).unwrap();
+    let b = s.insert_task(&child("b", started)).unwrap();
+    s.set_task_status(started, TaskStatus::InProgress, now).unwrap();
+    s.set_task_status(b, TaskStatus::InProgress, now).unwrap();
+    assert_eq!(status_of(&s, started), TaskStatus::InProgress);
+
+    // Other subtask statuses leave a To do parent alone.
+    let idle = s.insert_task(&input("idle")).unwrap();
+    let c = s.insert_task(&child("c", idle)).unwrap();
+    s.set_task_status(c, TaskStatus::Todo, now).unwrap();
+    s.set_task_completed(c, true, now).unwrap();
+    assert_eq!(status_of(&s, idle), TaskStatus::Todo);
+}
+
+#[test]
+fn top_level_task_unaffected() {
+    let (_d, _p, s) = store();
+    let a = s.insert_task(&input("a")).unwrap();
+    let b = s.insert_task(&input("b")).unwrap();
+    s.set_task_status(a, TaskStatus::InProgress, Utc::now()).unwrap();
+    assert_eq!(status_of(&s, a), TaskStatus::InProgress);
+    assert_eq!(status_of(&s, b), TaskStatus::Todo);
+}
+
+#[test]
+fn subtask_in_progress_count() {
+    let (_d, _p, s) = store();
+    let now = Utc::now();
+    let p = s.insert_task(&input("p")).unwrap();
+    let ids: Vec<i64> = (0..4)
+        .map(|i| s.insert_task(&child(&format!("c{i}"), p)).unwrap())
+        .collect();
+    s.set_task_status(ids[0], TaskStatus::InProgress, now).unwrap();
+    s.set_task_status(ids[1], TaskStatus::InProgress, now).unwrap();
+    s.set_task_completed(ids[2], true, now).unwrap();
+    let t = s.get_task(p).unwrap();
+    assert_eq!(
+        (t.subtask_in_progress, t.subtask_open, t.subtask_total),
+        (2, 3, 4)
+    );
+    let listed = s.list_tasks(TaskFilter::All, now, chrono_tz::Tz::UTC).unwrap();
+    let lp = listed.iter().find(|t| t.id == p).unwrap();
+    assert_eq!(lp.subtask_in_progress, 2);
+    assert_eq!(s.get_task(ids[0]).unwrap().subtask_in_progress, 0);
+}

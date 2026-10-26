@@ -20,6 +20,18 @@ pub(crate) fn sync_children_placement(conn: &Connection, parent_id: i64) -> Resu
     Ok(())
 }
 
+/// A subtask that is now In progress means its parent has started: a To do
+/// parent moves to In progress. Called from every path that writes a status.
+pub(crate) fn start_parent_if_todo(conn: &Connection, task_id: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE tasks SET status = 'in_progress', completed_at = NULL, updated_at = ?2
+         WHERE status = 'todo'
+           AND id = (SELECT parent_id FROM tasks WHERE id = ?1 AND status = 'in_progress')",
+        params![task_id, fmt_ts(Utc::now())],
+    )?;
+    Ok(())
+}
+
 impl Store {
     /// Subtasks of `parent_id` in sibling order.
     pub fn list_subtasks(&self, parent_id: i64) -> Result<Vec<Task>> {

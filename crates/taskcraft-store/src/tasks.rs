@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::plans::{first_bucket, next_sort};
-use crate::subtasks::{reset_for_next_occurrence, sync_children_placement};
+use crate::subtasks::{reset_for_next_occurrence, start_parent_if_todo, sync_children_placement};
 use crate::{fmt_ts, parse_ts, Store};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension, Row};
@@ -34,6 +34,7 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         start_has_time: r.get(17)?,
         subtask_open: 0,
         subtask_total: 0,
+        subtask_in_progress: 0,
         checklist_done: 0,
         checklist_total: 0,
         attachment_count: 0,
@@ -64,6 +65,7 @@ impl Store {
             ],
         )?;
         let id = tx.last_insert_rowid();
+        start_parent_if_todo(tx, id)?;
         crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         Ok(id)
@@ -126,6 +128,7 @@ impl Store {
             return Err(StoreError::NotFound);
         }
         sync_children_placement(tx, id)?;
+        start_parent_if_todo(tx, id)?;
         crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         if newly_done && t.rrule.is_some() && t.due.is_some() {
@@ -135,14 +138,15 @@ impl Store {
         })
     }
 
-    /// Fills subtask and checklist counts with two grouped queries.
+    /// Fills subtask, checklist and attachment counts with grouped queries.
     pub(crate) fn attach_counts(&self, tasks: &mut [Task]) -> Result<()> {
         use std::collections::HashMap;
-        let mut subs: HashMap<i64, (i64, i64)> = HashMap::new();
+        let mut subs: HashMap<i64, (i64, i64, i64)> = HashMap::new();
         let mut st = self.conn.prepare(
-            "SELECT parent_id, sum(completed_at IS NULL), count(*) FROM tasks WHERE parent_id IS NOT NULL GROUP BY parent_id",
+            "SELECT parent_id, sum(completed_at IS NULL), count(*), sum(status = 'in_progress')
+             FROM tasks WHERE parent_id IS NOT NULL GROUP BY parent_id",
         )?;
-        for r in st.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))? {
+        for r in st.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?))))? {
             let (k, v) = r?;
             subs.insert(k, v);
         }
@@ -164,7 +168,8 @@ impl Store {
         }
         for t in tasks {
             t.attachment_count = att.get(&t.id).copied().unwrap_or(0);
-            (t.subtask_open, t.subtask_total) = subs.get(&t.id).copied().unwrap_or((0, 0));
+            (t.subtask_open, t.subtask_total, t.subtask_in_progress) =
+                subs.get(&t.id).copied().unwrap_or((0, 0, 0));
             (t.checklist_done, t.checklist_total) = cl.get(&t.id).copied().unwrap_or((0, 0));
         }
         Ok(())
@@ -353,14 +358,16 @@ impl Store {
         if status == TaskStatus::Done {
             return self.set_task_completed(id, true, now);
         }
-        let n = self.conn.execute(
-            "UPDATE tasks SET status = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
-            params![status.as_sql(), fmt_ts(Utc::now()), id],
-        )?;
-        if n == 0 {
-            return Err(StoreError::NotFound);
-        }
-        Ok(())
+        self.in_tx(|tx| {
+            let n = tx.execute(
+                "UPDATE tasks SET status = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
+                params![status.as_sql(), fmt_ts(Utc::now()), id],
+            )?;
+            if n == 0 {
+                return Err(StoreError::NotFound);
+            }
+            start_parent_if_todo(tx, id)
+        })
     }
 
     pub fn delete_task(&self, id: i64) -> Result<()> {
