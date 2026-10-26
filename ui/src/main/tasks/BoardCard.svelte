@@ -111,7 +111,7 @@
     </div>
   {/if}
   {#if progress}
-    <!-- Done (green), then in progress (amber), then the track for what is still to do. -->
+    <!-- Done (green), then in progress (yellow), then the track for what is still to do. -->
     <div class="bar" aria-hidden="true">
       {#if seg.done}<span class="done" style="width:{pct(seg.done)}"></span>{/if}
       {#if seg.inProgress}<span class="doing" style="width:{pct(seg.inProgress)}"></span>{/if}
@@ -164,7 +164,7 @@
   .bar { display: flex; gap: 1px; height: 3px; border-radius: 2px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
   .bar span { flex: none; height: 100%; border-radius: 2px; }
   .bar .done { background: var(--status-done); }
-  .bar .doing { background: var(--warning); }
+  .bar .doing { background: var(--progress-active); }
   .subs { list-style: none; margin: 6px 0 0 18px; padding: 4px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
   .subs li { display: flex; align-items: flex-start; gap: 6px; padding: 2px; border-radius: 6px; }
   .subs li:hover { background: var(--hover); }

@@ -34,6 +34,8 @@
   --label-tag: #155e75;
   --status-progress: #8f6200;
   --status-done: #2f9e6a;
+  /* The subtask bar's in-progress segment: a decorative yellow (the "2 of 4" text carries the meaning). */
+  --progress-active: #eab308;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -68,6 +70,7 @@
     --label-tag: #67e8f9;
     --status-progress: #f0b44c;
     --status-done: #4cc38a;
+    --progress-active: #facc15;
   }
 }
 

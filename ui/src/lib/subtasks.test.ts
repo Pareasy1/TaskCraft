@@ -189,3 +189,14 @@ describe('flattenRows', () => {
     expect(rows.map((r) => [r.task.id, r.dimmed])).toEqual([[1, true], [2, false]]);
   });
 });
+
+import { completedBySave } from './subtasks';
+describe('completedBySave', () => {
+  it('true only when a subtask went from open to done', () => {
+    expect(completedBySave({ status: 'todo', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(true);
+    expect(completedBySave({ status: 'inProgress', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(true);
+    expect(completedBySave({ status: 'done', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(false);
+    expect(completedBySave({ status: 'todo', parentId: 1 }, { status: 'inProgress', parentId: 1 })).toBe(false);
+    expect(completedBySave({ status: 'todo', parentId: null }, { status: 'done', parentId: null })).toBe(false);
+  });
+});

@@ -17,7 +17,7 @@
   import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
   import { PopupMenu } from '../lib/menu.svelte';
   import { askSaveTemplate, duplicate } from '../lib/taskCommands.svelte';
-  import { changeStatus } from '../lib/actions';
+  import { askParentAfterSave, changeStatus } from '../lib/actions';
   import Menu from './Menu.svelte';
 
   export type Target =
@@ -201,7 +201,19 @@
     }
   }
   async function save() {
-    if ((await flushAdds()) && (await persist())) onsaved();
+    if (!(await flushAdds())) return;
+    const before = target.kind === 'task' && target.id != null ? { id: target.id, status: target.input.status } : null;
+    if (!(await persist())) return;
+    if (before) {
+      // Saved as Done from its own form: the last open subtask asks about its parent too.
+      try {
+        await askParentAfterSave(before.id, before.status);
+      } catch (e) {
+        error = errorMessage(e);
+        return;
+      }
+    }
+    onsaved();
   }
   async function close() {
     if (await flushAdds()) onclose();

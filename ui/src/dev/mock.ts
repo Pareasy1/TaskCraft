@@ -193,10 +193,11 @@ export function installMock() {
   };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
   const setStatus = (t: MockTask, status: MockTask['status']) => {
+    const started = status === 'inProgress' && t.status !== 'inProgress';
     t.status = status;
     t.completedAt = status === 'done' ? new Date().toISOString() : null;
-    // As the store does: a subtask put in progress starts a To do parent.
-    const parent = status === 'inProgress' && t.parentId != null ? all.find((x) => x.id === t.parentId) : undefined;
+    // As the store does: a subtask put in progress (a change, not a re-save) starts a To do parent.
+    const parent = started && t.parentId != null ? all.find((x) => x.id === t.parentId) : undefined;
     if (parent?.status === 'todo') parent.status = 'inProgress';
   };
   // A bucket decides its plan; a plan alone means its first bucket (placed last).

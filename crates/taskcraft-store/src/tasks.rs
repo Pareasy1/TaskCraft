@@ -128,7 +128,13 @@ impl Store {
             return Err(StoreError::NotFound);
         }
         sync_children_placement(tx, id)?;
-        start_parent_if_todo(tx, id)?;
+        // Only a start (or a move under a new parent) starts the parent; saving an
+        // already in-progress subtask must not undo the user's reset of its parent.
+        let started = t.status == TaskStatus::InProgress
+            && was.as_deref().map(TaskStatus::from_sql) != Some(TaskStatus::InProgress);
+        if started || old_parent != t.parent_id {
+            start_parent_if_todo(tx, id)?;
+        }
         crate::labels::write_task_labels(tx, id, &t.labels)?;
         self.write_alerts(tx, ItemKindDb::Task, id, &t.alerts)?;
         if newly_done && t.rrule.is_some() && t.due.is_some() {
@@ -359,14 +365,18 @@ impl Store {
             return self.set_task_completed(id, true, now);
         }
         self.in_tx(|tx| {
-            let n = tx.execute(
+            let was: String = tx
+                .query_row("SELECT status FROM tasks WHERE id = ?1", [id], |r| r.get(0))
+                .optional()?
+                .ok_or(StoreError::NotFound)?;
+            tx.execute(
                 "UPDATE tasks SET status = ?1, completed_at = NULL, updated_at = ?2 WHERE id = ?3",
                 params![status.as_sql(), fmt_ts(Utc::now()), id],
             )?;
-            if n == 0 {
-                return Err(StoreError::NotFound);
+            if TaskStatus::from_sql(&was) != status {
+                start_parent_if_todo(tx, id)?;
             }
-            start_parent_if_todo(tx, id)
+            Ok(())
         })
     }
 

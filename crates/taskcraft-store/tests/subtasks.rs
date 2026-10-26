@@ -710,3 +710,53 @@ fn subtask_in_progress_count() {
     assert_eq!(lp.subtask_in_progress, 2);
     assert_eq!(s.get_task(ids[0]).unwrap().subtask_in_progress, 0);
 }
+
+#[test]
+fn auto_start_fires_on_transition_only() {
+    let (_d, _p, s) = store();
+    let now = Utc::now();
+    let p = s.insert_task(&input("p")).unwrap();
+    let a = s.insert_task(&child("a", p)).unwrap();
+    s.set_task_status(a, TaskStatus::InProgress, now).unwrap();
+    assert_eq!(status_of(&s, p), TaskStatus::InProgress);
+    // Undo of the auto-start: the parent goes back to To do.
+    s.set_task_status(p, TaskStatus::Todo, now).unwrap();
+    // Editing the still-in-progress subtask does not restart the parent.
+    s.update_task(
+        a,
+        &TaskInput {
+            status: TaskStatus::InProgress,
+            notes: Some("more".into()),
+            ..child("a", p)
+        },
+    )
+    .unwrap();
+    assert_eq!(status_of(&s, p), TaskStatus::Todo);
+    // Setting In progress again on an in-progress subtask is not a start either.
+    s.set_task_status(a, TaskStatus::InProgress, now).unwrap();
+    assert_eq!(status_of(&s, p), TaskStatus::Todo);
+}
+
+#[test]
+fn reparenting_an_in_progress_task_starts_new_parent() {
+    let (_d, _p, s) = store();
+    let now = Utc::now();
+    let x = s.insert_task(&input("x")).unwrap();
+    s.set_task_status(x, TaskStatus::InProgress, now).unwrap();
+    let p = s.insert_task(&input("p")).unwrap();
+    s.set_task_parent(x, Some(p)).unwrap();
+    assert_eq!(status_of(&s, p), TaskStatus::InProgress);
+    // Via update_task re-parenting too.
+    let y = s.insert_task(&input("y")).unwrap();
+    s.set_task_status(y, TaskStatus::InProgress, now).unwrap();
+    let q = s.insert_task(&input("q")).unwrap();
+    s.update_task(
+        y,
+        &TaskInput {
+            status: TaskStatus::InProgress,
+            ..child("y", q)
+        },
+    )
+    .unwrap();
+    assert_eq!(status_of(&s, q), TaskStatus::InProgress);
+}

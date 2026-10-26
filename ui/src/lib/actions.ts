@@ -4,7 +4,7 @@ import { taskInput } from './edit';
 import { STATUS_LABEL } from './tasks';
 import { notify } from './toast.svelte';
 import { requestComplete, requestCompleteParent } from './complete.svelte';
-import { completeUndo, completionAsk, offerParentAfter } from './subtasks';
+import { completedBySave, completeUndo, completionAsk, offerParentAfter } from './subtasks';
 import type { Priority, Task, TaskInput, TaskStatus } from './types';
 import { t } from './i18n';
 
@@ -50,6 +50,17 @@ export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx, h
     // Its subtasks are all done now, so completing it asks nothing.
     await (hooks.completeParent ?? ((p: Task) => changeStatus(p, 'done')))(parent);
   }
+}
+
+/**
+ * After a task's details form was saved: when that took a subtask from open to done and it was
+ * the last open one, asks whether to complete the parent too (Yes completes it the usual way).
+ */
+export async function askParentAfterSave(id: number, statusBefore: TaskStatus): Promise<void> {
+  const me = await api.getTask(id);
+  if (me.parentId == null || !completedBySave({ status: statusBefore, parentId: me.parentId }, me)) return;
+  const [parent, siblings] = await Promise.all([api.getTask(me.parentId), api.listSubtasks(me.parentId)]);
+  if (offerParentAfter(me, siblings, parent) && (await requestCompleteParent(parent))) await changeStatus(parent, 'done');
 }
 
 /** The parent the store will move from To do to In progress when `task` starts, if any. */

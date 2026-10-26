@@ -6,12 +6,13 @@ vi.mock('./api', () => ({
     completeWithSubtasks: vi.fn(async () => {}),
     updateTask: vi.fn(async () => {}),
     getTask: vi.fn(),
+    listSubtasks: vi.fn(),
   },
   errorMessage: (e: unknown) => String(e),
 }));
 
 import { api } from './api';
-import { changeStatus } from './actions';
+import { askParentAfterSave, changeStatus } from './actions';
 import { answerComplete, pending } from './complete.svelte';
 import { dismiss, runAction, toast, undo } from './toast.svelte';
 import type { Task } from './types';
@@ -150,5 +151,44 @@ describe('changeStatus: a subtask in progress starts its parent', () => {
     await changeStatus(parent, 'inProgress', { children: [sub], siblings: [], parent: null });
     expect(api.getTask).not.toHaveBeenCalled();
     expect(toast.current?.message).toBe('Moved “Ship Rafael” to In progress');
+  });
+});
+
+describe('askParentAfterSave (a subtask saved as Done from its own form)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => dismiss());
+  const parent = mk(1, null, false, 'Ship Rafael');
+  const sub = mk(2, 1, true);
+
+  it('last subtask saved Done: asks; Yes completes the parent', async () => {
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => (id === 2 ? sub : parent));
+    vi.mocked(api.listSubtasks).mockResolvedValue([sub, mk(3, 1, true)]);
+    const p = askParentAfterSave(2, 'todo');
+    await tick();
+    expect(pending.current).toMatchObject({ kind: 'parent', task: { id: 1 } });
+    answerComplete('yes');
+    await p;
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'done');
+  });
+
+  it('No: nothing else happens', async () => {
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => (id === 2 ? sub : parent));
+    vi.mocked(api.listSubtasks).mockResolvedValue([sub]);
+    const p = askParentAfterSave(2, 'inProgress');
+    await tick();
+    answerComplete('cancel');
+    await p;
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+
+  it('no question when it was already done, a sibling is open, or it is not a subtask', async () => {
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => (id === 2 ? sub : parent));
+    vi.mocked(api.listSubtasks).mockResolvedValue([sub, mk(3, 1)]);
+    await askParentAfterSave(2, 'done');
+    await askParentAfterSave(2, 'todo');
+    vi.mocked(api.getTask).mockResolvedValue(mk(9, null, true));
+    await askParentAfterSave(9, 'todo');
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
   });
 });

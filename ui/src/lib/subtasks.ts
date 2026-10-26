@@ -1,6 +1,6 @@
 // Pure helpers for subtasks, checklists and priority columns.
 import { t } from './i18n';
-import { PRIORITIES, type Priority, type TaskInput } from './types';
+import { PRIORITIES, type Priority, type TaskInput, type TaskStatus } from './types';
 
 type Child = { id: number; parentId: number | null; sortOrder: number };
 const bySort = (a: Child, b: Child) => a.sortOrder - b.sortOrder || a.id - b.id;
@@ -74,6 +74,11 @@ export function completionAsk(_task: Done, children: Done[]): 'askChildren' | 'n
 /** After `task` was completed: true when no sibling is open any more and the parent is still open. */
 export function offerParentAfter(task: Done & { id: number }, siblings: (Done & { id: number })[], parent: Done): boolean {
   return !parent.completedAt && siblings.every((s) => s.id === task.id || !!s.completedAt);
+}
+
+/** A subtask's form save that took it from open to done (the parent question may follow). */
+export function completedBySave(before: { status: TaskStatus; parentId: number | null }, after: { status: TaskStatus; parentId: number | null }): boolean {
+  return after.parentId != null && before.status !== 'done' && after.status === 'done';
 }
 
 export function priorityColumns<T extends { priority: Priority; sortOrder: number; id: number }>(tasks: T[]): { key: Priority; tasks: T[] }[] {
