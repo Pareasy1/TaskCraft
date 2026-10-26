@@ -369,3 +369,81 @@ fn purge_does_not_follow_symlinks_out() {
         .unwrap();
     assert!(victim.join(name).exists());
 }
+
+/// The OS "downloaded from the internet" marking must survive the copy, so
+/// opening an attached download still goes through Gatekeeper.
+#[cfg(target_os = "macos")]
+#[test]
+fn copy_keeps_quarantine_xattr() {
+    let (s, t, data, sd) = setup();
+    let p = src(sd.path(), "dl.pdf", b"%PDF");
+    let mark = "0081;6530a1b2;Safari;";
+    let ok = std::process::Command::new("/usr/bin/xattr")
+        .args(["-w", "com.apple.quarantine", mark])
+        .arg(&p)
+        .status()
+        .unwrap();
+    assert!(ok.success());
+    let a = s.add_file_attachment(t, &p, data.path()).unwrap();
+    let stored = data.path().join(a.stored.unwrap());
+    let out = std::process::Command::new("/usr/bin/xattr")
+        .args(["-p", "com.apple.quarantine"])
+        .arg(&stored)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stored copy lost the quarantine mark");
+    // copyfile keeps the mark but may refresh its timestamp/agent fields;
+    // the flags field is what Gatekeeper acts on.
+    let got = String::from_utf8_lossy(&out.stdout);
+    assert!(got.trim().starts_with("0081;"), "{got}");
+    assert_eq!(std::fs::read(&stored).unwrap(), b"%PDF");
+}
+
+/// The Mark of the Web (Zone.Identifier stream) must survive the copy, so
+/// SmartScreen / Protected View still apply.
+#[cfg(windows)]
+#[test]
+fn copy_keeps_zone_identifier() {
+    let (s, t, data, sd) = setup();
+    let p = src(sd.path(), "dl.pdf", b"%PDF");
+    let zone = "[ZoneTransfer]\r\nZoneId=3\r\n";
+    std::fs::write(format!("{}:Zone.Identifier", p.display()), zone).unwrap();
+    let a = s.add_file_attachment(t, &p, data.path()).unwrap();
+    let stored = data.path().join(a.stored.unwrap());
+    let got = std::fs::read_to_string(format!("{}:Zone.Identifier", stored.display()))
+        .expect("stored copy lost the Zone.Identifier stream");
+    assert_eq!(got, zone);
+    assert_eq!(std::fs::read(&stored).unwrap(), b"%PDF");
+}
+
+#[test]
+fn failed_insert_removes_copied_file() {
+    let data = tempfile::tempdir().unwrap();
+    let sd = tempfile::tempdir().unwrap();
+    let db = data.path().join("t.db");
+    let s = Store::open(&db).unwrap();
+    let t = s
+        .insert_task(&TaskInput {
+            title: "t".into(),
+            calendar_id: 1,
+            tz: "UTC".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    // Make the row insert fail after the file has been copied.
+    rusqlite::Connection::open(&db)
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER no_attach BEFORE INSERT ON attachments
+             BEGIN SELECT RAISE(ABORT, 'blocked'); END;",
+        )
+        .unwrap();
+    let r = s.add_file_attachment(t, &src(sd.path(), "f.txt", b"1"), data.path());
+    assert!(r.is_err(), "{r:?}");
+    let d = data.path().join(format!("attachments/{t}"));
+    assert_eq!(
+        std::fs::read_dir(d).unwrap().count(),
+        0,
+        "copied file removed"
+    );
+}

@@ -294,6 +294,84 @@ fn offsets_across_dst() {
     );
 }
 
+/// Saves a Rome parent (due `p`) with one timed subtask (due `k`), then
+/// creates from the template with the parent due `at`; returns the
+/// template's offset/time and the new subtask's due.
+fn rome_roundtrip(
+    s: &Store,
+    p: chrono::DateTime<Utc>,
+    k: chrono::DateTime<Utc>,
+    at: chrono::DateTime<Utc>,
+) -> (Option<i64>, Option<String>, Option<chrono::DateTime<Utc>>) {
+    let tz = |i: TaskInput| TaskInput {
+        tz: "Europe/Rome".into(),
+        due_has_time: true,
+        ..i
+    };
+    let parent = s
+        .insert_task(&tz(TaskInput {
+            due: Some(p),
+            ..input("P")
+        }))
+        .unwrap();
+    s.insert_task(&tz(TaskInput {
+        parent_id: Some(parent),
+        due: Some(k),
+        ..input("S")
+    }))
+    .unwrap();
+    let t = s
+        .save_template(parent, &format!("rt{parent}"), false)
+        .unwrap();
+    let sub = s.template_body(t).unwrap().subtasks.remove(0);
+    let id = s
+        .create_from_template(
+            t,
+            &tz(TaskInput {
+                due: Some(at),
+                ..input("N")
+            }),
+        )
+        .unwrap();
+    let due = s.list_subtasks(id).unwrap()[0].due;
+    (sub.due_offset_days, sub.due_time, due)
+}
+
+#[test]
+fn positive_offset_and_dst_gap_time() {
+    let s = Store::open_in_memory().unwrap();
+    let rome = |y, m, d, h, mi| {
+        Rome.with_ymd_and_hms(y, m, d, h, mi, 0)
+            .unwrap()
+            .with_timezone(&Utc)
+    };
+    // A subtask due after the parent: +2 days, applied forward.
+    let (off, time, due) = rome_roundtrip(
+        &s,
+        rome(2026, 10, 26, 9, 0),
+        rome(2026, 10, 28, 10, 0),
+        rome(2026, 11, 2, 9, 0),
+    );
+    assert_eq!((off, time.as_deref()), (Some(2), Some("10:00")));
+    assert_eq!(due, Some(rome(2026, 11, 4, 10, 0)));
+    // 02:30 the day before; created against Mon 30 Mar 2026 it lands on
+    // Sun 29 Mar 02:30, which does not exist in Rome (clocks jump 02:00 ->
+    // 03:00). Chosen behaviour (time::local_to_utc): shift forward one
+    // hour, i.e. 03:30 CEST = 01:30 UTC.
+    let (off, time, due) = rome_roundtrip(
+        &s,
+        rome(2026, 4, 6, 9, 0),
+        rome(2026, 4, 5, 2, 30),
+        rome(2026, 3, 30, 9, 0),
+    );
+    assert_eq!((off, time.as_deref()), (Some(-1), Some("02:30")));
+    assert_eq!(
+        due,
+        Some(Utc.with_ymd_and_hms(2026, 3, 29, 1, 30, 0).unwrap())
+    );
+    assert_eq!(due, Some(rome(2026, 3, 29, 3, 30)));
+}
+
 #[test]
 fn no_due_no_subtask_dues() {
     let s = Store::open_in_memory().unwrap();

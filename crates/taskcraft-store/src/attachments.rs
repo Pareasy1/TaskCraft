@@ -224,8 +224,12 @@ fn http_host(url: &str) -> Option<String> {
 }
 
 /// Copies `src` to a fresh `attachments/<task_id>/<n>-<safe>` under
-/// `data_dir` (never replacing a file). Source read errors are NotFound,
-/// destination errors Io; a failed copy leaves no file behind.
+/// `data_dir` (never replacing a file). Source open errors are NotFound,
+/// other errors Io; a failed copy leaves no file behind.
+/// Uses `std::fs::copy` so the OS "downloaded from the internet" marking
+/// travels with the file (macOS `com.apple.quarantine` xattr via
+/// `fcopyfile(COPYFILE_ALL)`, Windows `Zone.Identifier` stream via
+/// `CopyFileExW`).
 /// Returns (relative path, full path, size).
 pub(crate) fn copy_into_store(
     src: &Path,
@@ -237,11 +241,12 @@ pub(crate) fn copy_into_store(
     let rel_dir = format!("attachments/{task_id}");
     let dir = data_dir.join(&rel_dir);
     std::fs::create_dir_all(&dir)?;
-    use std::io::{Read, Write};
-    let mut input = std::fs::File::open(src).map_err(|_| StoreError::NotFound)?;
+    // Open first only to classify an unreadable source as NotFound.
+    drop(std::fs::File::open(src).map_err(|_| StoreError::NotFound)?);
     // create_new never replaces an existing file; retry with the next n.
+    // The empty file reserves the name; the copy then writes onto it.
     let mut n = 1;
-    let (rel, full, mut out) = loop {
+    let (rel, full) = loop {
         let file = format!("{n}-{safe}");
         let full = dir.join(&file);
         match std::fs::OpenOptions::new()
@@ -249,31 +254,28 @@ pub(crate) fn copy_into_store(
             .create_new(true)
             .open(&full)
         {
-            Ok(f) => break (format!("{rel_dir}/{file}"), full, f),
+            Ok(_) => break (format!("{rel_dir}/{file}"), full),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
             Err(e) => return Err(e.into()),
         }
     };
-    // Source read errors are NotFound (unreadable); destination errors are Io.
     let copy = (|| -> Result<u64> {
-        let mut buf = vec![0u8; 64 * 1024];
-        let mut total: u64 = 0;
-        loop {
-            let k = input.read(&mut buf).map_err(|_| StoreError::NotFound)?;
-            if k == 0 {
-                break;
-            }
-            total += k as u64;
-            // The file may have grown between stat and copy.
-            if total > limit {
-                return Err(StoreError::Rule(Rule::AttachmentTooLarge));
-            }
-            out.write_all(&buf[..k])?;
+        let total = std::fs::copy(src, &full)?;
+        // The file may have grown between stat and copy.
+        if total > limit {
+            return Err(StoreError::Rule(Rule::AttachmentTooLarge));
         }
-        out.flush()?;
+        // A read-only source would make the copy undeletable on Windows.
+        #[cfg(windows)]
+        {
+            let mut perm = std::fs::metadata(&full)?.permissions();
+            if perm.readonly() {
+                perm.set_readonly(false);
+                std::fs::set_permissions(&full, perm)?;
+            }
+        }
         Ok(total)
     })();
-    drop(out);
     match copy {
         Ok(sz) => Ok((rel, full, sz)),
         Err(e) => {

@@ -323,6 +323,11 @@ fn duplicate_failure_leaves_no_files() {
     ];
     want.sort();
     assert_eq!(dirs, want, "no copied files or folders remain");
+    // k1' (id k2+2) was copied before the failure: its folder is gone too,
+    // and the blocker still holds only what the test put there.
+    assert!(!data.path().join(format!("attachments/{}", k2 + 2)).exists());
+    assert!(!data.path().join(format!("attachments/{}", k2 + 1)).exists());
+    assert_eq!(std::fs::read(&blocked).unwrap(), b"in the way");
 }
 
 #[test]
