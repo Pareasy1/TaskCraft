@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checklistLabel, childrenByParent, completionAsk, groupWithParents, offerParentAfter, priorityColumns, progressLabel, progressSegments, topLevel,
+  checklistLabel, childrenByParent, completionAsk, groupWithParents, offerParentAfter, priorityColumns, barTrack, progressLabel, progressSegments, topLevel,
 } from './subtasks';
 import type { Priority } from './types';
 
@@ -54,6 +54,12 @@ describe('labels', () => {
     expect(progressSegments({ subtaskTotal: 0, subtaskOpen: 0, subtaskInProgress: 0 })).toEqual({ done: 0, inProgress: 0, todo: 0 });
     // Never more in progress than open (stale counts can't push the bar past full).
     expect(progressSegments({ subtaskTotal: 2, subtaskOpen: 1, subtaskInProgress: 2 })).toEqual({ done: 1, inProgress: 1, todo: 0 });
+  });
+  it('barTrack: tints the track only for a started parent with no subtask in progress', () => {
+    expect(barTrack({ status: 'inProgress', subtaskInProgress: 0 })).toBe('started');
+    expect(barTrack({ status: 'inProgress', subtaskInProgress: 1 })).toBe('neutral');
+    expect(barTrack({ status: 'todo', subtaskInProgress: 0 })).toBe('neutral');
+    expect(barTrack({ status: 'done', subtaskInProgress: 0 })).toBe('neutral');
   });
   it('checklistLabel', () => {
     expect(checklistLabel({ checklistDone: 0, checklistTotal: 0 })).toBeNull();

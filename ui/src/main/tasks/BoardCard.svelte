@@ -12,7 +12,7 @@
   import type { Plan, Task, TaskStatus } from '../../lib/types';
   import { isOverdue } from '../../lib/tasks';
   import { fmtShortDate, fmtSpan, fmtTime } from '../../lib/format';
-  import { checklistLabel, progressLabel, progressSegments } from '../../lib/subtasks';
+  import { checklistLabel, barTrack, progressLabel, progressSegments } from '../../lib/subtasks';
   import StatusGlyph from './StatusGlyph.svelte';
   import PriorityMark from './PriorityMark.svelte';
   import LabelChip from './LabelChip.svelte';
@@ -64,6 +64,7 @@
   });
   const progress = $derived(progressLabel(t));
   const seg = $derived(progressSegments(t));
+  const started = $derived(barTrack(t) === 'started');
   /** "2 of 4" (plus "1 in progress" when any) for the expand button's name. */
   const progressName = $derived(seg.inProgress ? `${progress}, ${tr('subtasks.inProgress', { n: seg.inProgress })}` : progress);
   const pct = (n: number) => `${(n / t.subtaskTotal) * 100}%`;
@@ -111,8 +112,9 @@
     </div>
   {/if}
   {#if progress}
-    <!-- Done (green), then in progress (yellow), then the track for what is still to do. -->
-    <div class="bar" aria-hidden="true">
+    <!-- Done (green), then in progress (yellow), then the track for what is still to do;
+         the track is tinted yellow when the task itself is in progress but no subtask is. -->
+    <div class="bar" class:started aria-hidden="true">
       {#if seg.done}<span class="done" style="width:{pct(seg.done)}"></span>{/if}
       {#if seg.inProgress}<span class="doing" style="width:{pct(seg.inProgress)}"></span>{/if}
     </div>
@@ -161,8 +163,9 @@
   .caret.down { transform: rotate(90deg); }
   @media (prefers-reduced-motion: no-preference) { .caret { transition: transform 0.15s; } }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .bar { display: flex; gap: 1px; height: 3px; border-radius: 2px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
-  .bar span { flex: none; height: 100%; border-radius: 2px; }
+  .bar { display: flex; gap: 1px; height: 5px; border-radius: 3px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
+  .bar.started { background: color-mix(in srgb, var(--progress-active) 35%, var(--border)); }
+  .bar span { flex: none; height: 100%; border-radius: 3px; }
   .bar .done { background: var(--status-done); }
   .bar .doing { background: var(--progress-active); }
   .subs { list-style: none; margin: 6px 0 0 18px; padding: 4px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }

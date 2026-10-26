@@ -84,7 +84,7 @@ export function installMock() {
     { ...task(32, 'Review with team', null, false, 'done'), parentId: 16, sortOrder: 30 },
     // "Ship order #1042" (23) is still To do: starting one of these starts it.
     { ...task(33, 'Pack the order', null, false), parentId: 23, planId: 2, bucketId: 6, sortOrder: 10 },
-    { ...task(34, 'Print the label', null, false), parentId: 23, planId: 2, bucketId: 6, sortOrder: 20 },
+    { ...task(34, 'Print the label', null, false, 'inProgress'), parentId: 23, planId: 2, bucketId: 6, sortOrder: 20 },
   );
   Object.assign(all.find((t) => t.id === 11)!, { priority: 'urgent' });
   Object.assign(all.find((t) => t.id === 12)!, { start: midnight(-1), due: midnight(1), priority: 'low' });

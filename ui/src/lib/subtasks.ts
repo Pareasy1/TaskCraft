@@ -60,6 +60,14 @@ export function progressSegments(x: { subtaskTotal: number; subtaskOpen: number;
   return { done: x.subtaskTotal - open, inProgress, todo: open - inProgress };
 }
 
+/**
+ * The bar's track: 'started' (tinted yellow) when the parent is in progress but no subtask is,
+ * so a started task still looks started; otherwise neutral (a subtask in progress already shows yellow).
+ */
+export function barTrack(x: { status: TaskStatus; subtaskInProgress: number }): 'neutral' | 'started' {
+  return x.status === 'inProgress' && x.subtaskInProgress === 0 ? 'started' : 'neutral';
+}
+
 export function checklistLabel(x: { checklistDone: number; checklistTotal: number }): string | null {
   return x.checklistTotal ? `${x.checklistDone}/${x.checklistTotal}` : null;
 }
