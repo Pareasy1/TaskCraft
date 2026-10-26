@@ -1,0 +1,51 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadCalendarMode, saveCalendarMode, shortcutFor } from './navigation';
+
+const k = (key: string, mod = false, inTextField = false) => ({ key, mod, inTextField });
+
+describe('shortcutFor', () => {
+  it('maps Mod+1/2/3 to areas', () => {
+    expect(shortcutFor(k('1', true), 'tasks')).toEqual({ area: 'calendar' });
+    expect(shortcutFor(k('2', true), 'calendar')).toEqual({ area: 'tasks' });
+    expect(shortcutFor(k('3', true), 'calendar')).toEqual({ area: 'grid' });
+  });
+  it('reserves Mod+4', () => expect(shortcutFor(k('4', true), 'calendar')).toBeNull());
+  it('D/W/M set the mode in calendar outside text fields', () => {
+    expect(shortcutFor(k('d'), 'calendar')).toEqual({ mode: 'day' });
+    expect(shortcutFor(k('w'), 'calendar')).toEqual({ mode: 'week' });
+    expect(shortcutFor(k('M'), 'calendar')).toEqual({ mode: 'month' });
+  });
+  it('ignores letters in a text field', () => expect(shortcutFor(k('d', false, true), 'calendar')).toBeNull());
+  it('ignores letters outside calendar', () => {
+    expect(shortcutFor(k('w'), 'tasks')).toBeNull();
+    expect(shortcutFor(k('w'), 'grid')).toBeNull();
+  });
+  it('ignores letters with mod and other keys', () => {
+    expect(shortcutFor(k('d', true), 'calendar')).toBeNull();
+    expect(shortcutFor(k('x'), 'calendar')).toBeNull();
+  });
+});
+
+describe('calendar mode storage', () => {
+  beforeEach(() => {
+    const m = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  it('round-trips', () => {
+    saveCalendarMode('month');
+    expect(localStorage.getItem('taskcraft.calendarMode')).toBe('month');
+    expect(loadCalendarMode()).toBe('month');
+  });
+  it('defaults to week', () => expect(loadCalendarMode()).toBe('week'));
+  it('falls back on an invalid value', () => {
+    localStorage.setItem('taskcraft.calendarMode', 'year');
+    expect(loadCalendarMode()).toBe('week');
+  });
+  it('survives throwing storage', () => {
+    const bad = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } };
+    vi.stubGlobal('localStorage', bad);
+    expect(loadCalendarMode()).toBe('week');
+    expect(() => saveCalendarMode('day')).not.toThrow();
+  });
+});
