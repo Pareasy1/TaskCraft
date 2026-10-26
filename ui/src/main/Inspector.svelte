@@ -3,7 +3,7 @@
   import { t } from '../lib/i18n';
   import { onDestroy, tick } from 'svelte';
   import { X, Trash2, CornerLeftUp, Ellipsis } from 'lucide-svelte';
-  import { PRIORITIES, type Bucket, type Calendar, type EventInput, type Plan, type Task, type TaskInput, type TaskLabel } from '../lib/types';
+  import { PRIORITIES, type Bucket, type Calendar, type EventInput, type Plan, type Task, type TaskInput, type TaskLabel, type TaskStatus } from '../lib/types';
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import SubtaskList from './tasks/SubtaskList.svelte';
@@ -17,6 +17,7 @@
   import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
   import { PopupMenu } from '../lib/menu.svelte';
   import { askSaveTemplate, duplicate } from '../lib/taskCommands.svelte';
+  import { changeStatus } from '../lib/actions';
   import Menu from './Menu.svelte';
 
   export type Target =
@@ -64,6 +65,7 @@
     ev = target.kind === 'event' ? eventToForm(target.input) : null;
     task = target.kind === 'task' ? taskToForm(target.input) : null;
     parentPick = target.kind === 'task' ? target.input.parentId ?? null : null;
+    syncedStatus = target.kind === 'task' ? target.input.status : null;
     confirmDelete = false;
     error = '';
   });
@@ -75,6 +77,11 @@
   let parentTask = $state<Task | null>(null);
   /** The parent picked in the dialog; applied with `setTaskParent` on Save. */
   let parentPick = $state<number | null>(null);
+  /**
+   * The stored status the form last showed. When the store changes it meanwhile (a subtask put
+   * in progress starts this task), the form follows, unless a different status was picked here.
+   */
+  let syncedStatus: TaskStatus | null = null;
   async function loadRelated() {
     const id = target.kind === 'task' ? target.id : null;
     if (id == null) return void ((stored = parentTask = null), (subtasks = allTasks = []));
@@ -82,6 +89,8 @@
       const [me, subs, all] = await Promise.all([api.getTask(id), api.listSubtasks(id), api.listTasks('all')]);
       if (target.kind !== 'task' || target.id !== id) return;
       stored = me;
+      if (task && syncedStatus != null && task.status === syncedStatus) task.status = me.status;
+      syncedStatus = me.status;
       subtasks = subs;
       allTasks = all;
       parentTask = me.parentId == null ? null : all.find((x) => x.id === me.parentId) ?? (await api.getTask(me.parentId));
@@ -298,6 +307,13 @@
       error = errorMessage(e);
     }
   }
+  /** Yes to "Mark the task as done too?": saves what was typed, completes this task and shows it as stored now (the dialog stays). */
+  async function completeSelf() {
+    const me = await savedTask();
+    if (!me) return;
+    await changeStatus(me, 'done');
+    onopentask?.(me.id);
+  }
   async function saveAsTemplate() {
     const me = await savedTask();
     if (me) askSaveTemplate(me);
@@ -453,7 +469,7 @@
     <textarea class="field notes" bind:value={task.notes} placeholder={t('inspector.notes')}></textarea>
     {#if stored}
       {#if !isSubtask}
-        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} />
+        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} oncompleteparent={completeSelf} />
       {/if}
       <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
       <Attachments bind:this={attachments} task={stored} onerror={(m) => (error = m)} />

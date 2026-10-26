@@ -53,6 +53,13 @@ export function progressLabel(x: { subtaskOpen: number; subtaskTotal: number }):
   return t('subtasks.progress', { done: x.subtaskTotal - x.subtaskOpen, total: x.subtaskTotal });
 }
 
+/** The subtask bar's segments, as counts: done, in progress, still to do. */
+export function progressSegments(x: { subtaskTotal: number; subtaskOpen: number; subtaskInProgress: number }): { done: number; inProgress: number; todo: number } {
+  const open = Math.max(0, Math.min(x.subtaskOpen, x.subtaskTotal));
+  const inProgress = Math.max(0, Math.min(x.subtaskInProgress, open));
+  return { done: x.subtaskTotal - open, inProgress, todo: open - inProgress };
+}
+
 export function checklistLabel(x: { checklistDone: number; checklistTotal: number }): string | null {
   return x.checklistTotal ? `${x.checklistDone}/${x.checklistTotal}` : null;
 }

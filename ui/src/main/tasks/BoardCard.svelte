@@ -12,7 +12,7 @@
   import type { Plan, Task, TaskStatus } from '../../lib/types';
   import { isOverdue } from '../../lib/tasks';
   import { fmtShortDate, fmtSpan, fmtTime } from '../../lib/format';
-  import { checklistLabel, progressLabel } from '../../lib/subtasks';
+  import { checklistLabel, progressLabel, progressSegments } from '../../lib/subtasks';
   import StatusGlyph from './StatusGlyph.svelte';
   import PriorityMark from './PriorityMark.svelte';
   import LabelChip from './LabelChip.svelte';
@@ -63,6 +63,10 @@
     return `${fmtShortDate(new Date(t.due))}${t.dueHasTime ? `, ${fmtTime(new Date(t.due))}` : ''}`;
   });
   const progress = $derived(progressLabel(t));
+  const seg = $derived(progressSegments(t));
+  /** "2 of 4" (plus "1 in progress" when any) for the expand button's name. */
+  const progressName = $derived(seg.inProgress ? `${progress}, ${tr('subtasks.inProgress', { n: seg.inProgress })}` : progress);
+  const pct = (n: number) => `${(n / t.subtaskTotal) * 100}%`;
   const checklist = $derived(checklistLabel(t));
   const open = $derived(expanded.has(t.id) && children.length > 0);
   const toggle = () => (expanded.has(t.id) ? expanded.delete(t.id) : expanded.add(t.id));
@@ -89,7 +93,7 @@
     <div class="meta">
       {#if progress}
         <button class="count prog" aria-expanded={open} disabled={!children.length}
-          aria-label={`${open ? tr('subtasks.collapse') : tr('subtasks.expand')}, ${progress}`}
+          aria-label={`${open ? tr('subtasks.collapse') : tr('subtasks.expand')}, ${progressName}`}
           title={open ? tr('subtasks.collapse') : tr('subtasks.expand')}
           onclick={(e) => { e.stopPropagation(); toggle(); }} ondblclick={(e) => e.stopPropagation()}>
           <span class="caret" class:down={open} aria-hidden="true">▸</span>{progress}
@@ -107,7 +111,11 @@
     </div>
   {/if}
   {#if progress}
-    <div class="bar" aria-hidden="true"><span style="width:{((t.subtaskTotal - t.subtaskOpen) / t.subtaskTotal) * 100}%"></span></div>
+    <!-- Done (green), then in progress (amber), then the track for what is still to do. -->
+    <div class="bar" aria-hidden="true">
+      {#if seg.done}<span class="done" style="width:{pct(seg.done)}"></span>{/if}
+      {#if seg.inProgress}<span class="doing" style="width:{pct(seg.inProgress)}"></span>{/if}
+    </div>
   {/if}
   {#if open}
     <ul class="subs" aria-label={tr('subtasks.title')}>
@@ -153,8 +161,10 @@
   .caret.down { transform: rotate(90deg); }
   @media (prefers-reduced-motion: no-preference) { .caret { transition: transform 0.15s; } }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .bar { height: 3px; border-radius: 2px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
-  .bar span { display: block; height: 100%; background: var(--status-done); border-radius: 2px; }
+  .bar { display: flex; gap: 1px; height: 3px; border-radius: 2px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
+  .bar span { flex: none; height: 100%; border-radius: 2px; }
+  .bar .done { background: var(--status-done); }
+  .bar .doing { background: var(--warning); }
   .subs { list-style: none; margin: 6px 0 0 18px; padding: 4px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
   .subs li { display: flex; align-items: flex-start; gap: 6px; padding: 2px; border-radius: 6px; }
   .subs li:hover { background: var(--hover); }

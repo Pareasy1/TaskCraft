@@ -1,11 +1,11 @@
 <script lang="ts">
-  // "Complete the 2 open subtasks too?" — asked when a parent with open subtasks is ticked.
+  // "Complete the 2 open subtasks too?" — asked when a parent with open subtasks is ticked;
+  // "All subtasks of “X” are done. Mark the task as done too?" — once its last subtask is done.
   import { onDestroy, onMount } from 'svelte';
   import { t } from '../lib/i18n';
-  import { answerComplete, type CompleteChoice } from '../lib/complete.svelte';
-  import type { Task } from '../lib/types';
+  import { answerComplete, type CompleteAsk, type CompleteChoice } from '../lib/complete.svelte';
 
-  let { task, openChildren }: { task: Task; openChildren: number } = $props();
+  let { ask }: { ask: CompleteAsk } = $props();
 
   // Focus moves to the default button when it opens and back to where it came from when it closes.
   const opener = document.activeElement as HTMLElement | null;
@@ -34,14 +34,23 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (backdrop click cancels; Esc is the keyboard path) -->
 <div class="scrim" onclick={(e) => e.target === e.currentTarget && answer('cancel')}>
-  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cmp-title" aria-describedby="cmp-desc" tabindex="-1" bind:this={dialogEl} onkeydown={keys}>
-    <strong id="cmp-title">{task.title}</strong>
-    <p id="cmp-desc">{openChildren === 1 ? t('complete.askChildrenOne') : t('complete.askChildren', { n: openChildren })}</p>
-    <div class="actions">
-      <button class="btn" onclick={() => answer('cancel')}>{t('common.cancel')}</button>
-      <button class="btn" onclick={() => answer('only')}>{t('complete.onlyThis')}</button>
-      <button class="btn primary" onclick={() => answer('all')}>{t('complete.all')}</button>
-    </div>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby={ask.kind === 'children' ? 'cmp-title' : 'cmp-desc'} aria-describedby={ask.kind === 'children' ? 'cmp-desc' : undefined} tabindex="-1" bind:this={dialogEl} onkeydown={keys}>
+    {#if ask.kind === 'children'}
+      <strong id="cmp-title">{ask.task.title}</strong>
+      <p id="cmp-desc">{ask.openChildren === 1 ? t('complete.askChildrenOne') : t('complete.askChildren', { n: ask.openChildren })}</p>
+      <div class="actions">
+        <button class="btn" onclick={() => answer('cancel')}>{t('common.cancel')}</button>
+        <button class="btn" onclick={() => answer('only')}>{t('complete.onlyThis')}</button>
+        <button class="btn primary" onclick={() => answer('all')}>{t('complete.all')}</button>
+      </div>
+    {:else}
+      <!-- The question names the task, so it needs no title line of its own. -->
+      <p id="cmp-desc" class="only">{t('complete.askParent', { title: ask.task.title })}</p>
+      <div class="actions">
+        <button class="btn" onclick={() => answer('cancel')}>{t('complete.no')}</button>
+        <button class="btn primary" onclick={() => answer('yes')}>{t('complete.yes')}</button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -58,6 +67,7 @@
   }
   .dialog:focus { outline: none; }
   strong { display: block; overflow-wrap: anywhere; }
-  p { margin: 8px 0 14px; line-height: 1.4; }
+  p { margin: 8px 0 14px; line-height: 1.4; overflow-wrap: anywhere; }
+  p.only { margin-top: 0; }
   .actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 </style>

@@ -70,7 +70,7 @@ describe('taskInput', () => {
       completedAt: null, recurring: false, rrule: null, notes: 'n', color: '#fff', alerts: [], status: 'inProgress',
       labels: [{ id: 1, name: 'home', color: '#000' }], planId: 3, bucketId: 8, sortOrder: 20,
       parentId: null, priority: 'medium', start: null, startHasTime: false,
-      subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
+      subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
     };
     expect(taskInput(t)).toEqual({
       calendarId: 2, title: 'Pay rent', due: '2026-10-23T07:00:00.000Z', dueHasTime: true, tz: 'Europe/Rome',
@@ -86,7 +86,7 @@ describe('subtask fields', () => {
     completedAt: null, recurring: false, rrule: null, notes: null, color: '#fff', alerts: [], status: 'todo',
     labels: [], planId: 1, bucketId: 1, sortOrder: 10,
     parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true,
-    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
+    subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
   };
   it('taskInput carries priority, start and parent', () => {
     expect(taskInput(t)).toMatchObject({ parentId: 3, priority: 'urgent', start: '2026-10-20T07:00:00.000Z', startHasTime: true });

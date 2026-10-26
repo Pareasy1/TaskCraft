@@ -376,7 +376,7 @@
 
 <Toast />
 
-{#if pending.current}<CompleteDialog task={pending.current.task} openChildren={pending.current.openChildren} />{/if}
+{#if pending.current}<CompleteDialog ask={pending.current} />{/if}
 
 {#if templateSave.current}<TemplateNameDialog task={templateSave.current} onclose={closeSaveTemplate} />{/if}
 

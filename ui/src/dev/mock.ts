@@ -37,7 +37,7 @@ export function installMock() {
     alerts: []; status: 'todo' | 'inProgress' | 'done'; labels: { id: number; name: string; color: string }[];
     planId: number; bucketId: number; sortOrder: number;
     parentId: number | null; priority: 'urgent' | 'important' | 'medium' | 'low'; start: string | null; startHasTime: boolean;
-    subtaskOpen: number; subtaskTotal: number; checklistDone: number; checklistTotal: number; attachmentCount: number;
+    subtaskOpen: number; subtaskTotal: number; subtaskInProgress: number; checklistDone: number; checklistTotal: number; attachmentCount: number;
   };
   type MockItem = { id: number; taskId: number; text: string; done: boolean; sort: number };
   const task = (id: number, title: string, due: string | null, dueHasTime: boolean, status: MockTask['status'] = 'todo', lbl: number[] = []): MockTask => ({
@@ -45,7 +45,7 @@ export function installMock() {
     recurring: false, rrule: null, notes: null, color: '#3b82f6', alerts: [], status, labels: L(...lbl),
     planId: 1, bucketId: 1, sortOrder: id * 10,
     parentId: null, priority: 'medium', start: null, startHasTime: false,
-    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
+    subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
   });
   let all: MockTask[] = [
     task(10, 'Pay electricity bill', midnight(-2), false, 'todo', [1]),
@@ -82,6 +82,9 @@ export function installMock() {
     { ...task(30, 'Collect figures', midnight(1), false), parentId: 16, sortOrder: 10, priority: 'important' },
     { ...task(31, 'Write summary', midnight(2), false), parentId: 16, sortOrder: 20 },
     { ...task(32, 'Review with team', null, false, 'done'), parentId: 16, sortOrder: 30 },
+    // "Ship order #1042" (23) is still To do: starting one of these starts it.
+    { ...task(33, 'Pack the order', null, false), parentId: 23, planId: 2, bucketId: 6, sortOrder: 10 },
+    { ...task(34, 'Print the label', null, false), parentId: 23, planId: 2, bucketId: 6, sortOrder: 20 },
   );
   Object.assign(all.find((t) => t.id === 11)!, { priority: 'urgent' });
   Object.assign(all.find((t) => t.id === 12)!, { start: midnight(-1), due: midnight(1), priority: 'low' });
@@ -183,6 +186,7 @@ export function installMock() {
     const list = items.filter((i) => i.taskId === t.id);
     return Object.assign(t, {
       subtaskTotal: kids.length, subtaskOpen: kids.filter((k) => !k.completedAt).length,
+      subtaskInProgress: kids.filter((k) => k.status === 'inProgress').length,
       checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
       attachmentCount: atts.filter((a) => a.taskId === t.id).length,
     });
@@ -191,6 +195,9 @@ export function installMock() {
   const setStatus = (t: MockTask, status: MockTask['status']) => {
     t.status = status;
     t.completedAt = status === 'done' ? new Date().toISOString() : null;
+    // As the store does: a subtask put in progress starts a To do parent.
+    const parent = status === 'inProgress' && t.parentId != null ? all.find((x) => x.id === t.parentId) : undefined;
+    if (parent?.status === 'todo') parent.status = 'inProgress';
   };
   // A bucket decides its plan; a plan alone means its first bucket (placed last).
   const place = (t: MockTask, planId?: number | null, bucketId?: number | null) => {

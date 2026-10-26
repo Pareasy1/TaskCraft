@@ -3,7 +3,7 @@ import { api } from './api';
 import { taskInput } from './edit';
 import { STATUS_LABEL } from './tasks';
 import { notify } from './toast.svelte';
-import { requestComplete } from './complete.svelte';
+import { requestComplete, requestCompleteParent } from './complete.svelte';
 import { completeUndo, completionAsk, offerParentAfter } from './subtasks';
 import type { Priority, Task, TaskInput, TaskStatus } from './types';
 import { t } from './i18n';
@@ -11,12 +11,16 @@ import { t } from './i18n';
 /** A task's subtasks, its siblings (itself included) and its parent; see `statusCtx`. */
 export interface StatusCtx { children: Task[]; siblings: Task[]; parent: Task | null }
 
+/** How the parent gets completed after "Mark the task as done too?" (default: `changeStatus(parent, 'done')`). */
+export interface StatusHooks { completeParent?: (parent: Task) => Promise<void> }
+
 /**
  * Changes a task's status and offers Undo (which restores the task as it was, due date included).
  * With `ctx`, completing a parent with open subtasks asks first, and completing the last open
- * subtask offers to complete its parent.
+ * subtask asks whether to complete its parent too. A subtask put in progress starts a To do
+ * parent (the store does it); the toast then says so and its Undo puts the parent back.
  */
-export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx): Promise<void> {
+export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx, hooks: StatusHooks = {}): Promise<void> {
   const before = taskInput(task);
   if (s === 'done' && ctx && completionAsk(task, ctx.children) === 'askChildren') {
     const open = ctx.children.filter((c) => !c.completedAt);
@@ -31,18 +35,28 @@ export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx): 
       return;
     }
   }
+  const starting = s === 'inProgress' && task.status !== 'inProgress' ? await parentToStart(task, ctx) : null;
   await api.setTaskStatus(task.id, s);
-  const undo = () => api.updateTask(task.id, before);
-  const parent = ctx?.parent;
-  if (s === 'done' && ctx && parent && offerParentAfter(task, ctx.siblings, parent)) {
-    // Its subtasks are all done now, so completing it asks nothing.
-    notify(t('complete.allDone', { title: parent.title }), undo, {
-      label: t('complete.parent'),
-      run: () => changeStatus(parent, 'done'),
-    });
+  if (starting) {
+    // The subtask stays in progress; Undo only takes the parent back to To do.
+    notify(t('msg.parentStarted', { title: starting.title }), () => api.setTaskStatus(starting.id, 'todo'));
     return;
   }
-  notify(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }), undo);
+  notify(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }), () =>
+    api.updateTask(task.id, before),
+  );
+  const parent = ctx?.parent;
+  if (s === 'done' && ctx && parent && offerParentAfter(task, ctx.siblings, parent) && (await requestCompleteParent(parent))) {
+    // Its subtasks are all done now, so completing it asks nothing.
+    await (hooks.completeParent ?? ((p: Task) => changeStatus(p, 'done')))(parent);
+  }
+}
+
+/** The parent the store will move from To do to In progress when `task` starts, if any. */
+async function parentToStart(task: Task, ctx?: StatusCtx): Promise<Task | null> {
+  if (task.parentId == null) return null;
+  const parent = ctx?.parent ?? (await api.getTask(task.parentId).catch(() => null));
+  return parent && parent.status === 'todo' && !parent.completedAt ? parent : null;
 }
 
 /** Sets a task's priority, with Undo. */

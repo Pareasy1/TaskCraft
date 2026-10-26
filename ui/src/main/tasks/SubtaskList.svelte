@@ -22,7 +22,15 @@
     subtasks,
     onopen,
     onerror,
-  }: { parent: Task; subtasks: Task[]; onopen: (t: Task) => void; onerror: (m: string) => void } = $props();
+    oncompleteparent,
+  }: {
+    parent: Task;
+    subtasks: Task[];
+    onopen: (t: Task) => void;
+    onerror: (m: string) => void;
+    /** Yes to "Mark the task as done too?" after the last subtask is ticked here. */
+    oncompleteparent?: (parent: Task) => Promise<void>;
+  } = $props();
 
   let listEl = $state<HTMLUListElement | undefined>();
   let addEl = $state<HTMLInputElement | undefined>();
@@ -175,7 +183,7 @@
           ondragend={endDrag}
           oncontextmenu={(e) => { e.preventDefault(); menu.open(x, e.clientX, e.clientY, listEl?.querySelector<HTMLElement>(`[data-sub-menu="${x.id}"]`) ?? (e.currentTarget as HTMLElement)); }}
         >
-          <StatusGlyph status={x.status} size={15} onchange={(s) => run(() => changeStatus(x, s))} />
+          <StatusGlyph status={x.status} size={15} onchange={(s) => run(() => changeStatus(x, s, { children: [], siblings: subtasks, parent }, { completeParent: oncompleteparent }))} />
           <button class="title" onclick={() => onopen(x)} onkeydown={(e) => menu.openFromKey(e, x, listEl?.querySelector<HTMLElement>(`[data-sub-menu="${x.id}"]`) ?? undefined)}>{x.title}</button>
           {#each x.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
           {#if x.due}<span class="due">{due(x)}</span>{/if}

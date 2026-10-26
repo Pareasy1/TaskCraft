@@ -102,6 +102,8 @@ export interface Task {
   startHasTime: boolean;
   subtaskOpen: number;
   subtaskTotal: number;
+  /** Subtasks in progress (counted in `subtaskOpen` too). */
+  subtaskInProgress: number;
   checklistDone: number;
   checklistTotal: number;
   attachmentCount: number;
