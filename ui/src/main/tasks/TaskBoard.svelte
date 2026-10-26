@@ -146,7 +146,7 @@
               children={children?.get(t.id)} onchildstatus={onstatus} onchildopen={onopen}
               oncontextmenu={(e) => { e.preventDefault(); cardMenu.open(t, e.clientX, e.clientY, menuButton(t) ?? (e.currentTarget as HTMLElement)); }}>
               {#snippet actions()}
-                <button class="icon-btn more" data-card-menu={t.id} class:open={cardMenu.current?.target.id === t.id}
+                <button class="icon-btn card-more" data-card-menu={t.id} class:open={cardMenu.current?.target.id === t.id}
                   aria-label={tr('task.options', { title: t.title })} title={tr('task.options', { title: t.title })}
                   aria-haspopup="menu" aria-expanded={cardMenu.current?.target.id === t.id}
                   onclick={(e) => { e.stopPropagation(); cardMenu.openBelow(t, e.currentTarget, (x) => x.id === t.id); }}
@@ -193,8 +193,8 @@
   .n { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
   .cards { flex: 1; overflow-y: auto; padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 6px; }
   .slot.dragging { opacity: 0.45; }
-  .more { padding: 2px; opacity: 0; flex: none; }
-  .slot:hover .more, .more:focus-visible, .more.open { opacity: 1; }
+  .card-more { padding: 2px; opacity: 0; flex: none; }
+  .slot:hover .card-more, .card-more:focus-visible, .card-more.open { opacity: 1; }
   .empty { color: var(--muted); font-size: 12px; text-align: center; margin: 18px 8px; }
   .empty p { margin: 0; }
   .more { border: none; background: none; color: var(--accent); font-size: 12px; padding: 6px; border-radius: 6px; }

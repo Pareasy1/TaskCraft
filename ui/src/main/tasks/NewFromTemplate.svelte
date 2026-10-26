@@ -25,20 +25,26 @@
   let items = $state<TemplateMenuItem[]>([]);
   const label = $derived(context ? `${t('template.newFrom')} — ${context}` : t('template.newFrom'));
 
+  /** True while the templates load for the menu; a click meanwhile is ignored (it would close it again). */
+  let opening = $state(false);
   async function toggle(button: HTMLElement) {
+    if (opening) return;
     if (menu.current) return menu.close();
+    opening = true;
     try {
       // Fresh each time: templates change from other places (Settings, other windows).
       items = templateMenuItems(await api.listTemplates());
+      menu.openBelow(null, button, () => true);
     } catch (e) {
-      return onerror(errorMessage(e));
+      onerror(errorMessage(e));
+    } finally {
+      opening = false;
     }
-    menu.openBelow(null, button, () => true);
   }
 </script>
 
 <button class={compact ? 'icon-btn tpl compact' : 'tpl'} aria-label={label} title={t('template.newFrom')}
-  aria-haspopup="menu" aria-expanded={!!menu.current} class:open={!!menu.current}
+  aria-haspopup="menu" aria-expanded={!!menu.current || opening} class:open={!!menu.current || opening}
   onclick={(e) => toggle(e.currentTarget)}>
   <LayoutTemplate size={compact ? 13 : 14} aria-hidden="true" />
   {#if !compact}<span>{t('template.newFrom')}</span><ChevronDown size={13} aria-hidden="true" />{/if}

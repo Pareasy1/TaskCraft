@@ -235,22 +235,35 @@
   let title = $state('');
   /** A template picked from the footer's "New from template": the field then takes just its title. */
   let fromTemplate = $state<{ id: number; name: string } | null>(null);
+  /** A task from a template is being created (a second Enter meanwhile is ignored). */
+  let creating = false;
   async function createIn(b: Bucket) {
     const name = title.trim();
     if (!name) return;
-    title = '';
     const tpl = fromTemplate;
+    if (tpl) return createFromTemplateIn(b, tpl, name);
+    title = ''; // the field stays open for the next one
     try {
       // Same defaults as the Tasks page's quick entry: default calendar, local time zone, no date.
-      const input = await newTaskInput(name, plan.id, b.id);
-      if (!tpl) return void (await api.createTask(input));
-      const id = await api.createFromTemplate(tpl.id, input);
-      fromTemplate = null;
-      adding = null;
-      onopen(await api.getTask(id));
+      await api.createTask(await newTaskInput(name, plan.id, b.id));
     } catch (e) {
       if (!title) title = name; // give the typed text back
       onerror(errorMessage(e));
+    }
+  }
+  /** Creates the task from the template in this bucket and opens its details; the field keeps the title until then. */
+  async function createFromTemplateIn(b: Bucket, tpl: { id: number; name: string }, name: string) {
+    if (creating) return;
+    creating = true;
+    try {
+      const id = await api.createFromTemplate(tpl.id, await newTaskInput(name, plan.id, b.id));
+      title = '';
+      stopAdding();
+      onopen(await api.getTask(id));
+    } catch (e) {
+      onerror(errorMessage(e));
+    } finally {
+      creating = false;
     }
   }
   function startAdding(b: Bucket, tpl: { id: number; name: string } | null = null) {

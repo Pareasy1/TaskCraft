@@ -113,6 +113,11 @@
   let parsed = $state<ParsedItem | null>(null);
   /** A template picked from "New from template": the input then takes just its title. */
   let fromTemplate = $state<{ id: number; name: string } | null>(null);
+  // A template picked in one plan never creates in another: switching plans leaves template mode.
+  $effect.pre(() => {
+    void scope;
+    fromTemplate = null;
+  });
 
   // Re-evaluated on every data refresh so "overdue" follows the clock.
   let now = $derived.by(() => (void tasks, new Date()));
@@ -274,7 +279,10 @@
     input?.focus();
   }
   /** Creates the task from the template (this plan, its first bucket, no due) and opens its details. */
+  let creating = false;
   async function addFromTemplate(tpl: { id: number; name: string }) {
+    if (creating) return; // a second Enter while the first is in flight
+    creating = true;
     try {
       const id = await api.createFromTemplate(tpl.id, await newTaskInput(text.trim(), plan?.id ?? null));
       text = '';
@@ -282,6 +290,8 @@
       onopen(await api.getTask(id));
     } catch (err) {
       onerror(errorMessage(err));
+    } finally {
+      creating = false;
     }
   }
 
