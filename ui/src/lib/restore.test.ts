@@ -14,11 +14,13 @@ vi.mock('./api', () => ({
     restoreFileAttachment: vi.fn(async () => ({ id: nextId++ })),
     addLinkAttachment: vi.fn(async () => ({ id: nextId++ })),
     reorderAttachments: vi.fn(async () => {}),
+    setTaskStatus: vi.fn(async () => {}),
   },
   errorMessage: (e: unknown) => String(e),
 }));
 
 import { api } from './api';
+import { dismiss, toast } from './toast.svelte';
 import { restoreRemovedAttachment, restoreSubtask, restoreWithSubtasks, restoredOrder, snapshotSubtask, snapshotWithSubtasks } from './restore';
 import type { Attachment, ChecklistItem, Task } from './types';
 
@@ -136,5 +138,90 @@ describe('attachment remove undo', () => {
       ['addLinkAttachment', 1, 'https://example.com/spec', 'Spec'],
       ['listAttachments', 1],
     ]);
+  });
+});
+
+describe('undo never auto-starts the parent', () => {
+  const withStatus = (statuses: Record<number, Task['status']>) =>
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => ({ ...mk(id, id === 1 ? null : 1), status: statuses[id] ?? 'todo' }));
+
+  it('a To do parent with an In progress subtask is put back to To do last', async () => {
+    withStatus({ 2: 'inProgress' });
+    const snap = await snapshotWithSubtasks(1);
+    vi.clearAllMocks();
+    await restoreWithSubtasks(snap);
+    const all = calls();
+    expect(all.at(-1)).toEqual(['setTaskStatus', 100, 'todo']);
+    expect(all.filter((c) => c[0] === 'setTaskStatus')).toHaveLength(1);
+  });
+
+  it('leaves a parent alone when nothing could have started it', async () => {
+    withStatus({ 1: 'inProgress', 2: 'inProgress' });
+    const snap = await snapshotWithSubtasks(1);
+    vi.clearAllMocks();
+    await restoreWithSubtasks(snap);
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+
+  it('a restored In progress subtask puts its To do parent back to To do', async () => {
+    withStatus({ 2: 'inProgress' });
+    const snap = await snapshotSubtask(2, [2, 3]);
+    vi.clearAllMocks();
+    vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(3, 1), mk(100, 1)]);
+    await restoreSubtask(snap);
+    const all = calls();
+    expect(all[0]).toEqual(['getTask', 1]);
+    expect(all.at(-1)).toEqual(['setTaskStatus', 1, 'todo']);
+  });
+
+  it('a restored In progress subtask under an In progress parent changes nothing', async () => {
+    withStatus({ 1: 'inProgress', 2: 'inProgress' });
+    const snap = await snapshotSubtask(2, [2, 3]);
+    vi.clearAllMocks();
+    vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(3, 1), mk(100, 1)]);
+    await restoreSubtask(snap);
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('undo with attachments that are gone', () => {
+  it('skips a purged file, keeps going, and says which ones are missing once', async () => {
+    const snap = await snapshotWithSubtasks(1);
+    vi.clearAllMocks();
+    vi.mocked(api.restoreFileAttachment).mockRejectedValue(new Error('not_found'));
+    try {
+      await restoreWithSubtasks(snap);
+      const names = calls().map((c) => c[0]);
+      // Every subtask still came back.
+      expect(names.filter((n) => n === 'createTask')).toHaveLength(3);
+      expect(api.addLinkAttachment).toHaveBeenCalledTimes(1);
+      expect(api.restoreFileAttachment).toHaveBeenCalledTimes(2);
+      expect(toast.current?.message).toBe('Restored without brief.pdf, photo.jpg.');
+    } finally {
+      vi.mocked(api.restoreFileAttachment).mockReset().mockImplementation(async () => ({ id: nextId++ }) as Attachment);
+      dismiss();
+    }
+  });
+
+  it('a restored subtask also skips a purged file and says so', async () => {
+    const snap = await snapshotSubtask(2, [2, 3]);
+    vi.clearAllMocks();
+    vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(3, 1), mk(100, 1)]);
+    vi.mocked(api.restoreFileAttachment).mockRejectedValue(new Error('not_found'));
+    try {
+      await restoreSubtask(snap);
+      expect(api.reorderSubtasks).toHaveBeenCalledWith(1, [100, 3]);
+      expect(toast.current?.message).toBe('Restored without photo.jpg.');
+    } finally {
+      vi.mocked(api.restoreFileAttachment).mockReset().mockImplementation(async () => ({ id: nextId++ }) as Attachment);
+      dismiss();
+    }
+  });
+
+  it('no toast when everything came back', async () => {
+    const snap = await snapshotWithSubtasks(1);
+    vi.clearAllMocks();
+    await restoreWithSubtasks(snap);
+    expect(toast.current).toBeNull();
   });
 });

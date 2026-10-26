@@ -18,7 +18,7 @@ export interface StatusHooks { completeParent?: (parent: Task) => Promise<void> 
  * Changes a task's status and offers Undo (which restores the task as it was, due date included).
  * With `ctx`, completing a parent with open subtasks asks first, and completing the last open
  * subtask asks whether to complete its parent too. A subtask put in progress starts a To do
- * parent (the store does it); the toast then says so and its Undo puts the parent back.
+ * parent (the store does it); the toast then says so and its Undo puts both back.
  */
 export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx, hooks: StatusHooks = {}): Promise<void> {
   const before = taskInput(task);
@@ -38,8 +38,11 @@ export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx, h
   const starting = s === 'inProgress' && task.status !== 'inProgress' ? await parentToStart(task, ctx) : null;
   await api.setTaskStatus(task.id, s);
   if (starting) {
-    // The subtask stays in progress; Undo only takes the parent back to To do.
-    notify(t('msg.parentStarted', { title: starting.title }), () => api.setTaskStatus(starting.id, 'todo'));
+    // Undo puts the subtask back as it was, then the parent back to To do.
+    notify(t('msg.parentStarted', { title: starting.title }), async () => {
+      await api.updateTask(task.id, before);
+      await api.setTaskStatus(starting.id, 'todo');
+    });
     return;
   }
   notify(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }), () =>

@@ -123,14 +123,17 @@ describe('changeStatus: a subtask in progress starts its parent', () => {
   const parent = mk(1, null, false, 'Ship Rafael');
   const sub = mk(2, 1);
 
-  it('a To do parent: toast says it is now In progress; Undo restores only the parent', async () => {
+  it('a To do parent: toast says it is now In progress; Undo restores the subtask and the parent', async () => {
     await changeStatus(sub, 'inProgress', { children: [], siblings: [sub], parent });
     expect(api.setTaskStatus).toHaveBeenCalledWith(2, 'inProgress');
     expect(toast.current?.message).toBe('Ship Rafael is now In progress');
     expect(toast.current?.canUndo).toBe(true);
     await undo();
+    expect(api.updateTask).toHaveBeenCalledWith(2, expect.objectContaining({ title: 'T2', status: 'todo' }));
     expect(api.setTaskStatus).toHaveBeenLastCalledWith(1, 'todo');
-    expect(api.updateTask).not.toHaveBeenCalled();
+    // The subtask first, so nothing can start the parent again afterwards.
+    expect(vi.mocked(api.updateTask).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(api.setTaskStatus).mock.invocationCallOrder.at(-1)!);
   });
 
   it('without context it fetches the parent', async () => {
