@@ -3,7 +3,7 @@
   import { Ellipsis, ExternalLink, FileText, FolderOpen, Link, Paperclip, Plus } from 'lucide-svelte';
   import { t } from '../../lib/i18n';
   import { api, errorMessage, knownErrorMessage, onItemsChanged } from '../../lib/api';
-  import { formatSize, isWebUrl, notAddedMessage, urlHost } from '../../lib/attachments';
+  import { formatSize, isWebUrl, notAddedMessage, refuseFileDrop, urlHost } from '../../lib/attachments';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { dropIndex, insertAt } from '../../lib/plans';
   import { restoreRemovedAttachment } from '../../lib/restore';
@@ -227,7 +227,8 @@
   const menu = new PopupMenu<Attachment>();
 </script>
 
-<section class="attachments" aria-label={t('attachments.title')}>
+<!-- OS files dropped here must not make the webview open them (see refuseFileDrop). -->
+<section class="attachments" aria-label={t('attachments.title')} ondragover={refuseFileDrop} ondrop={refuseFileDrop}>
   <h3>{t('attachments.title')}{#if items.length}<span class="n">{items.length}</span>{/if}</h3>
   {#if items.length}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions (drag is a mouse shortcut; the row menu is the keyboard path) -->

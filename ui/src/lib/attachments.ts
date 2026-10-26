@@ -51,3 +51,16 @@ export function notAddedMessage(
   }
   return [...byReason].map(([why, names]) => sentence(names.join(', '), why)).join(' ');
 }
+
+/**
+ * For a drag carrying OS files (dragover/drop): stops the webview from navigating to the file
+ * and shows the "no drop" cursor. Tauri's own file-drop handler is off for the main window, so
+ * files are added with the Add file button. Returns whether it was a file drag.
+ */
+export function refuseFileDrop(e: DragEvent): boolean {
+  const dt = e.dataTransfer;
+  if (!dt || !Array.from(dt.types ?? []).includes('Files')) return false;
+  e.preventDefault();
+  dt.dropEffect = 'none';
+  return true;
+}

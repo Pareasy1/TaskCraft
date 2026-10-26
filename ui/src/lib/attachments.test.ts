@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSize, isWebUrl, notAddedMessage, urlHost } from './attachments';
+import { formatSize, isWebUrl, notAddedMessage, refuseFileDrop, urlHost } from './attachments';
 
 describe('formatSize', () => {
   it('uses bytes below 1 KB', () => {
@@ -57,5 +57,32 @@ describe('notAddedMessage', () => {
     expect(notAddedMessage([
       { name: 'x.bin', code: 'io' }, { name: 'y.bin', code: 'db' }, { name: 'a.mov', code: 'attachment_too_large' },
     ], known, fmt, '<not copied>')).toBe('x.bin, y.bin: <not copied> a.mov: <too large>');
+  });
+});
+
+describe('refuseFileDrop', () => {
+  const ev = (types: string[]) => {
+    const dataTransfer = { types, dropEffect: 'copy' as DataTransfer['dropEffect'] };
+    let prevented = false;
+    return {
+      e: { dataTransfer, preventDefault: () => { prevented = true; } } as unknown as DragEvent,
+      dataTransfer,
+      prevented: () => prevented,
+    };
+  };
+  it('blocks a drag carrying OS files so the webview never opens the file', () => {
+    const x = ev(['Files']);
+    expect(refuseFileDrop(x.e)).toBe(true);
+    expect(x.prevented()).toBe(true);
+    expect(x.dataTransfer.dropEffect).toBe('none');
+  });
+  it('leaves an in-app row drag alone', () => {
+    const x = ev(['text/plain']);
+    expect(refuseFileDrop(x.e)).toBe(false);
+    expect(x.prevented()).toBe(false);
+    expect(x.dataTransfer.dropEffect).toBe('copy');
+  });
+  it('copes with no dataTransfer', () => {
+    expect(refuseFileDrop({ preventDefault() {} } as unknown as DragEvent)).toBe(false);
   });
 });
