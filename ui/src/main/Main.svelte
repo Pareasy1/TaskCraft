@@ -77,9 +77,8 @@
     return [days[0], addDays(days[days.length - 1], 1)] as const;
   });
   let title = $derived.by(() => {
-    if (area === 'grid') return t('area.grid');
-    if (area === 'tasks') {
-      // The area switcher already says "Tasks"; the title says how many are open.
+    if (area !== 'calendar') {
+      // The area switcher already names the area; the title says how many are open.
       if (scopePlan) return scopePlan.name;
       const n = allTasks.filter((x) => !x.completedAt && x.parentId == null).length; // top-level, like plan counts
       return n === 0 ? t('tasks.openNone') : n === 1 ? t('tasks.openOne') : t('tasks.openMany', { n });
@@ -281,10 +280,16 @@
     const n = el as HTMLElement | null;
     return !!n && (n.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(n.tagName) || !!n.closest?.('[contenteditable]'));
   }
+  /** True while a dialog or menu is open, or the key came from inside one. */
+  function inOverlay(el: EventTarget | null) {
+    const n = el as HTMLElement | null;
+    return !!target || settingsOpen || !!scopePrompt || !!pending.current || !!templateSave.current ||
+      !!n?.closest?.('[role=dialog], [role=alertdialog], [role=menu]') || !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]');
+  }
   function keys(e: KeyboardEvent) {
     if (e.key === 'Escape' && !target && !settingsOpen && !scopePrompt) return clearSelection();
     const tag = (e.target as HTMLElement)?.tagName;
-    const go = shortcutFor({ key: e.key, mod: isMod(e), inTextField: inTextField(e.target) }, area);
+    const go = shortcutFor({ key: e.key, mod: isMod(e), inTextField: inTextField(e.target), inOverlay: inOverlay(e.target), ctrl: e.ctrlKey, meta: e.metaKey, repeat: e.repeat }, area);
     if (!isMod(e) && !e.altKey && !e.shiftKey && go) {
       if (go.mode) mode = go.mode;
       e.preventDefault();

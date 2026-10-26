@@ -26,6 +26,22 @@ describe('shortcutFor', () => {
   });
 });
 
+describe('shortcutFor letter guards', () => {
+  it('ignores letters while an overlay is open', () => {
+    expect(shortcutFor({ ...k('d'), inOverlay: true }, 'calendar')).toBeNull();
+  });
+  it('ignores letters with ctrl or meta held', () => {
+    expect(shortcutFor({ ...k('d'), ctrl: true }, 'calendar')).toBeNull();
+    expect(shortcutFor({ ...k('d'), meta: true }, 'calendar')).toBeNull();
+  });
+  it('ignores auto-repeat', () => {
+    expect(shortcutFor({ ...k('d'), repeat: true }, 'calendar')).toBeNull();
+  });
+  it('area shortcuts still work with an overlay flag absent', () => {
+    expect(shortcutFor(k('3', true), 'calendar')).toEqual({ area: 'grid' });
+  });
+});
+
 describe('calendar mode storage', () => {
   beforeEach(() => {
     const m = new Map<string, string>();

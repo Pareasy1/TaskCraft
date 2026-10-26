@@ -25,11 +25,11 @@ const LETTERS: Record<string, CalendarMode> = { d: 'day', w: 'week', m: 'month' 
 
 /** What a key press changes: Mod+1/2/3 pick the area (Mod+4 is reserved); D/W/M pick the calendar mode. */
 export function shortcutFor(
-  e: { key: string; mod: boolean; inTextField: boolean },
+  e: { key: string; mod: boolean; inTextField: boolean; inOverlay?: boolean; ctrl?: boolean; meta?: boolean; repeat?: boolean },
   area: Area,
 ): { area?: Area; mode?: CalendarMode } | null {
   if (e.mod) return AREAS[e.key] ? { area: AREAS[e.key] } : null;
-  if (e.inTextField || area !== 'calendar') return null;
+  if (e.inTextField || e.inOverlay || e.ctrl || e.meta || e.repeat || area !== 'calendar') return null;
   const mode = LETTERS[e.key.toLowerCase()];
   return mode ? { mode } : null;
 }
