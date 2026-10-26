@@ -1054,9 +1054,16 @@ pub fn duplicate_task_impl(st: &AppState, id: i64) -> CmdResult<DuplicateResult>
     Ok(r)
 }
 
+/// Async so the copy runs off the main thread: duplicating large
+/// attachments must not freeze the window.
 #[tauri::command]
-pub fn duplicate_task(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<DuplicateResult> {
-    let r = duplicate_task_impl(&st, id)?;
+pub async fn duplicate_task(app: AppHandle, id: i64) -> CmdResult<DuplicateResult> {
+    let handle = app.clone();
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        duplicate_task_impl(&handle.state::<AppState>(), id)
+    })
+    .await
+    .map_err(|e| CmdError::new("internal", e.to_string()))??;
     changed(&app);
     Ok(r)
 }
