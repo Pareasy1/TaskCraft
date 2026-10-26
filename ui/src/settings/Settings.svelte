@@ -1,11 +1,12 @@
 <script lang="ts">
   import { hotkeyLabel, isMac } from '../lib/platform';
   import { t } from '../lib/i18n';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
-  import { Plus, Trash2, X } from 'lucide-svelte';
+  import { Pencil, Plus, Trash2, X } from 'lucide-svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
-  import type { Calendar, Plan, Settings } from '../lib/types';
+  import type { Calendar, Plan, Settings, TemplateInfo } from '../lib/types';
+  import { nameConflict, templateMenuItems } from '../lib/templates';
 
   let settings = $state<Settings | null>(null);
   let calendars = $state<Calendar[]>([]);
@@ -16,10 +17,13 @@
   let recording = $state(false);
   let deleting = $state<{ cal: Calendar; moveTo: number } | null>(null);
   let newName = $state('');
+  let templates = $state<TemplateInfo[]>([]);
 
   async function load() {
     try {
-      [settings, calendars, plans, defaultPlan] = await Promise.all([api.getSettings(), api.listCalendars(), api.listPlans(), api.getDefaultPlan()]);
+      [settings, calendars, plans, defaultPlan, templates] = await Promise.all([
+        api.getSettings(), api.listCalendars(), api.listPlans(), api.getDefaultPlan(), api.listTemplates(),
+      ]);
     } catch (e) {
       error = errorMessage(e);
     }
@@ -116,6 +120,74 @@
     }
   }
 
+  // ---- templates ----
+  let tplRows = $derived(templateMenuItems(templates));
+  let renaming = $state<number | null>(null);
+  let tplDraft = $state('');
+  let tplDeleting = $state<number | null>(null);
+  let templatesEl = $state<HTMLDivElement | undefined>();
+  const focusTpl = (sel: string) => tick().then(() => templatesEl?.querySelector<HTMLElement>(sel)?.focus());
+
+  function startRenameTemplate(x: { id: number; name: string }) {
+    tplDeleting = null;
+    tplDraft = x.name;
+    renaming = x.id;
+    focusTpl('.tpl-name');
+  }
+  async function commitRenameTemplate(x: { id: number; name: string }) {
+    if (renaming !== x.id) return;
+    const name = tplDraft.trim();
+    renaming = null;
+    focusTpl(`[data-tpl-rename="${x.id}"]`);
+    if (!name || name === x.name) return; // empty reverts
+    if (nameConflict(name, templates, x.id)) return void (error = t('error.duplicate'));
+    if ([...name].length > 60) return void (error = t('error.template_name'));
+    try {
+      await api.renameTemplate(x.id, name);
+      error = '';
+      flash(t('settings.saved'));
+    } catch (e) {
+      error = errorMessage(e);
+    }
+    await load();
+  }
+  function renameTemplateKeys(e: KeyboardEvent, x: { id: number; name: string }) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRenameTemplate(x);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation(); // cancels the rename, not the Settings dialog
+      renaming = null;
+      focusTpl(`[data-tpl-rename="${x.id}"]`);
+    }
+  }
+  function askDeleteTemplate(id: number) {
+    renaming = null;
+    tplDeleting = id;
+    focusTpl('.tpl-confirm .cancel');
+  }
+  function cancelDeleteTemplate() {
+    const id = tplDeleting;
+    tplDeleting = null;
+    focusTpl(`[data-tpl-delete="${id}"]`);
+  }
+  async function deleteTemplate(id: number) {
+    const ids = tplRows.flatMap((r) => (r.kind === 'template' ? [r.id] : []));
+    const i = ids.indexOf(id);
+    const next = ids[i + 1] ?? ids[i - 1];
+    tplDeleting = null;
+    try {
+      await api.deleteTemplate(id);
+      error = '';
+    } catch (e) {
+      error = errorMessage(e);
+    }
+    await load();
+    // The row is gone: focus its neighbour's Delete, or the section when none is left.
+    focusTpl(next != null ? `[data-tpl-delete="${next}"]` : '.group');
+  }
+
   onMount(() => {
     load();
     const un = onItemsChanged(load);
@@ -205,6 +277,40 @@
     </section>
 
     <section>
+      <h2 id="tpl-heading">{t('settings.templates')}</h2>
+      <div class="templates" bind:this={templatesEl}>
+      <div class="group" tabindex="-1" role="group" aria-labelledby="tpl-heading">
+      {#each tplRows as x (x.kind === 'template' ? x.id : 'empty')}
+        {#if x.kind === 'empty'}
+          <p class="hint empty">{x.label}</p>
+        {:else}
+          <div class="tpl">
+            {#if renaming === x.id}
+              <input class="field tpl-name" aria-label={t('template.name')} maxlength="60" bind:value={tplDraft}
+                onkeydown={(e) => renameTemplateKeys(e, x)} onblur={() => commitRenameTemplate(x)} />
+            {:else}
+              <span class="tpl-title"><span class="nm">{x.name}</span>{#if x.detail}<span class="hint">{x.detail}</span>{/if}</span>
+            {/if}
+            <button class="icon-btn" data-tpl-rename={x.id} title={t('template.rename')} aria-label={t('template.renameNamed', { name: x.name })}
+              onclick={() => startRenameTemplate(x)}><Pencil size={13} aria-hidden="true" /></button>
+            <button class="icon-btn" data-tpl-delete={x.id} title={t('common.delete')} aria-label={t('template.deleteNamed', { name: x.name })}
+              onclick={() => askDeleteTemplate(x.id)}><Trash2 size={14} aria-hidden="true" /></button>
+          </div>
+          {#if tplDeleting === x.id}
+            <div class="confirm tpl-confirm" role="group" aria-label={t('template.deleteNamed', { name: x.name })}>
+              <span>{t('template.deleteConfirm', { name: x.name })}</span>
+              <span class="spacer"></span>
+              <button class="btn cancel" onclick={cancelDeleteTemplate}>{t('common.cancel')}</button>
+              <button class="btn danger" onclick={() => deleteTemplate(x.id)}>{t('common.delete')}</button>
+            </div>
+          {/if}
+        {/if}
+      {/each}
+      </div>
+      </div>
+    </section>
+
+    <section>
       <h2>{t('settings.data')}</h2>
       <div class="group">
       <div class="row">
@@ -234,6 +340,15 @@
   .cal input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
   .cal input[type='color']::-webkit-color-swatch { border: none; border-radius: 50%; }
   .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px dashed var(--muted); justify-self: center; }
+  .tpl { display: grid; grid-template-columns: 1fr 28px 28px; gap: 4px; align-items: center; min-height: 40px; padding: 4px 0; }
+  .tpl-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tpl-title .hint { flex: none; font-variant-numeric: tabular-nums; }
+  .group:focus { outline: none; }
+  .empty { margin: 0; padding: 12px 0; }
+  .spacer { flex: 1; }
+  /* The question on its own line, the buttons under it on the right. */
+  .tpl-confirm > span:first-child { flex-basis: 100%; }
   .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; }
   .small { width: auto; }
   .hint { color: var(--muted); font-size: 12px; }

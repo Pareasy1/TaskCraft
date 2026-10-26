@@ -6,7 +6,7 @@
 
 <script lang="ts">
   import { t } from '../lib/i18n';
-  import { Rows3, Columns3, ChevronDown } from 'lucide-svelte';
+  import { Rows3, Columns3, ChevronDown, X } from 'lucide-svelte';
   import { PRIORITIES, type Bucket, type ParsedItem, type Plan, type Priority, type Task, type TaskLabel, type TaskStatus } from '../lib/types';
   import { api, errorMessage } from '../lib/api';
   import { describeParsed, dueInGroup, fmtDayHeading } from '../lib/format';
@@ -18,13 +18,14 @@
   import { PopupMenu } from '../lib/menu.svelte';
   import Menu from './Menu.svelte';
   import HighlightInput from '../quick/HighlightInput.svelte';
-  import { changePriority, changeStatus } from '../lib/actions';
+  import { changePriority, changeStatus, newTaskInput } from '../lib/actions';
   import { flattenRows, nestGroups, priorityColumns, statusCtx, topLevel } from '../lib/subtasks';
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard, { type BoardColumn } from './tasks/TaskBoard.svelte';
   import BucketBoard from './tasks/BucketBoard.svelte';
   import Doodle from './tasks/Doodle.svelte';
   import LabelChip from './tasks/LabelChip.svelte';
+  import NewFromTemplate from './tasks/NewFromTemplate.svelte';
 
   let {
     tasks,
@@ -110,6 +111,13 @@
   let status = $state<StatusFilter>('any');
   let text = $state('');
   let parsed = $state<ParsedItem | null>(null);
+  /** A template picked from "New from template": the input then takes just its title. */
+  let fromTemplate = $state<{ id: number; name: string } | null>(null);
+  // A template picked in one plan never creates in another: switching plans leaves template mode.
+  $effect.pre(() => {
+    void scope;
+    fromTemplate = null;
+  });
 
   // Re-evaluated on every data refresh so "overdue" follows the clock.
   let now = $derived.by(() => (void tasks, new Date()));
@@ -226,7 +234,8 @@
   $effect(() => {
     const t = text;
     clearTimeout(timer);
-    if (!t.trim()) return void (parsed = null);
+    // A template's title is taken as typed, so there is nothing to parse.
+    if (!t.trim() || fromTemplate) return void (parsed = null);
     timer = setTimeout(async () => {
       try {
         parsed = await api.parsePreview(t, true);
@@ -237,8 +246,9 @@
   });
 
   async function add(e: KeyboardEvent) {
-    if (e.key === 'Escape') return void (text = '');
+    if (e.key === 'Escape') return void ((text = ''), (fromTemplate = null));
     if (e.key !== 'Enter' || !text.trim()) return;
+    if (fromTemplate) return addFromTemplate(fromTemplate);
     try {
       const typed = text;
       const scopePlan = plan;
@@ -257,6 +267,31 @@
       }
     } catch (err) {
       onerror(errorMessage(err));
+    }
+  }
+
+  function pickTemplate(tpl: { id: number; name: string }) {
+    fromTemplate = tpl;
+    input?.focus();
+  }
+  function stopTemplate() {
+    fromTemplate = null;
+    input?.focus();
+  }
+  /** Creates the task from the template (this plan, its first bucket, no due) and opens its details. */
+  let creating = false;
+  async function addFromTemplate(tpl: { id: number; name: string }) {
+    if (creating) return; // a second Enter while the first is in flight
+    creating = true;
+    try {
+      const id = await api.createFromTemplate(tpl.id, await newTaskInput(text.trim(), plan?.id ?? null));
+      text = '';
+      fromTemplate = null;
+      onopen(await api.getTask(id));
+    } catch (err) {
+      onerror(errorMessage(err));
+    } finally {
+      creating = false;
     }
   }
 
@@ -290,9 +325,14 @@
 <div class="page" class:board={layout === 'board'}>
   <div class="head">
     <div class="add">
-      <HighlightInput label={t('common.newTask')} bind:value={text} bind:input spans={parsed?.spans ?? []} placeholder={t('tasks.addPlaceholder')} onkeydown={add} />
+      <HighlightInput label={fromTemplate ? t('template.titleFor', { name: fromTemplate.name }) : t('common.newTask')} bind:value={text} bind:input
+        spans={fromTemplate ? [] : parsed?.spans ?? []}
+        placeholder={fromTemplate ? t('template.titleFor', { name: fromTemplate.name }) : t('tasks.addPlaceholder')} onkeydown={add} />
       <div class="hint">
-        {#if parsed}
+        {#if fromTemplate}
+          <span class="from">{t('template.using', { name: fromTemplate.name })}<button class="icon-btn" aria-label={t('template.cancelNamed', { name: fromTemplate.name })}
+            title={t('template.cancelNamed', { name: fromTemplate.name })} onclick={stopTemplate}><X size={11} aria-hidden="true" /></button></span>
+        {:else if parsed}
           <strong>{parsed.title || t('common.untitled')}</strong>
           <span>{describeParsed(parsed)}</span>
           {#each parsed.tags as tag}<LabelChip name={tag} color={labelColor(tag)} />{/each}
@@ -301,6 +341,7 @@
         {/if}
       </div>
     </div>
+    <div class="from-template"><NewFromTemplate onpick={pickTemplate} {onerror} /></div>
     <div class="layout" role="radiogroup" aria-label={t('tasks.layout')}>
       <button role="radio" aria-checked={layout === 'list'} class:on={layout === 'list'} onclick={() => (layout = 'list')} title={t('tasks.list')}><Rows3 size={15} /><span>{t('tasks.list')}</span></button>
       <button role="radio" aria-checked={layout === 'board'} class:on={layout === 'board'} onclick={() => (layout = 'board')} title={t('tasks.board')}><Columns3 size={15} /><span>{t('tasks.board')}</span></button>
@@ -338,7 +379,7 @@
         <BucketBoard {plan} {buckets} tasks={boardTasks} {now} activeLabels={active} onstatus={setStatus} {onopen} onlabel={toggleLabel} {onerror} {onreload}
           {children} onpriority={setPriority} />
       {:else}
-        <TaskBoard {columns} {now} activeLabels={active} plans={plan ? [] : plans} onstatus={setStatus} {onopen} onlabel={toggleLabel} {children}
+        <TaskBoard {columns} {now} activeLabels={active} plans={plan ? [] : plans} onstatus={setStatus} {onopen} onlabel={toggleLabel} {onerror} {children}
           ondrop={statusBoard ? dropOnStatus : priorityBoard ? dropOnPriority : undefined}
           onkeymove={statusBoard ? stepStatus : priorityBoard ? stepPriority : undefined}
           stateOf={priorityBoard ? (x) => t(`priority.${x.priority}`) : undefined} />
@@ -379,6 +420,9 @@
   .add { flex: 1; min-width: 0; }
   .hint { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); padding: 6px 4px 0; min-height: 22px; white-space: nowrap; overflow: hidden; }
   .hint strong { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .from-template { flex: none; margin-top: 7px; }
+  .from { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 0 1px 0 7px; overflow: hidden; }
+  .from .icon-btn { padding: 2px; color: inherit; }
   .layout { display: flex; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 9px; padding: 2px; flex: none; margin-top: 3px; }
   .layout button { display: flex; align-items: center; gap: 5px; border: none; background: none; padding: 5px 10px; border-radius: 7px; color: var(--muted); }
   .layout button.on { background: var(--surface-strong); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
@@ -410,6 +454,7 @@
   @media (max-width: 640px) {
     .page { padding: 12px 16px 0; }
     .layout span { display: none; }
+    .from-template :global(.tpl span) { display: none; }
     .status { margin-left: 0; }
   }
 </style>

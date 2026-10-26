@@ -17,6 +17,9 @@ pub struct ParseOptions {
     /// Plan names that `/plan` quick-entry hints can route a task to.
     #[serde(default)]
     pub plans: Vec<String>,
+    /// Template names that `+template` quick-entry hints can pick.
+    #[serde(default)]
+    pub templates: Vec<String>,
 }
 
 impl Default for ParseOptions {
@@ -26,6 +29,7 @@ impl Default for ParseOptions {
             calendars: vec!["Personal".into(), "Work".into()],
             date_order: DateOrder::DayMonth,
             plans: vec![],
+            templates: vec![],
         }
     }
 }
@@ -62,6 +66,8 @@ pub enum Label {
     /// `#word` on a task.
     Tag,
     Plan,
+    /// `+template` hint on a task.
+    Template,
     /// `!urgent` style priority word on a task.
     Priority,
 }
@@ -177,6 +183,8 @@ pub struct ParsedItem {
     /// Label names from `#word` tokens (tasks only), without the `#`.
     pub tags: Vec<String>,
     pub plan: Option<String>,
+    /// Exact name of the template picked by the first `+template` hint.
+    pub template: Option<String>,
     /// From the first `!urgent`-style word (tasks only).
     pub priority: Option<ParsedPriority>,
     pub spans: Vec<Span>,

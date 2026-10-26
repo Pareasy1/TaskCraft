@@ -3,7 +3,7 @@
 use crate::model::Result;
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 4;
+pub const CURRENT_VERSION: i64 = 5;
 
 const V1: &str = "
 CREATE TABLE calendars(
@@ -93,6 +93,24 @@ CREATE INDEX tasks_parent ON tasks(parent_id, sort_order);
 CREATE INDEX checklist_task ON checklist_items(task_id, sort);
 ";
 
+/// Templates, task attachments and the delayed file-delete queue.
+const V5: &str = "
+CREATE TABLE templates(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, body TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE attachments(
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('file','link')),
+  name TEXT NOT NULL,
+  stored TEXT,
+  url TEXT,
+  size INTEGER,
+  created_at TEXT NOT NULL,
+  sort REAL NOT NULL
+);
+CREATE INDEX attachments_task ON attachments(task_id, sort);
+CREATE TABLE pending_file_deletes(stored TEXT PRIMARY KEY, delete_after_utc TEXT NOT NULL);
+";
+
 pub fn version(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
 }
@@ -128,6 +146,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if v < 4 {
         tx.execute_batch(V4)?;
+    }
+    if v < 5 {
+        tx.execute_batch(V5)?;
     }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;

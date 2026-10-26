@@ -10,6 +10,8 @@ pub struct AppState {
     pub settings_path: Option<PathBuf>,
     /// UI language, reported by the webview at startup.
     pub lang: RwLock<crate::i18n::Lang>,
+    /// Folder holding the database and `attachments/`.
+    pub data_dir: PathBuf,
 }
 
 impl AppState {
@@ -22,17 +24,33 @@ impl AppState {
             settings: RwLock::new(settings),
             settings_path: Some(settings_path),
             lang: RwLock::default(),
+            data_dir: data_dir.to_path_buf(),
         })
     }
 
+    /// In-memory store whose data folder is a unique temp path that is never
+    /// created unless a test writes attachments (use `in_memory_at` for that).
     #[cfg(test)]
     pub fn in_memory() -> AppState {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "taskcraft-test-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        AppState::in_memory_at(&dir)
+    }
+
+    #[cfg(test)]
+    pub fn in_memory_at(data_dir: &std::path::Path) -> AppState {
         let store = Store::open_in_memory().expect("in-memory store");
         AppState {
             store: Mutex::new(store),
             settings: RwLock::new(Settings::default()),
             settings_path: None,
             lang: RwLock::default(),
+            data_dir: data_dir.to_path_buf(),
         }
     }
 }

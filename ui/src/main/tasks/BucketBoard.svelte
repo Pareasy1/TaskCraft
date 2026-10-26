@@ -5,6 +5,8 @@
   // `t` names a task throughout this component, so the translator is `tr`.
   import { t as tr } from '../../lib/i18n';
   import { api, errorMessage } from '../../lib/api';
+  import { newTaskInput } from '../../lib/actions';
+  import { askSaveTemplate, duplicate } from '../../lib/taskCommands.svelte';
   import { bucketColumns, dropIndex, dropNeighbours, insertAt, uniqueName } from '../../lib/plans';
   import { PopupMenu } from '../../lib/menu.svelte';
   import { PRIORITIES, type Bucket, type DeleteMode, type Plan, type Priority, type Task, type TaskStatus } from '../../lib/types';
@@ -12,6 +14,7 @@
   import Doodle from './Doodle.svelte';
   import Menu from '../Menu.svelte';
   import DeleteDialog from '../plans/DeleteDialog.svelte';
+  import NewFromTemplate from './NewFromTemplate.svelte';
 
   let {
     plan,
@@ -230,28 +233,64 @@
   // ── New task at the bottom of a column ──
   let adding = $state<number | null>(null);
   let title = $state('');
+  /** A template picked from the footer's "New from template": the field then takes just its title. */
+  let fromTemplate = $state<{ id: number; name: string } | null>(null);
+  /** A task from a template is being created (a second Enter meanwhile is ignored). */
+  let creating = false;
   async function createIn(b: Bucket) {
     const name = title.trim();
     if (!name) return;
-    title = '';
+    const tpl = fromTemplate;
+    if (tpl) return createFromTemplateIn(b, tpl, name);
+    title = ''; // the field stays open for the next one
     try {
       // Same defaults as the Tasks page's quick entry: default calendar, local time zone, no date.
-      const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
-      await api.createTask({
-        calendarId: s.defaultCalendarId, title: name, due: null, dueHasTime: false, tz, rrule: null, notes: null,
-        alerts: [], status: 'todo', labels: [], planId: plan.id, bucketId: b.id,
-      });
+      await api.createTask(await newTaskInput(name, plan.id, b.id));
     } catch (e) {
+      if (!title) title = name; // give the typed text back
       onerror(errorMessage(e));
     }
+  }
+  /** Creates the task from the template in this bucket and opens its details; the field keeps the title until then. */
+  async function createFromTemplateIn(b: Bucket, tpl: { id: number; name: string }, name: string) {
+    if (creating) return;
+    creating = true;
+    try {
+      const id = await api.createFromTemplate(tpl.id, await newTaskInput(name, plan.id, b.id));
+      title = '';
+      stopAdding();
+      onopen(await api.getTask(id));
+    } catch (e) {
+      onerror(errorMessage(e));
+    } finally {
+      creating = false;
+    }
+  }
+  function startAdding(b: Bucket, tpl: { id: number; name: string } | null = null) {
+    title = '';
+    fromTemplate = tpl;
+    adding = b.id;
+  }
+  function stopAdding() {
+    adding = null;
+    fromTemplate = null;
   }
   function addKeys(e: KeyboardEvent, b: Bucket) {
     e.stopPropagation();
     if (e.key === 'Enter') createIn(b);
     else if (e.key === 'Escape') {
       e.preventDefault();
-      adding = null;
+      stopAdding();
       tick().then(() => boardEl?.querySelector<HTMLElement>(`[data-add="${b.id}"]`)?.focus());
+    }
+  }
+
+  /** Duplicate from the card menu; the copy lands right after the original. */
+  async function duplicateCard(t: Task) {
+    try {
+      await duplicate(t, (id) => api.getTask(id).then(onopen));
+    } catch (e) {
+      onerror(errorMessage(e));
     }
   }
 
@@ -333,10 +372,14 @@
       </div>
       <footer>
         {#if adding === b.id}
-          <input class="name-field" aria-label={tr('common.newTask')} placeholder={tr('inspector.taskPlaceholder')} maxlength="500"
-            bind:value={title} use:focusSelect onkeydown={(e) => addKeys(e, b)} onblur={() => { if (!title.trim()) adding = null; }} />
+          {@const label = fromTemplate ? tr('template.titleFor', { name: fromTemplate.name }) : tr('common.newTask')}
+          <input class="name-field" aria-label={label} placeholder={fromTemplate ? label : tr('inspector.taskPlaceholder')} maxlength="500"
+            bind:value={title} use:focusSelect onkeydown={(e) => addKeys(e, b)} onblur={() => { if (!title.trim()) stopAdding(); }} />
         {:else}
-          <button class="add" data-add={b.id} onclick={() => { title = ''; adding = b.id; }}><Plus size={13} aria-hidden="true" />{tr('common.newTask')}</button>
+          <div class="add-row">
+            <button class="add" data-add={b.id} onclick={() => startAdding(b)}><Plus size={13} aria-hidden="true" />{tr('common.newTask')}</button>
+            <NewFromTemplate compact context={b.name} onpick={(tpl) => startAdding(b, tpl)} {onerror} />
+          </div>
         {/if}
       </footer>
     </section>
@@ -359,6 +402,9 @@
       {/each}
       <div class="sep" role="separator"></div>
     {/if}
+    <button role="menuitem" onclick={() => cardMenu.act(duplicateCard)}>{tr('task.duplicate')}</button>
+    <button role="menuitem" onclick={() => cardMenu.act(askSaveTemplate)}>{tr('template.save')}</button>
+    <div class="sep" role="separator"></div>
     <button role="menuitem" disabled={ids.indexOf(t.id) <= 0} onclick={() => cardMenu.act((x) => shiftCard(x, -1))}>{tr('task.moveUp')}</button>
     <button role="menuitem" disabled={ids.indexOf(t.id) >= ids.length - 1} onclick={() => cardMenu.act((x) => shiftCard(x, 1))}>{tr('task.moveDown')}</button>
     <div class="sep" role="separator"></div>
@@ -447,6 +493,9 @@
   .empty { color: var(--muted); font-size: 12px; text-align: center; margin: 18px 8px; }
   .empty p { margin: 0; }
   footer { padding: 0 8px 8px; }
+  .add-row { display: flex; align-items: center; gap: 2px; }
+  .add-row :global(.tpl) { opacity: 0; }
+  .col:hover .add-row :global(.tpl), .add-row :global(.tpl:focus-visible), .add-row :global(.tpl.open) { opacity: 1; }
   .add { display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-radius: 7px; text-align: left; }
   .add:hover { background: var(--hover); color: var(--text); }
   .add:focus-visible { outline: 2px solid var(--accent); }

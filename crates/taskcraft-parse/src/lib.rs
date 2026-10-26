@@ -61,6 +61,11 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
     } else {
         None
     };
+    let template = if kind == ItemKind::Task {
+        mark_template(&toks, &mut tags, opts)
+    } else {
+        None
+    };
     let priority = if kind == ItemKind::Task {
         mark_priority(&toks, &mut tags)
     } else {
@@ -89,6 +94,7 @@ fn parse_kind(input: &str, now: DateTime<Tz>, opts: &ParseOptions, force_task: b
         url: r.url,
         tags: tags_found,
         plan,
+        template,
         priority,
         spans,
     }
@@ -168,6 +174,28 @@ fn mark_plan(toks: &[Token], tags: &mut [Tagged], opts: &ParseOptions) -> Option
             if !opts.calendars.iter().any(|c| c.eq_ignore_ascii_case(word)) {
                 tag.label = Some(Label::Plan);
             }
+            return Some(name.clone());
+        }
+    }
+    None
+}
+
+/// Labels the first `+template` token matching a known template and returns
+/// the template's exact name. Other `+word` tokens stay in the title.
+fn mark_template(toks: &[Token], tags: &mut [Tagged], opts: &ParseOptions) -> Option<String> {
+    for (t, tag) in toks.iter().zip(tags.iter_mut()) {
+        if tag.label.is_some() {
+            continue;
+        }
+        let Some(word) = t.text.strip_prefix('+') else {
+            continue;
+        };
+        if !word.chars().any(char::is_alphabetic) {
+            continue;
+        }
+        let key = plan_key(word);
+        if let Some(name) = opts.templates.iter().find(|n| plan_key(n) == key) {
+            tag.label = Some(Label::Template);
             return Some(name.clone());
         }
     }

@@ -2,18 +2,23 @@
   import { isMod } from '../lib/platform';
   import { t } from '../lib/i18n';
   import { onDestroy, tick } from 'svelte';
-  import { X, Trash2, CornerLeftUp } from 'lucide-svelte';
-  import { PRIORITIES, type Bucket, type Calendar, type EventInput, type Plan, type Task, type TaskInput, type TaskLabel } from '../lib/types';
+  import { X, Trash2, CornerLeftUp, Ellipsis } from 'lucide-svelte';
+  import { PRIORITIES, type Bucket, type Calendar, type EventInput, type Plan, type Task, type TaskInput, type TaskLabel, type TaskStatus } from '../lib/types';
   import { STATUSES, STATUS_LABEL } from '../lib/tasks';
   import StatusGlyph from './tasks/StatusGlyph.svelte';
   import SubtaskList from './tasks/SubtaskList.svelte';
   import Checklist from './tasks/Checklist.svelte';
+  import Attachments from './tasks/Attachments.svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { parentCandidates } from '../lib/subtasks';
   import { ymd } from '../lib/format';
   import { notify } from '../lib/toast.svelte';
   import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
+  import { PopupMenu } from '../lib/menu.svelte';
+  import { askSaveTemplate, duplicate } from '../lib/taskCommands.svelte';
+  import { askParentAfterSave, changeStatus } from '../lib/actions';
+  import Menu from './Menu.svelte';
 
   export type Target =
     | { kind: 'event'; id: number | null; occurrence: string | null; recurring: boolean; input: EventInput }
@@ -60,6 +65,7 @@
     ev = target.kind === 'event' ? eventToForm(target.input) : null;
     task = target.kind === 'task' ? taskToForm(target.input) : null;
     parentPick = target.kind === 'task' ? target.input.parentId ?? null : null;
+    syncedStatus = target.kind === 'task' ? target.input.status : null;
     confirmDelete = false;
     error = '';
   });
@@ -71,6 +77,11 @@
   let parentTask = $state<Task | null>(null);
   /** The parent picked in the dialog; applied with `setTaskParent` on Save. */
   let parentPick = $state<number | null>(null);
+  /**
+   * The stored status the form last showed. When the store changes it meanwhile (a subtask put
+   * in progress starts this task), the form follows, unless a different status was picked here.
+   */
+  let syncedStatus: TaskStatus | null = null;
   async function loadRelated() {
     const id = target.kind === 'task' ? target.id : null;
     if (id == null) return void ((stored = parentTask = null), (subtasks = allTasks = []));
@@ -78,6 +89,8 @@
       const [me, subs, all] = await Promise.all([api.getTask(id), api.listSubtasks(id), api.listTasks('all')]);
       if (target.kind !== 'task' || target.id !== id) return;
       stored = me;
+      if (task && syncedStatus != null && task.status === syncedStatus) task.status = me.status;
+      syncedStatus = me.status;
       subtasks = subs;
       allTasks = all;
       parentTask = me.parentId == null ? null : all.find((x) => x.id === me.parentId) ?? (await api.getTask(me.parentId));
@@ -175,18 +188,32 @@
   // ── Saving, closing and moving to another task never drop what was typed ──
   let subtaskList = $state<SubtaskList | undefined>();
   let checklist = $state<Checklist | undefined>();
-  /** Adds the text still sitting in the "Add subtask" / "Add item" fields; false if that failed (the error shows). */
+  let attachments = $state<Attachments | undefined>();
+  /** Adds the text still sitting in the "Add subtask" / "Add item" / link fields; false if that failed (the error shows). */
   async function flushAdds(): Promise<boolean> {
     try {
       await subtaskList?.flush();
       await checklist?.flush();
+      await attachments?.flush();
       return true;
     } catch {
       return false;
     }
   }
   async function save() {
-    if ((await flushAdds()) && (await persist())) onsaved();
+    if (!(await flushAdds())) return;
+    const before = target.kind === 'task' && target.id != null ? { id: target.id, status: target.input.status } : null;
+    if (!(await persist())) return;
+    if (before) {
+      // Saved as Done from its own form: the last open subtask asks about its parent too.
+      try {
+        await askParentAfterSave(before.id, before.status);
+      } catch (e) {
+        error = errorMessage(e);
+        return;
+      }
+    }
+    onsaved();
   }
   async function close() {
     if (await flushAdds()) onclose();
@@ -261,13 +288,47 @@
         const id = target.id;
         const saved = await snapshotWithSubtasks(id);
         await api.deleteTask(id);
-        // Undo brings back its checklist, its subtasks and their checklists too (they went with it).
+        // Undo brings back its checklist, attachments and subtasks (with theirs) too: they went with it.
         notify(t('msg.deleted', { title: saved.task.input.title }), () => restoreWithSubtasks(saved).then(() => {}));
       }
       onsaved();
     } catch (e) {
       error = errorMessage(e);
     }
+  }
+
+  // ── "…" menu: Duplicate, Save as template… ──
+  const moreMenu = new PopupMenu<null>();
+  /** The stored task as it is once anything typed here is saved; null when that failed (the error shows). */
+  async function savedTask(): Promise<Task | null> {
+    if (target.kind !== 'task' || target.id == null || !(await flushAdds())) return null;
+    if (task && taskFormDirty(target.input, task, parentPick) && !(await persist())) return null;
+    try {
+      return await api.getTask(target.id);
+    } catch (e) {
+      error = errorMessage(e);
+      return null;
+    }
+  }
+  async function duplicateThis() {
+    const me = await savedTask();
+    if (!me) return;
+    try {
+      await duplicate(me, (id) => onopentask?.(id));
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+  /** Yes to "Mark the task as done too?": saves what was typed, completes this task and shows it as stored now (the dialog stays). */
+  async function completeSelf() {
+    const me = await savedTask();
+    if (!me) return;
+    await changeStatus(me, 'done');
+    onopentask?.(me.id);
+  }
+  async function saveAsTemplate() {
+    const me = await savedTask();
+    if (me) askSaveTemplate(me);
   }
 
   // Keep Tab inside the dialog.
@@ -295,6 +356,11 @@
 <div class="panel" role="dialog" aria-modal="true" aria-label={t('inspector.label')} tabindex="-1" bind:this={panelEl} onkeydown={trapTab}>
   <div class="top">
     <span class="kind">{target.kind === 'event' ? (target.id == null ? t('common.newEvent') : t('common.event')) : target.id == null ? t('common.newTask') : t('common.task')}</span>
+    <span class="spacer"></span>
+    {#if target.kind === 'task' && stored}
+      <button class="icon-btn" aria-label={t('inspector.more')} title={t('inspector.more')} aria-haspopup="menu" aria-expanded={!!moreMenu.current}
+        onclick={(e) => moreMenu.openBelow(null, e.currentTarget, () => true)} onkeydown={(e) => moreMenu.openFromKey(e, null)}><Ellipsis size={16} aria-hidden="true" /></button>
+    {/if}
     <button class="icon-btn" aria-label={t('common.close')} onclick={close}><X size={16} /></button>
   </div>
   {#if error}<div class="banner" role="alert"><span>{error}</span></div>{/if}
@@ -415,9 +481,10 @@
     <textarea class="field notes" bind:value={task.notes} placeholder={t('inspector.notes')}></textarea>
     {#if stored}
       {#if !isSubtask}
-        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} />
+        <SubtaskList bind:this={subtaskList} parent={stored} {subtasks} onopen={(x) => openOther(x.id)} onerror={(m) => (error = m)} oncompleteparent={completeSelf} />
       {/if}
       <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
+      <Attachments bind:this={attachments} task={stored} onerror={(m) => (error = m)} />
     {/if}
   {/if}
 
@@ -432,6 +499,14 @@
   </div>
 </div>
 </div>
+
+{#if moreMenu.current}
+  <Menu menu={moreMenu} label={t('inspector.more')}>
+    <button role="menuitem" onclick={() => moreMenu.act(duplicateThis)}>{t('task.duplicate')}</button>
+    <!-- A subtask can't be a template (the store refuses it). -->
+    {#if !isSubtask}<button role="menuitem" onclick={() => moreMenu.act(saveAsTemplate)}>{t('template.save')}</button>{/if}
+  </Menu>
+{/if}
 
 <style>
   /* Item details open as a centred dialog over the main window. */
@@ -456,7 +531,7 @@
     @keyframes fade { from { opacity: 0; } }
     @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
   }
-  .top { display: flex; justify-content: space-between; align-items: center; }
+  .top { display: flex; align-items: center; gap: 2px; }
   .kind { font-size: 12px; font-weight: 600; color: var(--muted); }
   .title { font-size: 15px; font-weight: 600; }
   .row { display: grid; grid-template-columns: 88px 1fr; align-items: center; gap: 10px; }

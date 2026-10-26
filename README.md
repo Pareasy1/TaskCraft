@@ -38,6 +38,7 @@ Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
     draggable columns. Type `/planname` in quick entry to file a task in a plan, e.g.
     `todo ship Rafael friday /3dprint`.
   - **Subtasks, checklists and priority:** open a task's details (double-click) to add subtasks, a checklist and a start date. Set priority in quick entry with `!urgent` / `!urgente`, e.g. `todo ship Rafael friday /3dprint !urgente`.
+  - **Duplicate, templates and attachments:** duplicate a task from its card menu, save it as a template and reuse it with `+name` in quick entry (e.g. `todo ship Rafael friday /3dprint +ordine3d`), and attach files (copied into the data folder). The subtask progress bar shows in-progress steps in yellow; starting a subtask starts the task, and finishing all of them asks to finish the task.
 
 ## Install / update
 

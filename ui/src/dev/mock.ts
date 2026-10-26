@@ -2,6 +2,7 @@
 // (`npm run dev`, then open http://localhost:5173/?window=main|quick|settings).
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
+import { lang } from '../lib/i18n';
 
 export function installMock() {
   const label = new URLSearchParams(location.search).get('window') ?? 'main';
@@ -36,7 +37,7 @@ export function installMock() {
     alerts: []; status: 'todo' | 'inProgress' | 'done'; labels: { id: number; name: string; color: string }[];
     planId: number; bucketId: number; sortOrder: number;
     parentId: number | null; priority: 'urgent' | 'important' | 'medium' | 'low'; start: string | null; startHasTime: boolean;
-    subtaskOpen: number; subtaskTotal: number; checklistDone: number; checklistTotal: number;
+    subtaskOpen: number; subtaskTotal: number; subtaskInProgress: number; checklistDone: number; checklistTotal: number; attachmentCount: number;
   };
   type MockItem = { id: number; taskId: number; text: string; done: boolean; sort: number };
   const task = (id: number, title: string, due: string | null, dueHasTime: boolean, status: MockTask['status'] = 'todo', lbl: number[] = []): MockTask => ({
@@ -44,7 +45,7 @@ export function installMock() {
     recurring: false, rrule: null, notes: null, color: '#3b82f6', alerts: [], status, labels: L(...lbl),
     planId: 1, bucketId: 1, sortOrder: id * 10,
     parentId: null, priority: 'medium', start: null, startHasTime: false,
-    subtaskOpen: 0, subtaskTotal: 0, checklistDone: 0, checklistTotal: 0,
+    subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
   });
   let all: MockTask[] = [
     task(10, 'Pay electricity bill', midnight(-2), false, 'todo', [1]),
@@ -81,6 +82,9 @@ export function installMock() {
     { ...task(30, 'Collect figures', midnight(1), false), parentId: 16, sortOrder: 10, priority: 'important' },
     { ...task(31, 'Write summary', midnight(2), false), parentId: 16, sortOrder: 20 },
     { ...task(32, 'Review with team', null, false, 'done'), parentId: 16, sortOrder: 30 },
+    // "Ship order #1042" (23) is still To do: starting one of these starts it.
+    { ...task(33, 'Pack the order', null, false), parentId: 23, planId: 2, bucketId: 6, sortOrder: 10 },
+    { ...task(34, 'Print the label', null, false, 'inProgress'), parentId: 23, planId: 2, bucketId: 6, sortOrder: 20 },
   );
   Object.assign(all.find((t) => t.id === 11)!, { priority: 'urgent' });
   Object.assign(all.find((t) => t.id === 12)!, { start: midnight(-1), due: midnight(1), priority: 'low' });
@@ -89,6 +93,70 @@ export function installMock() {
     { id: 2, taskId: 17, text: 'Pick images', done: false, sort: 1 },
     { id: 3, taskId: 17, text: 'Rehearse', done: false, sort: 2 },
   ];
+  type MockAtt = { id: number; taskId: number; kind: 'file' | 'link'; name: string; stored: string | null; url: string | null; size: number | null; createdAt: string; sort: number };
+  let atts: MockAtt[] = [];
+  let picks = 0;
+  const nextSort = (taskId: number) => Math.max(-1, ...atts.filter((a) => a.taskId === taskId).map((a) => a.sort)) + 1;
+  // A template keeps a copy of its task's content, like the store's TemplateBody (no dates, no attachments).
+  type MockBody = { title: string; notes: string | null; labels: number[]; priority: MockTask['priority']; checklist: string[] };
+  let templates: { id: number; name: string; subtaskCount: number; body: MockBody & { subtasks: MockBody[] } }[] = [];
+  const bodyOf = (t: MockTask): MockBody => ({
+    title: t.title, notes: t.notes, labels: t.labels.map((l) => l.id), priority: t.priority,
+    checklist: items.filter((i) => i.taskId === t.id).sort((a, b) => a.sort - b.sort).map((i) => i.text),
+  });
+  const kidsOf = (id: number) => all.filter((t) => t.parentId === id).sort((a, b) => a.sortOrder - b.sortOrder);
+  const addChecklist = (taskId: number, texts: string[], done: boolean[] = []) =>
+    texts.forEach((text, n) => items.push({ id: nextId++, taskId, text, done: done[n] ?? false, sort: n }));
+  /** A sort order right after `t` among its siblings (same parent, or same bucket for top-level tasks). */
+  const sortAfter = (t: MockTask) => {
+    const next = all
+      .filter((x) => x.id !== t.id && x.parentId === t.parentId && (t.parentId != null || x.bucketId === t.bucketId) && x.sortOrder > t.sortOrder)
+      .reduce((m, x) => Math.min(m, x.sortOrder), Infinity);
+    return next === Infinity ? t.sortOrder + 10 : (t.sortOrder + next) / 2;
+  };
+  /** Copies a task's content under `parentId` (attachments too, except "missing" files, whose names go in `skipped`). */
+  const copyTask = (src: MockTask, patch: Partial<MockTask>, skipped: string[]): MockTask => {
+    const copy: MockTask = { ...src, labels: [...src.labels], id: nextId++, completedAt: null, status: 'todo', ...patch };
+    all = [...all, copy];
+    // Checklists come unticked.
+    addChecklist(copy.id, items.filter((i) => i.taskId === src.id).sort((a, b) => a.sort - b.sort).map((i) => i.text));
+    atts.filter((a) => a.taskId === src.id).forEach((a) => {
+      if (a.kind === 'file' && a.stored?.includes('missing')) skipped.push(a.name);
+      else atts.push({ ...a, id: nextId++, taskId: copy.id });
+    });
+    return copy;
+  };
+  const templateBy = (word: string) => {
+    const key = (s: string) => [...s].filter((c) => /[\p{L}\p{N}]/u.test(c)).join('').toLowerCase();
+    return templates.find((x) => key(x.name) === key(word));
+  };
+  /** Creates a task from a template: the input wins; the template's checklist and subtasks come along. */
+  const fromTemplate = (tpl: (typeof templates)[number], i: any): number => {
+    const b = tpl.body;
+    const lbl = [...new Set([...labels.filter((l) => i.labels.includes(l.name)).map((l) => l.id), ...b.labels])];
+    const t = task(nextId++, i.title, i.due, i.dueHasTime, 'todo', lbl);
+    Object.assign(t, { notes: i.notes?.trim() ? i.notes : b.notes, priority: i.priority && i.priority !== 'medium' ? i.priority : b.priority });
+    place(t, i.planId ?? defaultPlan, i.bucketId);
+    all = [...all, t];
+    addChecklist(t.id, b.checklist);
+    b.subtasks.forEach((s, n) => {
+      const sub = task(nextId++, s.title, null, false, 'todo', s.labels);
+      Object.assign(sub, { notes: s.notes, priority: s.priority, parentId: t.id, sortOrder: (n + 1) * 10, planId: t.planId, bucketId: t.bucketId });
+      all = [...all, sub];
+      addChecklist(sub.id, s.checklist);
+    });
+    return t.id;
+  };
+  const cleanName = (n: unknown, max: number, code: string) => {
+    const v = String(n ?? '').trim();
+    if (!v || [...v].length > max) throw { code, message: code };
+    return v;
+  };
+  const attOf = (id: number) => {
+    const a = atts.find((x) => x.id === id);
+    if (!a) throw { code: 'not_found', message: 'not_found' };
+    return a;
+  };
   let defaultPlan = 1;
   let nextId = 1000;
   const openCount = (planId: number) => all.filter((t) => t.planId === planId && !t.completedAt && t.parentId == null).length;
@@ -118,13 +186,19 @@ export function installMock() {
     const list = items.filter((i) => i.taskId === t.id);
     return Object.assign(t, {
       subtaskTotal: kids.length, subtaskOpen: kids.filter((k) => !k.completedAt).length,
+      subtaskInProgress: kids.filter((k) => k.status === 'inProgress').length,
       checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
+      attachmentCount: atts.filter((a) => a.taskId === t.id).length,
     });
   };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
   const setStatus = (t: MockTask, status: MockTask['status']) => {
+    const started = status === 'inProgress' && t.status !== 'inProgress';
     t.status = status;
     t.completedAt = status === 'done' ? new Date().toISOString() : null;
+    // As the store does: a subtask put in progress (a change, not a re-save) starts a To do parent.
+    const parent = started && t.parentId != null ? all.find((x) => x.id === t.parentId) : undefined;
+    if (parent?.status === 'todo') parent.status = 'inProgress';
   };
   // A bucket decides its plan; a plan alone means its first bucket (placed last).
   const place = (t: MockTask, planId?: number | null, bucketId?: number | null) => {
@@ -184,6 +258,13 @@ export function installMock() {
         return null;
       }
       case 'create_from_text': {
+        const tpl = [...String(args.text).matchAll(/\+(\S+)/g)].map((m) => templateBy(m[1])).find(Boolean);
+        if (tpl) {
+          const title = String(args.text).replace(/\+\S+/, (w) => (templateBy(w.slice(1)) === tpl ? '' : w)).replace(/\s+/g, ' ').trim();
+          const id = fromTemplate(tpl, { title, due: null, dueHasTime: false, labels: [], notes: null, planId: null, bucketId: null });
+          changed();
+          return { kind: 'task', id };
+        }
         const tags = [...String(args.text).matchAll(/#(\w+)/g)].map((m) => m[1]);
         const title = String(args.text).replace(/#\w+/g, '').trim();
         const lbl = tags.map((n) => labels.find((l) => l.name === n)?.id).filter((x): x is number => !!x);
@@ -251,6 +332,7 @@ export function installMock() {
         const gone = new Set(all.filter((t) => t.id === args.id || t.parentId === args.id).map((t) => t.id));
         all = all.filter((t) => !gone.has(t.id));
         items = items.filter((i) => !gone.has(i.taskId));
+        atts = atts.filter((a) => !gone.has(a.taskId));
         changed();
         return null;
       }
@@ -305,6 +387,85 @@ export function installMock() {
         changed();
         return t.id;
       }
+      case 'list_attachments': return atts.filter((a) => a.taskId === args.taskId).sort((a, b) => a.sort - b.sort);
+      case 'pick_and_add_files': {
+        // Cycles through three picks; every third also reports a file that was too large, and its
+        // "missing" file fails to open (not_found), so both toasts can be checked by eye.
+        const n = picks++ % 3;
+        const [name, size] = ([['notes.pdf', 1_250_000], ['photo.jpg', 482_000], ['missing.docx', 18_400]] as const)[n];
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name, stored: `mock-${name}`, url: null, size, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
+        atts.push(a);
+        changed();
+        return { added: [a], errors: n === 2 ? [{ name: 'holiday-video.mov', code: 'attachment_too_large' }] : [] };
+      }
+      case 'add_link_attachment': {
+        const url = String(args.url).trim();
+        if (!/^https?:\/\/\S+/i.test(url)) throw { code: 'attachment_url', message: 'attachment_url' };
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'link', name: args.name?.trim() || new URL(url).hostname.replace(/^www\./, ''), stored: null, url, size: null, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
+        atts.push(a);
+        changed();
+        return a;
+      }
+      case 'rename_attachment': attOf(args.id).name = cleanName(args.name, 200, 'empty'); changed(); return null;
+      case 'reorder_attachments': reorder(atts.filter((a) => a.taskId === args.taskId), args.ids); changed(); return null;
+      case 'remove_attachment': { const a = attOf(args.id); atts = atts.filter((x) => x.id !== a.id); changed(); return a; }
+      case 'restore_file_attachment': {
+        const a: MockAtt = { id: nextId++, taskId: args.taskId, kind: 'file', name: args.name, stored: args.stored, url: null, size: args.size, createdAt: new Date().toISOString(), sort: nextSort(args.taskId) };
+        atts.push(a);
+        changed();
+        return a;
+      }
+      case 'open_attachment':
+      case 'reveal_attachment': {
+        const a = attOf(args.id);
+        if (a.stored?.includes('missing')) throw { code: 'not_found', message: 'not_found' };
+        return null;
+      }
+      case 'duplicate_task': {
+        // Like the store: title + the UI language's suffix, right after the original, subtasks copied;
+        // a file attachment named "missing…" stands for one whose file is gone (reported in `skipped`).
+        const src = all.find((t) => t.id === args.id);
+        if (!src) throw { code: 'not_found', message: 'not_found' };
+        const skipped: string[] = [];
+        const suffix = lang === 'it' ? ' (copia)' : ' (copy)';
+        const copy = copyTask(src, { title: `${src.title}${suffix}`, sortOrder: sortAfter(src) }, skipped);
+        kidsOf(src.id).forEach((k) => copyTask(k, { parentId: copy.id, planId: copy.planId, bucketId: copy.bucketId }, skipped));
+        changed();
+        return { id: copy.id, skipped };
+      }
+      case 'save_template': {
+        const name = cleanName(args.name, 60, 'template_name');
+        const dup = templates.find((x) => x.name.toLowerCase() === name.toLowerCase());
+        if (dup && !args.replace) throw { code: 'duplicate', message: 'duplicate' };
+        const src = all.find((t) => t.id === args.taskId);
+        if (!src) throw { code: 'not_found', message: 'not_found' };
+        if (src.parentId != null) throw { code: 'invalid', message: 'A subtask can\'t be a template' };
+        const subs = kidsOf(src.id);
+        const body = { ...bodyOf(src), subtasks: subs.map(bodyOf) };
+        if (dup) { Object.assign(dup, { subtaskCount: subs.length, body }); changed(); return dup.id; }
+        const id = nextId++;
+        templates.push({ id, name, subtaskCount: subs.length, body });
+        changed();
+        return id;
+      }
+      case 'list_templates': return templates.map(({ id, name, subtaskCount }) => ({ id, name, subtaskCount })).sort((a, b) => a.name.localeCompare(b.name));
+      case 'rename_template': {
+        const name = cleanName(args.name, 60, 'template_name');
+        if (templates.some((x) => x.id !== args.id && x.name.toLowerCase() === name.toLowerCase())) throw { code: 'duplicate', message: 'duplicate' };
+        const tpl = templates.find((x) => x.id === args.id);
+        if (!tpl) throw { code: 'not_found', message: 'not_found' };
+        tpl.name = name;
+        changed();
+        return null;
+      }
+      case 'delete_template': templates = templates.filter((x) => x.id !== args.id); changed(); return null;
+      case 'create_from_template': {
+        const tpl = templates.find((x) => x.id === args.templateId);
+        if (!tpl) throw { code: 'not_found', message: 'not_found' };
+        const id = fromTemplate(tpl, args.input);
+        changed();
+        return id;
+      }
       case 'get_default_plan': return defaultPlan;
       case 'set_default_plan': defaultPlan = args.id; changed(); return null;
       case 'local_time_zone': return 'Europe/Rome';
@@ -312,11 +473,23 @@ export function installMock() {
       case 'search': return [];
       case 'parse_preview': {
         const t: string = args.text;
+        // A task with "+name" of a saved template: highlight it (spans are UTF-8 byte offsets).
+        const plus = [...t.matchAll(/\+(\S+)/g)].find((m) => templateBy(m[1]));
+        if (plus) {
+          const bytes = (s: string) => new TextEncoder().encode(s).length;
+          const start = bytes(t.slice(0, plus.index)), end = start + bytes(plus[0]);
+          return {
+            kind: 'task', title: (t.slice(0, plus.index) + t.slice(plus.index! + plus[0].length)).replace(/\s+/g, ' ').trim(), start: null, end: null,
+            allDay: false, location: null, attendees: [], calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null,
+            template: templateBy(plus[1])!.name,
+            spans: [...(start > 0 ? [{ start: 0, end: start, label: 'title' }] : []), { start, end, label: 'template' }],
+          };
+        }
         const i = t.indexOf(' tomorrow at 1');
         return {
           kind: 'event', title: i > 0 ? t.slice(0, i) : t, start: { date: '2026-10-21', time: '13:00:00' },
           end: { date: '2026-10-21', time: '14:00:00' }, allDay: false, location: null, attendees: ['Sam'],
-          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null,
+          calendar: null, recurrence: null, alerts: [], url: null, tags: [], plan: null, priority: null, template: null,
           spans: i > 0 ? [{ start: 0, end: i, label: 'title' }, { start: i + 1, end: i + 9, label: 'date' }, { start: i + 10, end: i + 12, label: 'separator' }, { start: i + 13, end: i + 14, label: 'time' }] : [],
         };
       }

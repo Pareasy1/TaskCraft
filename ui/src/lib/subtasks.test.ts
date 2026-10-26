@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checklistLabel, childrenByParent, completionAsk, groupWithParents, offerParentAfter, priorityColumns, progressLabel, topLevel,
+  checklistLabel, childrenByParent, completionAsk, groupWithParents, offerParentAfter, priorityColumns, barTrack, progressLabel, progressSegments, topLevel,
 } from './subtasks';
 import type { Priority } from './types';
 
@@ -46,6 +46,20 @@ describe('labels', () => {
   it('progressLabel', () => {
     expect(progressLabel({ subtaskOpen: 0, subtaskTotal: 0 })).toBeNull();
     expect(progressLabel({ subtaskOpen: 2, subtaskTotal: 4 })).toBe('2 of 4');
+  });
+  it('progressSegments: done, in progress and to do counts', () => {
+    expect(progressSegments({ subtaskTotal: 4, subtaskOpen: 2, subtaskInProgress: 1 })).toEqual({ done: 2, inProgress: 1, todo: 1 });
+    expect(progressSegments({ subtaskTotal: 3, subtaskOpen: 3, subtaskInProgress: 0 })).toEqual({ done: 0, inProgress: 0, todo: 3 });
+    expect(progressSegments({ subtaskTotal: 2, subtaskOpen: 0, subtaskInProgress: 0 })).toEqual({ done: 2, inProgress: 0, todo: 0 });
+    expect(progressSegments({ subtaskTotal: 0, subtaskOpen: 0, subtaskInProgress: 0 })).toEqual({ done: 0, inProgress: 0, todo: 0 });
+    // Never more in progress than open (stale counts can't push the bar past full).
+    expect(progressSegments({ subtaskTotal: 2, subtaskOpen: 1, subtaskInProgress: 2 })).toEqual({ done: 1, inProgress: 1, todo: 0 });
+  });
+  it('barTrack: tints the track only for a started parent with no subtask in progress', () => {
+    expect(barTrack({ status: 'inProgress', subtaskInProgress: 0 })).toBe('started');
+    expect(barTrack({ status: 'inProgress', subtaskInProgress: 1 })).toBe('neutral');
+    expect(barTrack({ status: 'todo', subtaskInProgress: 0 })).toBe('neutral');
+    expect(barTrack({ status: 'done', subtaskInProgress: 0 })).toBe('neutral');
   });
   it('checklistLabel', () => {
     expect(checklistLabel({ checklistDone: 0, checklistTotal: 0 })).toBeNull();
@@ -179,5 +193,16 @@ describe('flattenRows', () => {
   it('keeps dimmed parents dimmed', () => {
     const rows = flattenRows(groupWithParents([all[1]], all), new Set());
     expect(rows.map((r) => [r.task.id, r.dimmed])).toEqual([[1, true], [2, false]]);
+  });
+});
+
+import { completedBySave } from './subtasks';
+describe('completedBySave', () => {
+  it('true only when a subtask went from open to done', () => {
+    expect(completedBySave({ status: 'todo', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(true);
+    expect(completedBySave({ status: 'inProgress', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(true);
+    expect(completedBySave({ status: 'done', parentId: 1 }, { status: 'done', parentId: 1 })).toBe(false);
+    expect(completedBySave({ status: 'todo', parentId: 1 }, { status: 'inProgress', parentId: 1 })).toBe(false);
+    expect(completedBySave({ status: 'todo', parentId: null }, { status: 'done', parentId: null })).toBe(false);
   });
 });

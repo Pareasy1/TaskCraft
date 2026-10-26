@@ -11,6 +11,7 @@
   import { focusAfterRemoval, shiftId } from '../../lib/subtasks';
   import { notify } from '../../lib/toast.svelte';
   import { restoreSubtask, snapshotSubtask } from '../../lib/restore';
+  import { duplicate } from '../../lib/taskCommands.svelte';
   import type { Task } from '../../lib/types';
   import Menu from '../Menu.svelte';
   import LabelChip from './LabelChip.svelte';
@@ -21,7 +22,15 @@
     subtasks,
     onopen,
     onerror,
-  }: { parent: Task; subtasks: Task[]; onopen: (t: Task) => void; onerror: (m: string) => void } = $props();
+    oncompleteparent,
+  }: {
+    parent: Task;
+    subtasks: Task[];
+    onopen: (t: Task) => void;
+    onerror: (m: string) => void;
+    /** Yes to "Mark the task as done too?" after the last subtask is ticked here. */
+    oncompleteparent?: (parent: Task) => Promise<void>;
+  } = $props();
 
   let listEl = $state<HTMLUListElement | undefined>();
   let addEl = $state<HTMLInputElement | undefined>();
@@ -102,6 +111,8 @@
     const el = next == null ? null : listEl?.querySelector<HTMLElement>(`[data-sub-menu="${next}"]`);
     (el ?? addEl)?.focus();
   }
+  /** The copy goes right after it; focus stays on this row's "…". */
+  const duplicateRow = (x: Task) => run(() => duplicate(x, (id) => api.getTask(id).then(onopen)));
   const makeNormal = (x: Task) => leave(x, () => api.setTaskParent(x.id, null));
   const remove = (x: Task) =>
     leave(x, async () => {
@@ -172,7 +183,7 @@
           ondragend={endDrag}
           oncontextmenu={(e) => { e.preventDefault(); menu.open(x, e.clientX, e.clientY, listEl?.querySelector<HTMLElement>(`[data-sub-menu="${x.id}"]`) ?? (e.currentTarget as HTMLElement)); }}
         >
-          <StatusGlyph status={x.status} size={15} onchange={(s) => run(() => changeStatus(x, s))} />
+          <StatusGlyph status={x.status} size={15} onchange={(s) => run(() => changeStatus(x, s, { children: [], siblings: subtasks, parent }, { completeParent: oncompleteparent }))} />
           <button class="title" onclick={() => onopen(x)} onkeydown={(e) => menu.openFromKey(e, x, listEl?.querySelector<HTMLElement>(`[data-sub-menu="${x.id}"]`) ?? undefined)}>{x.title}</button>
           {#each x.labels as l (l.id)}<LabelChip name={l.name} color={l.color} />{/each}
           {#if x.due}<span class="due">{due(x)}</span>{/if}
@@ -197,6 +208,7 @@
   {@const i = subtasks.findIndex((s) => s.id === x.id)}
   <Menu {menu} label={x.title}>
     <button role="menuitem" onclick={() => menu.act(onopen, false)}>{tr('subtasks.open')}</button>
+    <button role="menuitem" onclick={() => menu.act(duplicateRow)}>{tr('task.duplicate')}</button>
     <div class="sep" role="separator"></div>
     <button role="menuitem" disabled={i <= 0} onclick={() => menu.act((y) => shift(y, -1))}>{tr('task.moveUp')}</button>
     <button role="menuitem" disabled={i < 0 || i >= subtasks.length - 1} onclick={() => menu.act((y) => shift(y, 1))}>{tr('task.moveDown')}</button>

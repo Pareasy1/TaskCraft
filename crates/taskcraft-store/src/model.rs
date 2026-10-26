@@ -29,6 +29,9 @@ pub enum Rule {
     RepeatingSubtask,
     StartAfterDue,
     ChecklistText,
+    AttachmentTooLarge,
+    AttachmentUrl,
+    TemplateName,
 }
 
 impl Rule {
@@ -39,6 +42,9 @@ impl Rule {
             Rule::RepeatingSubtask => "repeating_subtask",
             Rule::StartAfterDue => "start_after_due",
             Rule::ChecklistText => "checklist_text",
+            Rule::AttachmentTooLarge => "attachment_too_large",
+            Rule::AttachmentUrl => "attachment_url",
+            Rule::TemplateName => "template_name",
         }
     }
 }
@@ -51,6 +57,9 @@ impl std::fmt::Display for Rule {
             Rule::RepeatingSubtask => "a subtask cannot repeat",
             Rule::StartAfterDue => "start date is after the due date",
             Rule::ChecklistText => "checklist item text is empty or too long",
+            Rule::AttachmentTooLarge => "the file is larger than 100 MiB",
+            Rule::AttachmentUrl => "only http and https links can be attached",
+            Rule::TemplateName => "template name is empty or too long",
         })
     }
 }
@@ -246,8 +255,10 @@ pub struct Task {
     pub start_has_time: bool,
     pub subtask_open: i64,
     pub subtask_total: i64,
+    pub subtask_in_progress: i64,
     pub checklist_done: i64,
     pub checklist_total: i64,
+    pub attachment_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

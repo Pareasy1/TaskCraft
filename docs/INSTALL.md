@@ -79,6 +79,7 @@ You'll also find TaskCraft in the **Start** menu.
   - `Gym every monday at 7am alert 15 min before` adds a repeating event with a reminder.
 - **Plans keep different projects apart.** Your plans are listed in the sidebar. Each plan shows its tasks as columns (buckets) that you can drag cards between. In quick entry, add `/planname` to put a task in a plan, for example `todo ship Rafael friday /3dprint`.
 - **Break big tasks into steps.** Double-click a task to open its details, where you can add subtasks and a checklist. You can also set a priority in quick entry with `!urgent` (or `!urgente`), for example `todo ship Rafael friday /3dprint !urgente`.
+- **Reuse and attach.** In a card's **…** menu, **Duplicate** makes a copy of a task. **Save as template** keeps a task (with its subtasks) to reuse later, and **New from template** starts a fresh one from it. In quick entry, add `+name` to use a template, for example `todo ship Rafael friday /3dprint +ordine3d`. You can attach files to a task from its details; they are copied into the TaskCraft data folder, so the originals can move or disappear. The subtask progress bar shows finished steps in green and the ones in progress in yellow. Starting a subtask starts the task too, and when you finish the last subtask TaskCraft asks if you want to finish the task.
 - **Plan in the main window.** It has Day, Week, Month and Tasks views. **Double-click** anything to open its details.
 - **Settings:** the gear at the bottom-left of the main window, or **⌘,** on Mac and **Ctrl+,** on Windows and Linux. There you can change the shortcut, choose **Launch at login**, add calendars, and export everything.
 - **Language:** English or Italian, following your computer's language.
@@ -90,6 +91,8 @@ Closing the main window keeps TaskCraft running in the menu bar or tray, so remi
 ## Updating, moving and removing
 
 **Update:** download the newer installer and install it the same way (on Mac, choose **Replace**). Your events and tasks are kept.
+
+**Attachments** live in the data folder too (see below), so moving the data folder moves them with it.
 
 **Back up:** Settings → **Export .ics…** saves everything in a file that Apple Calendar, Google Calendar and Outlook can import.
 

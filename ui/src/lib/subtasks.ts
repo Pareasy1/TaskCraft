@@ -1,6 +1,6 @@
 // Pure helpers for subtasks, checklists and priority columns.
 import { t } from './i18n';
-import { PRIORITIES, type Priority, type TaskInput } from './types';
+import { PRIORITIES, type Priority, type TaskInput, type TaskStatus } from './types';
 
 type Child = { id: number; parentId: number | null; sortOrder: number };
 const bySort = (a: Child, b: Child) => a.sortOrder - b.sortOrder || a.id - b.id;
@@ -53,6 +53,21 @@ export function progressLabel(x: { subtaskOpen: number; subtaskTotal: number }):
   return t('subtasks.progress', { done: x.subtaskTotal - x.subtaskOpen, total: x.subtaskTotal });
 }
 
+/** The subtask bar's segments, as counts: done, in progress, still to do. */
+export function progressSegments(x: { subtaskTotal: number; subtaskOpen: number; subtaskInProgress: number }): { done: number; inProgress: number; todo: number } {
+  const open = Math.max(0, Math.min(x.subtaskOpen, x.subtaskTotal));
+  const inProgress = Math.max(0, Math.min(x.subtaskInProgress, open));
+  return { done: x.subtaskTotal - open, inProgress, todo: open - inProgress };
+}
+
+/**
+ * The bar's track: 'started' (tinted yellow) when the parent is in progress but no subtask is,
+ * so a started task still looks started; otherwise neutral (a subtask in progress already shows yellow).
+ */
+export function barTrack(x: { status: TaskStatus; subtaskInProgress: number }): 'neutral' | 'started' {
+  return x.status === 'inProgress' && x.subtaskInProgress === 0 ? 'started' : 'neutral';
+}
+
 export function checklistLabel(x: { checklistDone: number; checklistTotal: number }): string | null {
   return x.checklistTotal ? `${x.checklistDone}/${x.checklistTotal}` : null;
 }
@@ -67,6 +82,11 @@ export function completionAsk(_task: Done, children: Done[]): 'askChildren' | 'n
 /** After `task` was completed: true when no sibling is open any more and the parent is still open. */
 export function offerParentAfter(task: Done & { id: number }, siblings: (Done & { id: number })[], parent: Done): boolean {
   return !parent.completedAt && siblings.every((s) => s.id === task.id || !!s.completedAt);
+}
+
+/** A subtask's form save that took it from open to done (the parent question may follow). */
+export function completedBySave(before: { status: TaskStatus; parentId: number | null }, after: { status: TaskStatus; parentId: number | null }): boolean {
+  return after.parentId != null && before.status !== 'done' && after.status === 'done';
 }
 
 export function priorityColumns<T extends { priority: Priority; sortOrder: number; id: number }>(tasks: T[]): { key: Priority; tasks: T[] }[] {

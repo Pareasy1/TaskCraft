@@ -31,6 +31,8 @@ pub struct Text {
     /// Names of the seeded first plan and bucket.
     pub seed_plan: &'static str,
     pub seed_bucket: &'static str,
+    /// Appended to a duplicated task's title.
+    pub duplicate_suffix: &'static str,
 }
 
 const EN: Text = Text {
@@ -42,6 +44,7 @@ const EN: Text = Text {
     due: "Due",
     seed_plan: "My tasks",
     seed_bucket: "To do",
+    duplicate_suffix: " (copy)",
 };
 
 const IT: Text = Text {
@@ -53,6 +56,7 @@ const IT: Text = Text {
     due: "Scade alle",
     seed_plan: "Le mie attività",
     seed_bucket: "Da fare",
+    duplicate_suffix: " (copia)",
 };
 
 pub fn text(lang: Lang) -> &'static Text {

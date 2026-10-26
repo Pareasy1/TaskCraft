@@ -1,26 +1,59 @@
 // Snapshots taken before a task is deleted, so Undo can bring back what went with it.
 import { api } from './api';
 import { taskInput } from './edit';
-import type { TaskInput } from './types';
+import { t } from './i18n';
+import { notify } from './toast.svelte';
+import type { Attachment, TaskInput } from './types';
+
+export type AttachmentSnapshot = Pick<Attachment, 'kind' | 'name' | 'stored' | 'url' | 'size'>;
 
 export interface TaskSnapshot {
   input: TaskInput;
   checklist: { text: string; done: boolean }[];
+  /** In their order. A deleted task's stored files wait 15 s before going, so Undo can re-link them. */
+  attachments: AttachmentSnapshot[];
 }
 
 async function snapshot(id: number): Promise<TaskSnapshot> {
-  const [task, list] = await Promise.all([api.getTask(id), api.listChecklist(id)]);
-  return { input: taskInput(task), checklist: list.map(({ text, done }) => ({ text, done })) };
+  const [task, list, atts] = await Promise.all([api.getTask(id), api.listChecklist(id), api.listAttachments(id)]);
+  return {
+    input: taskInput(task),
+    checklist: list.map(({ text, done }) => ({ text, done })),
+    attachments: atts.map(({ kind, name, stored, url, size }) => ({ kind, name, stored, url, size })),
+  };
 }
 
-/** Creates the task, then its checklist items in order with their done state. Returns the new id. */
-async function recreate(s: TaskSnapshot, parentId?: number): Promise<number> {
+/** Brings one attachment back on `taskId`: a file re-links its stored copy, a link is added again. */
+export async function restoreAttachment(taskId: number, a: AttachmentSnapshot): Promise<Attachment> {
+  return a.kind === 'file'
+    ? api.restoreFileAttachment(taskId, a.name, a.stored ?? '', a.size ?? 0)
+    : api.addLinkAttachment(taskId, a.url ?? '', a.name);
+}
+
+/**
+ * Creates the task, then its checklist items (with their done state) and attachments, in order.
+ * Best effort for attachments: one that cannot come back (e.g. its file was already purged) is
+ * skipped and its name pushed on `missed`. Returns the new id.
+ */
+async function recreate(s: TaskSnapshot, missed: string[], parentId?: number): Promise<number> {
   const id = await api.createTask(parentId === undefined ? s.input : { ...s.input, parentId });
   for (const item of s.checklist) {
     const itemId = await api.addChecklistItem(id, item.text);
     if (item.done) await api.updateChecklistItem(itemId, { done: true });
   }
+  for (const a of s.attachments) {
+    try {
+      await restoreAttachment(id, a);
+    } catch {
+      missed.push(a.name);
+    }
+  }
   return id;
+}
+
+/** One toast naming every attachment that could not come back. */
+function reportMissed(missed: string[]): void {
+  if (missed.length) notify(t('msg.restoredWithout', { names: missed.join(', ') }));
 }
 
 // ── A task with its subtasks (they are deleted with it) ──
@@ -31,10 +64,19 @@ export async function snapshotWithSubtasks(id: number): Promise<TreeSnapshot> {
   return { task, subtasks: await Promise.all(subs.map((s) => snapshot(s.id))) };
 }
 
-/** Recreates the task and its checklist, then each subtask (in their order) with its checklist. */
+/**
+ * Recreates the task (checklist, attachments), then each subtask in their order with its own.
+ * An In progress subtask makes the store start a To do parent; the parent's saved To do is put
+ * back last, so Undo restores exactly what was deleted.
+ */
 export async function restoreWithSubtasks(s: TreeSnapshot): Promise<number> {
-  const id = await recreate(s.task);
-  for (const sub of s.subtasks) await recreate(sub, id);
+  const missed: string[] = [];
+  const id = await recreate(s.task, missed);
+  for (const sub of s.subtasks) await recreate(sub, missed, id);
+  if (s.task.input.status === 'todo' && s.subtasks.some((x) => x.input.status === 'inProgress')) {
+    await api.setTaskStatus(id, 'todo');
+  }
+  reportMissed(missed);
   return id;
 }
 
@@ -57,13 +99,31 @@ export function restoredOrder(original: number[], oldId: number, newId: number, 
   return [...kept, ...current.filter((x) => !seen.has(x))];
 }
 
-/** Recreates the subtask and its checklist, then puts it back in its place among its siblings. */
+/**
+ * Recreates the subtask and its checklist, then puts it back in its place among its siblings.
+ * Coming back In progress must not start a To do parent: it is put back to To do last.
+ */
 export async function restoreSubtask(s: SubtaskSnapshot): Promise<number> {
   const parentId = s.task.input.parentId;
-  const id = await recreate(s.task);
-  if (parentId == null) return id;
-  const current = (await api.listSubtasks(parentId)).map((x) => x.id);
-  const order = restoredOrder(s.order, s.id, id, current);
-  if (order.some((x, i) => x !== current[i])) await api.reorderSubtasks(parentId, order);
+  const parentTodo = parentId != null && s.task.input.status === 'inProgress'
+    && (await api.getTask(parentId).then((p) => p.status === 'todo', () => false));
+  const missed: string[] = [];
+  const id = await recreate(s.task, missed);
+  if (parentId != null) {
+    const current = (await api.listSubtasks(parentId)).map((x) => x.id);
+    const order = restoredOrder(s.order, s.id, id, current);
+    if (order.some((x, i) => x !== current[i])) await api.reorderSubtasks(parentId, order);
+    if (parentTodo) await api.setTaskStatus(parentId, 'todo');
+  }
+  reportMissed(missed);
   return id;
+}
+
+// ── One removed attachment ──
+/** Brings a removed attachment back and puts it in its old place. `order`: the ids before the remove. */
+export async function restoreRemovedAttachment(a: Attachment, order: number[]): Promise<void> {
+  const back = await restoreAttachment(a.taskId, a);
+  const current = (await api.listAttachments(a.taskId)).map((x) => x.id);
+  const next = restoredOrder(order, a.id, back.id, current);
+  if (next.some((x, i) => x !== current[i])) await api.reorderAttachments(a.taskId, next);
 }
