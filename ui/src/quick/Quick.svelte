@@ -15,6 +15,9 @@
   import PreviewCard from './PreviewCard.svelte';
   import MiniMonth from './MiniMonth.svelte';
   import Upcoming from './Upcoming.svelte';
+  import CompleteDialog from '../main/CompleteDialog.svelte';
+  import { pending } from '../lib/complete.svelte';
+  import { confirmBlocked } from '../lib/actions';
 
   const win = getCurrentWindow();
   let text = $state('');
@@ -117,6 +120,7 @@
 
   async function setStatus(task: Task, s: TaskStatus) {
     try {
+      if (!(await confirmBlocked(task, s))) return;
       await api.setTaskStatus(task.id, s);
       showFlash(s === 'done' ? t('msg.completed', { title: task.title }) : t('msg.movedTo', { title: task.title, where: STATUS_LABEL[s] }));
     } catch (e) {
@@ -173,6 +177,7 @@
     <button class="icon-btn" title={t('quick.quit')} aria-label={t('quick.quit')} onclick={() => invoke('quit_app')}><Power size={16} /></button>
   </footer>
 </main>
+{#if pending.current}<CompleteDialog ask={pending.current} />{/if}
 
 <style>
   .pop {
