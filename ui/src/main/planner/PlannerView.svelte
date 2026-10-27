@@ -8,7 +8,7 @@
 </script>
 
 <script lang="ts">
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { t } from '../../lib/i18n';
   import { api, errorMessage, onItemsChanged } from '../../lib/api';
   import type { Bucket, Dependency, Plan, Span, Task } from '../../lib/types';
@@ -17,6 +17,12 @@
   } from '../../lib/timeline';
   import { quickAddTask, saveDates, type TaskDates } from '../../lib/actions';
   import { applyFilters, type StatusFilter } from '../../lib/tasks';
+  import { pickerExclude } from '../../lib/dependencies';
+  import { PopupMenu } from '../../lib/menu.svelte';
+  import { notify } from '../../lib/toast.svelte';
+  import Menu from '../Menu.svelte';
+  import TaskPicker from '../tasks/TaskPicker.svelte';
+  import ArrowLayer from './ArrowLayer.svelte';
   import HighlightInput from '../../quick/HighlightInput.svelte';
   import Doodle from '../tasks/Doodle.svelte';
   import PlannerHeader from './PlannerHeader.svelte';
@@ -96,6 +102,86 @@
       m.set(d.taskId, [...(m.get(d.taskId) ?? []), b.title]);
     }
     return m;
+  });
+
+  // ── Drawing and removing dependencies ──
+  const byId = $derived(new Map(tasks.map((x) => [x.id, x])));
+  /** The selected arrow (`taskId:dependsOn`): the focused one. */
+  let selectedArrow = $state<string | null>(null);
+
+  /** `targetId` now depends on `source` (a connector drop or "Depends on…"), with Undo. */
+  async function link(source: Task, targetId: number) {
+    const target = byId.get(targetId);
+    if (!target || deps.some((d) => d.taskId === targetId && d.dependsOn === source.id)) return;
+    try {
+      await api.addDependency(targetId, source.id);
+    } catch (e) {
+      return onerror(errorMessage(e)); // self / loop refusals, translated
+    }
+    deps = [...deps, { taskId: targetId, dependsOn: source.id }];
+    loadDeps();
+    notify(t('dep.linked', { a: source.title, b: target.title }), () => api.removeDependency(targetId, source.id));
+  }
+
+  /** Removes "taskId depends on dependsOn", with Undo; focus goes to the dependent task's row. */
+  async function unlink(d: Dependency, refocus = false) {
+    const a = byId.get(d.dependsOn), b = byId.get(d.taskId);
+    try {
+      await api.removeDependency(d.taskId, d.dependsOn);
+    } catch (e) {
+      return onerror(errorMessage(e));
+    }
+    deps = deps.filter((x) => !(x.taskId === d.taskId && x.dependsOn === d.dependsOn));
+    if (selectedArrow === `${d.taskId}:${d.dependsOn}`) selectedArrow = null;
+    loadDeps();
+    notify(t('dep.unlinked', { a: a?.title ?? '', b: b?.title ?? '' }), () => api.addDependency(d.taskId, d.dependsOn));
+    if (refocus) {
+      await tick();
+      scroller?.querySelector<HTMLElement>(`[data-row="t:${d.taskId}"]`)?.focus({ preventScroll: true });
+    }
+  }
+
+  // ── The bar menu (right-click, menu key, Shift+F10 on a row) ──
+  const barMenu = new PopupMenu<Task>();
+  function onmenu(task: Task, e: MouseEvent | KeyboardEvent, row: HTMLElement) {
+    if (e instanceof MouseEvent) return void barMenu.open(task, e.clientX, e.clientY, row);
+    // From the keyboard: under the row's (sticky) name, since the row itself starts off-screen when scrolled.
+    e.preventDefault();
+    const r = (row.querySelector('.name') ?? row).getBoundingClientRect();
+    barMenu.open(task, r.left + 16, r.bottom, row);
+  }
+  /** Every dependency of the menu's task (open or done), with the task it depends on. */
+  let menuBlockers = $derived.by(() => {
+    const id = barMenu.current?.target.id;
+    if (id == null) return [];
+    return deps.filter((d) => d.taskId === id).map((d) => byId.get(d.dependsOn)).filter((x): x is Task => !!x);
+  });
+  const NO_DATES = { start: null, startHasTime: false, due: null, dueHasTime: false } satisfies TaskDates;
+
+  // "Depends on…": the searchable task list, floating where the menu was.
+  let picking = $state<{ task: Task; x: number; y: number; opener: HTMLElement | null } | null>(null);
+  let pickerEl = $state<HTMLDivElement | undefined>();
+  function startPicking(task: Task) {
+    const at = barMenu.current!;
+    const row = scroller?.querySelector<HTMLElement>(`[data-row="t:${task.id}"]`) ?? null;
+    barMenu.close(false);
+    picking = { task, x: Math.max(8, Math.min(at.x, innerWidth - 328)), y: Math.max(8, Math.min(at.y, innerHeight - 280)), opener: row };
+  }
+  function endPicking() {
+    const opener = picking?.opener;
+    picking = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  function pick(other: Task) {
+    const task = picking!.task;
+    endPicking();
+    link(other, task.id);
+  }
+  $effect(() => {
+    if (!picking) return;
+    const away = (e: PointerEvent) => !pickerEl?.contains(e.target as Node) && (picking = null);
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
   });
 
   // ── Dates being dragged or saved: shown at once, dropped when fresh tasks arrive or a save fails ──
@@ -220,8 +306,10 @@
       <div class="scroller" bind:this={scroller} {onscroll}>
         <div class="canvas" style="width:{NAME_W + laneW}px">
           <PlannerHeader {range} {zoom} {weekStart} {today} nameW={NAME_W} height={HEADER_H} />
-          <PlannerRows {rows} {range} {zoom} {now} nameW={NAME_W} {blockers} {onopen} onreveal={reveal} {onpreview} {onsave}
+          <PlannerRows {rows} {range} {zoom} {now} nameW={NAME_W} {blockers} {onopen} onreveal={reveal} {onpreview} {onsave} onlink={link} {onmenu}
             ontoggle={(k) => (collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k))} />
+          <ArrowLayer {rows} {deps} {range} {zoom} nameW={NAME_W} top={HEADER_H} selected={selectedArrow}
+            onselect={(d) => (selectedArrow = d ? `${d.taskId}:${d.dependsOn}` : null)} onremove={(d) => unlink(d, true)} />
           {#if dropDay !== null}
             <div class="drop" style="left:{NAME_W + dayToX(dropDay, range, zoom)}px; width:{DAY_WIDTH[zoom]}px; top:{HEADER_H}px" aria-hidden="true"></div>
           {/if}
@@ -235,7 +323,35 @@
   {/if}
 </div>
 
+{#if barMenu.current}
+  {@const task = barMenu.current.target}
+  <Menu menu={barMenu} label={task.title}>
+    <button role="menuitem" onclick={() => barMenu.act(onopen, false)}>{t('planner.openDetails')}</button>
+    <button role="menuitem" onclick={() => startPicking(task)}>{t('dep.dependsOnMenu')}</button>
+    {#if menuBlockers.length}
+      <div class="sub" aria-hidden="true">{t('dep.remove')} ▸</div>
+      {#each menuBlockers as b (b.id)}
+        <button role="menuitem" class="indent" aria-label={t('dep.removeNamed', { title: b.title })}
+          onclick={() => barMenu.act((x) => unlink({ taskId: x.id, dependsOn: b.id }))}>{b.title}</button>
+      {/each}
+    {:else}
+      <button role="menuitem" disabled>{t('dep.remove')}</button>
+    {/if}
+    <div class="sep" role="separator"></div>
+    <button role="menuitem" disabled={!task.start && !task.due} onclick={() => barMenu.act((x) => onsave(x, NO_DATES))}>{t('planner.removeDates')}</button>
+  </Menu>
+{/if}
+
+{#if picking}
+  <div class="picker-pop" role="dialog" aria-label={t('dep.dependsOnMenu')} style="left:{picking.x}px; top:{picking.y}px" bind:this={pickerEl}>
+    <TaskPicker {tasks} exclude={pickerExclude(picking.task.id, deps)} onpick={pick} oncancel={endPicking} />
+  </div>
+{/if}
+
 <style>
+  .sub { font-size: 12px; color: var(--muted); padding: 6px 8px 2px; }
+  .indent.indent { padding-left: 18px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker-pop { position: fixed; z-index: 30; width: 320px; box-shadow: var(--shadow); border-radius: 8px; }
   .page { height: 100%; display: flex; flex-direction: column; padding: 16px 0 0; min-width: 0; }
   .head { display: flex; gap: 12px; align-items: flex-start; padding: 0 24px 12px; }
   .add { flex: 1; min-width: 0; max-width: 560px; }

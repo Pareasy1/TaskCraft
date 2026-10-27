@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockedPrompt, blockers, blocking, pickerExclude, pickerMatches, wouldCycle } from './dependencies';
+import { arrowConflict, arrowPath, blockedPrompt, blockers, blocking, pickerExclude, pickerMatches, wouldCycle } from './dependencies';
 import type { Dependency, Task } from './types';
 
 const mk = (id: number, done = false): Task => ({ id, title: `T${id}`, completedAt: done ? '2026-10-23T10:00:00Z' : null, status: done ? 'done' : 'todo' }) as Task;
@@ -30,5 +30,19 @@ describe('dependencies', () => {
     const g: Dependency[] = [{ taskId: 4, dependsOn: 1 }, { taskId: 1, dependsOn: 2 }];
     expect([...pickerExclude(2, g)].sort()).toEqual([1, 2, 4]); // 4 -> 1 -> 2 would close a loop
     expect([...pickerExclude(4, g)].sort()).toEqual([1, 4]); // 1 already; 2 is fine
+  });
+  it('arrowPath forward: out 8, down to the target row, in', () => {
+    expect(arrowPath({ x: 100, y: 16 }, { x: 200, y: 80 })).toBe('M100 16H108V80H200');
+    expect(arrowPath({ x: 100, y: 80 }, { x: 116, y: 16 })).toBe('M100 80H108V16H116'); // exactly 16 apart, upwards
+  });
+  it('arrowPath backward routes around, left of the target', () => {
+    // Target starts before the source ends: out 8, half a row towards it, back past to.x - 8, then in.
+    expect(arrowPath({ x: 200, y: 16 }, { x: 100, y: 80 })).toBe('M200 16H208V32H92V80H100');
+    expect(arrowPath({ x: 200, y: 80 }, { x: 190, y: 16 })).toBe('M200 80H208V64H182V16H190');
+  });
+  it('arrowConflict: B starts before A is due', () => {
+    expect(arrowConflict({ from: 1, to: 5 }, { from: 3, to: 8 })).toBe(true);
+    expect(arrowConflict({ from: 1, to: 5 }, { from: 6, to: 8 })).toBe(false);
+    expect(arrowConflict({ from: 1, to: 5 }, { from: 5, to: 8 })).toBe(false); // same day is fine
   });
 });

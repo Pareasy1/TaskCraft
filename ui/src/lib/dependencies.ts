@@ -1,6 +1,7 @@
 // Dependency helpers: who blocks whom, cycle check, and the "still open" question text.
 import { t } from './i18n';
 import type { Dependency, Task } from './types';
+import { ROW_H } from './timeline';
 
 const isOpen = (x: Task) => !x.completedAt && x.status !== 'done';
 
@@ -53,3 +54,23 @@ export function pickerExclude(taskId: number, deps: Dependency[]): Set<number> {
   }
   return out;
 }
+
+type Point = { x: number; y: number };
+/** How far an arrow runs straight out of A's bar (and into B's when routed around). */
+const STUB = 8;
+
+/**
+ * SVG path of the arrow "B depends on A": from the end of A's bar (`from`, right edge, row middle) to
+ * the start of B's (`to`, left edge, row middle). Out, along to B's row, in; when B starts too close
+ * or to the left, it turns half a row towards B, runs back past B's start, and comes in from the left.
+ */
+export function arrowPath(from: Point, to: Point): string {
+  const out = from.x + STUB;
+  if (to.x >= from.x + 2 * STUB) return `M${from.x} ${from.y}H${out}V${to.y}H${to.x}`;
+  const mid = from.y + (to.y >= from.y ? 1 : -1) * (ROW_H / 2);
+  return `M${from.x} ${from.y}H${out}V${mid}H${to.x - STUB}V${to.y}H${to.x}`;
+}
+
+/** True when B (depending on A) starts on a day before A is due: shown in the warning colour. */
+type DaySpan = { from: number; to: number };
+export const arrowConflict = (a: DaySpan, b: DaySpan): boolean => b.from < a.to;

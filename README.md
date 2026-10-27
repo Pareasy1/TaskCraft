@@ -21,7 +21,8 @@ Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
 
   **↩** adds, **⌘↩** adds and opens it, **esc** clears or closes.
 - **Grid:** a table of the selected plan (sort by column, edit title/status/priority/bucket/dates in place with Undo, choose columns, fold subtasks), with a charts panel on top whose bars filter the table. Top menu: Calendar / Tasks / Grid (⌘1/⌘2/⌘3, Ctrl on Windows/Linux).
-- **Main window:** ⌘1 Calendar · ⌘2 Tasks · ⌘3 Grid (Ctrl on Windows/Linux); inside Calendar, D / W / M switch Day, Week and Month · ⌘N new event · ⌘T today.
+- **Planner:** a timeline of the selected plan (Days / Weeks / Months): drag bars to move them or their ends to change start/due, drag tasks from the No dates panel onto a day, and draw dependency arrows between bars (🔒 on waiting tasks, warning colour when they start too early, select + Delete to remove, with Undo). Right-click or Shift+F10 on a bar: Open details, Depends on…, Remove dependency, Remove dates.
+- **Main window:** ⌘1 Calendar · ⌘2 Tasks · ⌘3 Grid · ⌘4 Planner (Ctrl on Windows/Linux); inside Calendar, D / W / M switch Day, Week and Month · ⌘N new event · ⌘T today.
   Drag events to move them, drag the bottom edge to resize, double-click empty
   space to create. Closing the window keeps TaskCraft in the menu bar.
 - **Tasks page:** ⌘2 (or *Tasks* in the top menu). Everything typed there becomes a

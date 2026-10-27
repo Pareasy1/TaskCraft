@@ -46,8 +46,8 @@
 </div>
 
 <style>
-  .header { position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid var(--border); }
-  .corner { position: sticky; left: 0; z-index: 4; height: 100%; background: var(--bg); border-right: 1px solid var(--border); }
+  .header { position: sticky; top: 0; z-index: 4; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .corner { position: sticky; left: 0; z-index: 5; height: 100%; background: var(--bg); border-right: 1px solid var(--border); }
   .scale { position: absolute; top: 0; bottom: 0; overflow: hidden; }
   .span { position: absolute; top: 3px; padding-left: 4px; font-size: 11.5px; font-weight: 600; color: var(--text); white-space: nowrap; border-left: 1px solid var(--border); line-height: 16px; }
   .tick { position: absolute; bottom: 2px; padding-left: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; line-height: 16px; border-left: 1px solid var(--border); font-variant-numeric: tabular-nums; }

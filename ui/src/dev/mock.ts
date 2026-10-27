@@ -192,7 +192,17 @@ export function installMock() {
     upcoming: () => open().filter((t) => !t.due || new Date(t.due).getTime() >= startTomorrow),
   };
   // Keeps the counts on every returned task consistent with the data.
-  let deps: { taskId: number; dependsOn: number }[] = [];
+  // "Prepare slides" waits on "Quarterly report draft"; "Buy milk" (starts yesterday) on "Renew passport" (due tomorrow): a conflict.
+  let deps: { taskId: number; dependsOn: number }[] = [{ taskId: 17, dependsOn: 16 }, { taskId: 12, dependsOn: 15 }];
+  const reaches = (from: number, to: number): boolean => {
+    const seen = new Set<number>(), stack = [from];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (cur === to) return true;
+      if (!seen.has(cur)) (seen.add(cur), deps.filter((d) => d.taskId === cur).forEach((d) => stack.push(d.dependsOn)));
+    }
+    return false;
+  };
   const withCounts = (t: MockTask): MockTask => {
     const kids = all.filter((x) => x.parentId === t.id);
     const list = items.filter((i) => i.taskId === t.id);
@@ -201,6 +211,7 @@ export function installMock() {
       subtaskInProgress: kids.filter((k) => k.status === 'inProgress').length,
       checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
       attachmentCount: atts.filter((a) => a.taskId === t.id).length,
+      blockedBy: deps.filter((d) => d.taskId === t.id && !all.find((x) => x.id === d.dependsOn)?.completedAt).length,
     });
   };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
@@ -401,6 +412,7 @@ export function installMock() {
       }
       case 'add_dependency': {
         if (args.taskId === args.dependsOn) throw { code: 'dependency_self', message: 'dependency_self' };
+        if (reaches(args.dependsOn, args.taskId)) throw { code: 'dependency_cycle', message: 'dependency_cycle' };
         if (!deps.some((d) => d.taskId === args.taskId && d.dependsOn === args.dependsOn)) deps.push({ taskId: args.taskId, dependsOn: args.dependsOn });
         changed();
         return;

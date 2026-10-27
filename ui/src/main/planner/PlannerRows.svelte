@@ -3,6 +3,7 @@
   import { ChevronRight } from 'lucide-svelte';
   import { t } from '../../lib/i18n';
   import { hotkeyLabel, isMod, modLabel } from '../../lib/platform';
+  import { isMenuKey } from '../../lib/menu.svelte';
   import { barSpan, dayDate, dayNumber, dayToX, DAY_WIDTH, dragResult, ROW_H, type TimelineRow, type Zoom } from '../../lib/timeline';
   import type { TaskDates } from '../../lib/actions';
   import { isOverdue, STATUS_LABEL } from '../../lib/tasks';
@@ -11,7 +12,7 @@
   import PlannerBar from './PlannerBar.svelte';
 
   // The name column (sticky) and the bar lanes, one ROW_H-tall row each: row i sits at y = i × ROW_H.
-  let { rows, range, zoom, now, nameW, blockers, onopen, ontoggle, onreveal, onpreview, onsave }: {
+  let { rows, range, zoom, now, nameW, blockers, onopen, ontoggle, onreveal, onpreview, onsave, onlink, onmenu }: {
     rows: TimelineRow<Task>[];
     range: { from: number; to: number };
     zoom: Zoom;
@@ -28,6 +29,10 @@
     onpreview: (id: number, next: TaskDates | null) => void;
     /** Saves a task's new dates (a finished drag or a keyboard move). */
     onsave: (task: Task, next: TaskDates) => void;
+    /** A connector drag from `source`'s bar dropped on task `targetId`'s bar. */
+    onlink: (source: Task, targetId: number) => void;
+    /** Opens a task's menu: right-click, the menu key or Shift+F10 on its row (`row`). */
+    onmenu: (task: Task, e: MouseEvent | KeyboardEvent, row: HTMLElement) => void;
   } = $props();
 
   let w = $derived(DAY_WIDTH[zoom]);
@@ -89,6 +94,10 @@
     const i = rows.findIndex((r) => keyOf(r) === stop);
     const r = rows[i];
     if (!r) return;
+    if (isMenuKey(e)) {
+      if (r.kind === 'task') onmenu(r.task, e, e.target as HTMLElement);
+      return;
+    }
     if (e.altKey) return moveKeys(e, r);
     switch (e.key) {
       case 'ArrowUp': focusRow(i - 1); break;
@@ -144,7 +153,8 @@
       <div class="row" class:dimmed={r.dimmed} role="treeitem" aria-level={r.depth + 2} aria-expanded={r.hasChildren && !r.dimmed ? !r.collapsed : undefined}
         aria-selected={stop === key} aria-label={label(r)}
         tabindex={stop === key ? 0 : -1} data-row={key} style="height:{ROW_H}px"
-        onfocus={() => (focusKey = key)} ondblclick={() => onopen(r.task)}>
+        onfocus={() => (focusKey = key)} ondblclick={() => onopen(r.task)}
+        oncontextmenu={(e) => { e.preventDefault(); onmenu(r.task, e, e.currentTarget as HTMLElement); }}>
         <div class="name" style="width:{nameW}px; padding-left:{10 + r.depth * 18}px">
           {#if r.hasChildren && !r.dimmed}
             <button class="chev" class:open={!r.collapsed} tabindex="-1" aria-hidden="true" onclick={() => ontoggle(r.task.id)}><ChevronRight size={14} /></button>
@@ -154,7 +164,7 @@
           <span class="text" class:done={r.task.status === 'done'}>{r.task.title}</span>
         </div>
         <div class="lane">
-          <PlannerBar task={r.task} {range} {zoom} {now} blockers={blockers.get(r.task.id)} {onpreview} {onsave} />
+          <PlannerBar task={r.task} {range} {zoom} {now} blockers={blockers.get(r.task.id)} {onpreview} {onsave} {onlink} />
         </div>
       </div>
     {/if}
@@ -172,7 +182,7 @@
   .row:focus-visible .name, .row:focus .name { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg); }
   .row:focus-visible .name { box-shadow: inset 2px 0 0 var(--accent); }
   .name {
-    position: sticky; left: 0; z-index: 2; flex: none; height: 100%;
+    position: sticky; left: 0; z-index: 3; flex: none; height: 100%;
     display: flex; align-items: center; gap: 4px; padding: 0 10px; min-width: 0;
     background: var(--bg); border-right: 1px solid var(--border);
   }
