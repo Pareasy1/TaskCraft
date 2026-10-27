@@ -33,6 +33,6 @@ describe('dictionaries', () => {
       (k) => dictionaries.it[k] === dictionaries.en[k] && /[a-z]{4,}/i.test(dictionaries.en[k]),
     );
     // Words that are the same in both languages.
-    expect(same.filter((k) => !['inspector.peoplePlaceholder', 'settings.ics', 'groupBy.bucket', 'details.bucket', 'checklist.title', 'attachments.linkPlaceholder', 'table.col.bucket', 'table.chartFilter'].includes(k))).toEqual([]);
+    expect(same.filter((k) => !['inspector.peoplePlaceholder', 'settings.ics', 'groupBy.bucket', 'details.bucket', 'checklist.title', 'attachments.linkPlaceholder', 'table.col.bucket', 'table.chartFilter', 'area.planner', 'planner.zoom'].includes(k))).toEqual([]);
   });
 });

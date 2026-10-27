@@ -4,9 +4,11 @@
   import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-svelte';
 
   import type { Area, CalendarMode } from '../lib/navigation';
+  import type { Zoom } from '../lib/timeline';
   let {
     area = $bindable<Area>('calendar'),
     mode = $bindable<CalendarMode>('week'),
+    zoom = $bindable<Zoom>('weeks'),
     title,
     query = $bindable(''),
     onprev,
@@ -16,6 +18,8 @@
   }: {
     area?: Area;
     mode?: CalendarMode;
+    /** The Planner's zoom (shown only in Planner). */
+    zoom?: Zoom;
     title: string;
     query?: string;
     onprev: () => void;
@@ -45,8 +49,16 @@
         {/each}
       </div>
     {/if}
+    {#if area === 'planner'}
+      <button class="btn today" onclick={ontoday}>{t('planner.today')}</button>
+      <div class="seg" role="group" aria-label={t('planner.zoom')}>
+        {#each [['days', t('planner.days')], ['weeks', t('planner.weeks')], ['months', t('planner.months')]] as [z, label]}
+          <button aria-pressed={zoom === z} class:on={zoom === z} onclick={() => (zoom = z as Zoom)}>{label}</button>
+        {/each}
+      </div>
+    {/if}
     <div class="seg" role="group" aria-label={t('toolbar.areas')}>
-      {#each [['calendar', t('area.calendar'), modLabel('1')], ['tasks', t('area.tasks'), modLabel('2')], ['grid', t('area.grid'), modLabel('3')]] as [a, label, key]}
+      {#each [['calendar', t('area.calendar'), modLabel('1')], ['tasks', t('area.tasks'), modLabel('2')], ['planner', t('area.planner'), modLabel('4')], ['grid', t('area.grid'), modLabel('3')]] as [a, label, key]}
         <button aria-pressed={area === a} class:on={area === a} title="{label} ({key})" onclick={() => (area = a as Area)}>{label}</button>
       {/each}
     </div>

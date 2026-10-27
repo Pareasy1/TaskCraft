@@ -45,6 +45,7 @@ export function dueInGroup(due: Date, hasTime: boolean, groupDay: Date | null): 
 }
 
 export const monthTitle = (d: Date) => d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+export const fmtMonthShort = (d: Date) => d.toLocaleDateString(locale, { month: 'short' });
 
 export function weekdayInitials(weekStart: 0 | 1): string[] {
   const base = new Date(2026, 9, 4 + weekStart); // a Sunday + weekStart

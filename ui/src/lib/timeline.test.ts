@@ -1,8 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-  DAY_WIDTH, barSpan, dayDate, dayNumber, dayToX, dragResult, headerTicks,
-  loadUndatedOpen, loadZoom, placeUndated, saveUndatedOpen, saveZoom, timelineRange, xToDay,
+  DAY_WIDTH, ROW_H, barSpan, dayDate, dayNumber, dayToX, dragResult, headerTicks,
+  loadUndatedOpen, loadZoom, placeUndated, saveUndatedOpen, saveZoom, timelineRange, timelineRows, xToDay,
+  type TimelineRow,
 } from './timeline';
+import type { Bucket, Plan, TaskStatus } from './types';
 
 const local = (y: number, m: number, d: number, hh = 0, mm = 0) => new Date(y, m - 1, d, hh, mm);
 const iso = (y: number, m: number, d: number, hh = 0, mm = 0) => local(y, m, d, hh, mm).toISOString();
@@ -192,4 +194,86 @@ describe('persistence', () => {
     expect(loadZoom()).toBe('months');
     expect(loadUndatedOpen()).toBe(false);
   });
+});
+
+describe('timelineRows', () => {
+  const plans: Plan[] = [
+    { id: 1, name: 'Alpha', color: '#000', sort: 2, openCount: 0 },
+    { id: 2, name: 'Beta', color: '#000', sort: 1, openCount: 0 },
+  ];
+  const buckets: Bucket[] = [
+    { id: 10, planId: 1, name: 'Later', sort: 2 },
+    { id: 11, planId: 1, name: 'Now', sort: 1 },
+    { id: 20, planId: 2, name: 'Only', sort: 1 },
+  ];
+  let n = 0;
+  type T = ReturnType<typeof mk>;
+  const mk = (o: Partial<{ id: number; status: TaskStatus; planId: number; bucketId: number; sortOrder: number; parentId: number | null; start: string | null; due: string | null; labels: { id: number; name: string; color: string }[] }> = {}) => ({
+    id: ++n, title: 't', status: 'todo' as TaskStatus, planId: 1, bucketId: 10, sortOrder: 0, parentId: null as number | null,
+    start: null as string | null, due: null as string | null, dueHasTime: false, completedAt: null as string | null,
+    labels: [] as { id: number; name: string; color: string }[], ...o,
+  });
+  const base = { scope: 1 as number | 'all', buckets, plans, labels: [] as number[], status: 'any' as const, collapsed: new Set<string | number>() };
+  const shape = (rows: TimelineRow<T>[]) => rows.map((r) => (r.kind === 'group' ? r.key : r.task.id));
+
+  it('row height is 32', () => expect(ROW_H).toBe(32));
+
+  it('groups by bucket in sort order, tasks in default order', () => {
+    const a = mk({ bucketId: 10, sortOrder: 1 }), b = mk({ bucketId: 11, sortOrder: 5 }), c = mk({ bucketId: 10, sortOrder: 0 });
+    const rows = timelineRows([a, b, c], base);
+    expect(shape(rows)).toEqual(['b:11', b.id, 'b:10', c.id, a.id]);
+    expect(rows[0]).toEqual({ kind: 'group', key: 'b:11', label: 'Now', count: 1, collapsed: false });
+    expect(rows[2]).toMatchObject({ kind: 'group', label: 'Later', count: 2 });
+  });
+
+  it('groups by plan in All tasks', () => {
+    const a = mk({ planId: 1, bucketId: 11 }), b = mk({ planId: 2, bucketId: 20 }), c = mk({ planId: 1, bucketId: 10 });
+    const rows = timelineRows([a, b, c], { ...base, scope: 'all' });
+    expect(shape(rows)).toEqual(['p:2', b.id, 'p:1', a.id, c.id]);
+    expect(rows[0]).toMatchObject({ label: 'Beta' });
+  });
+
+  it('only the scope\'s tasks inside a plan', () => {
+    const a = mk({ planId: 1 }), b = mk({ planId: 2, bucketId: 20 });
+    expect(shape(timelineRows([a, b], base))).toEqual(['b:10', a.id]);
+  });
+
+  it('a collapsed group hides its tasks but keeps its header', () => {
+    const a = mk({ bucketId: 11 }), b = mk({ bucketId: 10 });
+    const rows = timelineRows([a, b], { ...base, collapsed: new Set<string | number>(['b:11']) });
+    expect(shape(rows)).toEqual(['b:11', 'b:10', b.id]);
+    expect(rows[0]).toMatchObject({ collapsed: true, count: 1 });
+  });
+
+  it('subtasks indent under their parent; a collapsed parent hides them', () => {
+    const p = mk({ sortOrder: 0 }), c1 = mk({ parentId: 0, sortOrder: 1 }), c2 = mk({ parentId: 0, sortOrder: 0 });
+    c1.parentId = p.id; c2.parentId = p.id;
+    const rows = timelineRows([p, c1, c2], base);
+    expect(shape(rows)).toEqual(['b:10', p.id, c2.id, c1.id]);
+    expect(rows[1]).toMatchObject({ kind: 'task', depth: 0, hasChildren: true, collapsed: false, dimmed: false });
+    expect(rows[2]).toMatchObject({ kind: 'task', depth: 1, hasChildren: false });
+    expect(shape(timelineRows([p, c1, c2], { ...base, collapsed: new Set<string | number>([p.id]) }))).toEqual(['b:10', p.id]);
+  });
+
+  it('a matching subtask under a non-matching parent shows a dimmed parent', () => {
+    const p = mk({ status: 'done' }), c = mk({ status: 'todo' });
+    c.parentId = p.id;
+    const rows = timelineRows([p, c], { ...base, status: 'todo' });
+    expect(shape(rows)).toEqual(['b:10', p.id, c.id]);
+    expect(rows[1]).toMatchObject({ dimmed: true });
+    // A dimmed parent never hides its matching subtasks.
+    expect(shape(timelineRows([p, c], { ...base, status: 'todo', collapsed: new Set<string | number>([p.id]) }))).toEqual(['b:10', p.id, c.id]);
+  });
+
+  it('filters by label', () => {
+    const a = mk({ labels: [{ id: 5, name: 'x', color: '#000' }] }), b = mk();
+    expect(shape(timelineRows([a, b], { ...base, labels: [5] }))).toEqual(['b:10', a.id]);
+  });
+
+  it('undated tasks get rows too', () => {
+    const a = mk({ due: iso(2026, 10, 30) }), b = mk({ sortOrder: 1 });
+    expect(shape(timelineRows([a, b], base))).toEqual(['b:10', a.id, b.id]);
+  });
+
+  it('no tasks, no rows', () => expect(timelineRows([], base)).toEqual([]));
 });

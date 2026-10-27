@@ -1,8 +1,14 @@
 // Planner timeline geometry: pure helpers mapping tasks to day columns and back.
 import { monthTitle } from './format';
+import { groupWithParents } from './subtasks';
+import { applyFilters, type StatusFilter } from './tasks';
+import type { Bucket, Plan, TaskStatus } from './types';
 
 export type Zoom = 'days' | 'weeks' | 'months';
 export type DragMode = 'move' | 'start' | 'due';
+
+/** Height of every Planner row (name column, bars and arrows share it). */
+export const ROW_H = 32;
 
 export const DAY_WIDTH: Record<Zoom, number> = { days: 32, weeks: 14, months: 4 };
 
@@ -144,4 +150,65 @@ export function headerTicks(
     }
   }
   return ticks;
+}
+
+// ── Rows ──
+
+export type TimelineRow<T> =
+  | { kind: 'group'; key: string; label: string; count: number; collapsed: boolean }
+  | { kind: 'task'; task: T; depth: 0 | 1; dimmed: boolean; hasChildren: boolean; collapsed: boolean };
+
+type RowTask = {
+  id: number; status: TaskStatus; planId: number; bucketId: number; sortOrder: number; parentId: number | null;
+  labels: { id: number }[]; due: string | null; dueHasTime: boolean; completedAt: string | null;
+};
+
+export interface TimelineOpts {
+  scope: number | 'all'; buckets: Bucket[]; plans: Plan[]; labels: number[]; status: StatusFilter;
+  /** Collapsed group keys (`b:<id>` / `p:<id>`) and parent task ids. */
+  collapsed: Set<string | number>;
+}
+
+/**
+ * Planner rows: top-level tasks grouped by bucket (by plan in All tasks), groups and tasks in their
+ * default order, subtasks under their parent. Dated and undated tasks both get rows. A group's
+ * count is its matching tasks (dimmed parents excluded); empty groups are left out.
+ */
+export function timelineRows<T extends RowTask>(tasks: T[], opts: TimelineOpts): TimelineRow<T>[] {
+  const all = opts.scope === 'all';
+  const planSort = new Map(opts.plans.map((p) => [p.id, p.sort]));
+  const bucketSort = new Map(opts.buckets.map((b) => [b.id, b.sort]));
+  const inScope = all ? tasks : tasks.filter((x) => x.planId === opts.scope);
+  const shown = applyFilters(inScope, { status: opts.status, labels: opts.labels });
+  const byDefault = (a: T, b: T) =>
+    (all ? (planSort.get(a.planId) ?? 0) - (planSort.get(b.planId) ?? 0) : 0) ||
+    (bucketSort.get(a.bucketId) ?? 0) - (bucketSort.get(b.bucketId) ?? 0) ||
+    a.sortOrder - b.sortOrder || a.id - b.id;
+
+  const groups = new Map<string, { id: number; sort: number; label: string; items: ReturnType<typeof groupWithParents<T>> }>();
+  for (const g of groupWithParents<T>(shown, inScope).sort((a, b) => byDefault(a.parent, b.parent))) {
+    const id = all ? g.parent.planId : g.parent.bucketId;
+    const key = `${all ? 'p' : 'b'}:${id}`;
+    if (!groups.has(key)) {
+      const label = all ? opts.plans.find((p) => p.id === id)?.name : opts.buckets.find((b) => b.id === id)?.name;
+      groups.set(key, { id, sort: (all ? planSort : bucketSort).get(id) ?? 0, label: label ?? '', items: [] });
+    }
+    groups.get(key)!.items.push(g);
+  }
+
+  const rows: TimelineRow<T>[] = [];
+  for (const [key, grp] of [...groups].sort((a, b) => a[1].sort - b[1].sort || a[1].id - b[1].id)) {
+    const count = grp.items.reduce((n, g) => n + (g.dimmed ? 0 : 1) + g.children.length, 0);
+    const groupCollapsed = opts.collapsed.has(key);
+    rows.push({ kind: 'group', key, label: grp.label, count, collapsed: groupCollapsed });
+    if (groupCollapsed) continue;
+    for (const g of grp.items) {
+      // A dimmed parent is only there for its matching subtasks, so it never hides them.
+      const collapsed = !g.dimmed && opts.collapsed.has(g.parent.id);
+      rows.push({ kind: 'task', task: g.parent, depth: 0, dimmed: g.dimmed, hasChildren: g.children.length > 0, collapsed });
+      if (collapsed) continue;
+      for (const c of g.children) rows.push({ kind: 'task', task: c, depth: 1, dimmed: false, hasChildren: false, collapsed: false });
+    }
+  }
+  return rows;
 }

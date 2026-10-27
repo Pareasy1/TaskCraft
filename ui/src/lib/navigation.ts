@@ -1,6 +1,6 @@
 // Top-level areas and the calendar's Day/Week/Month mode.
 
-export type Area = 'calendar' | 'tasks' | 'grid';
+export type Area = 'calendar' | 'tasks' | 'grid' | 'planner';
 export type CalendarMode = 'day' | 'week' | 'month';
 
 const KEY = 'taskcraft.calendarMode';
@@ -20,10 +20,10 @@ export function saveCalendarMode(m: CalendarMode) {
   } catch { /* storage unavailable */ }
 }
 
-const AREAS: Record<string, Area> = { '1': 'calendar', '2': 'tasks', '3': 'grid' };
+const AREAS: Record<string, Area> = { '1': 'calendar', '2': 'tasks', '3': 'grid', '4': 'planner' };
 const LETTERS: Record<string, CalendarMode> = { d: 'day', w: 'week', m: 'month' };
 
-/** What a key press changes: Mod+1/2/3 pick the area (Mod+4 is reserved); D/W/M pick the calendar mode. */
+/** What a key press changes: Mod+1/2/3 pick Calendar/Tasks/Grid, Mod+4 the Planner; D/W/M pick the calendar mode. */
 export function shortcutFor(
   e: { key: string; mod: boolean; inTextField: boolean; inOverlay?: boolean; ctrl?: boolean; meta?: boolean; repeat?: boolean },
   area: Area,

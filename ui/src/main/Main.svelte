@@ -16,6 +16,8 @@
   import Inspector, { type Target } from './Inspector.svelte';
   import TasksView from './TasksView.svelte';
   import GridView from './grid/GridView.svelte';
+  import PlannerView from './planner/PlannerView.svelte';
+  import { loadZoom, type Zoom } from '../lib/timeline';
   import { loadCalendarMode, saveCalendarMode, shortcutFor, type Area, type CalendarMode } from '../lib/navigation';
   import Toast from './Toast.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
@@ -33,6 +35,9 @@
   let area = $state<Area>('calendar');
   let mode = $state<CalendarMode>(loadCalendarMode());
   $effect(() => saveCalendarMode(mode));
+  /** The Planner's zoom: the toolbar switches it, the Planner saves it. */
+  let zoom = $state<Zoom>(loadZoom());
+  let planner = $state<ReturnType<typeof PlannerView> | undefined>();
   let anchor = $state(startOfDay(new Date()));
   let sideMonth = $state(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   let calendars = $state<Calendar[]>([]);
@@ -156,6 +161,7 @@
       : addDays(anchor, n * (mode === 'day' ? 1 : 7));
   }
   function goToday() {
+    if (area === 'planner') return planner?.scrollToToday();
     anchor = startOfDay(new Date());
   }
 
@@ -349,14 +355,14 @@
     onopensettings={() => (settingsOpen = true)}
     {plans}
     {scope}
-    onselectscope={(s) => { scope = s; if (area !== 'grid') area = 'tasks'; }}
+    onselectscope={(s) => { scope = s; if (area !== 'grid' && area !== 'planner') area = 'tasks'; }}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
     onstatus={setStatus}
     onopentask={(t) => openTask(t.id)}
   />
   <main class="content">
-    <Toolbar bind:area bind:mode {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
+    <Toolbar bind:area bind:mode bind:zoom {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
       onnew={() => { if (area !== 'calendar') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
     {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
     <div class="body" tabindex="-1" aria-label={title} bind:this={bodyEl}>
@@ -375,6 +381,9 @@
         </div>
       {:else if area === 'grid'}
         <GridView tasks={allTasks} {plans} {buckets} {scope} {weekStart} bind:input={taskInput} bind:active={activeLabels}
+          onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+      {:else if area === 'planner'}
+        <PlannerView bind:this={planner} tasks={allTasks} {plans} {buckets} {scope} {weekStart} bind:zoom bind:input={taskInput} bind:active={activeLabels}
           onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if area === 'tasks'}
         <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} children={kids} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
