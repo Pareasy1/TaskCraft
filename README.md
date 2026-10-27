@@ -20,6 +20,7 @@ Step-by-step help, no Terminal needed: [docs/INSTALL.md](docs/INSTALL.md).
   - `Trip Oct 24 to Oct 26` · `Yoga 6-7pm` · `Gym in 3 days for 2 hours at 7am`
 
   **↩** adds, **⌘↩** adds and opens it, **esc** clears or closes.
+- **Grid:** a table of the selected plan (sort by column, edit title/status/priority/bucket/dates in place with Undo, choose columns, fold subtasks), with a charts panel on top whose bars filter the table. Top menu: Calendar / Tasks / Grid (⌘1/⌘2/⌘3, Ctrl on Windows/Linux).
 - **Main window:** ⌘1 Day · ⌘2 Week · ⌘3 Month · ⌘N new event · ⌘T today.
   Drag events to move them, drag the bottom edge to resize, double-click empty
   space to create. Closing the window keeps TaskCraft in the menu bar.
