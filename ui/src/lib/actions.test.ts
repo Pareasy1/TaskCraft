@@ -286,6 +286,14 @@ describe('saveDates', () => {
     })]);
   });
 
+  it('removing the dates says so, with Undo', async () => {
+    const task = mk(9, null, false, 'Plan trip', { start: '2026-10-20T00:00:00.000Z', due: '2026-10-22T00:00:00.000Z' });
+    await saveDates(task, { start: null, startHasTime: false, due: null, dueHasTime: false }, 'planner.datesRemoved');
+    expect(vi.mocked(api.updateTask).mock.calls[0][1]).toEqual(expect.objectContaining({ start: null, due: null }));
+    expect(toast.current?.message).toBe('Removed the dates of “Plan trip”');
+    expect(toast.current?.canUndo).toBe(true);
+  });
+
   it('a failed save throws and shows no toast', async () => {
     vi.mocked(api.updateTask).mockRejectedValueOnce(new Error('nope'));
     await expect(saveDates(mk(8, null), { start: null, startHasTime: false, due: '2026-10-23T00:00:00.000Z', dueHasTime: false })).rejects.toThrow('nope');

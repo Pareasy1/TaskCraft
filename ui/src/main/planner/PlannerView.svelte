@@ -9,7 +9,7 @@
 
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { t } from '../../lib/i18n';
+  import { t, type Key } from '../../lib/i18n';
   import { api, errorMessage, onItemsChanged } from '../../lib/api';
   import type { Bucket, Dependency, Plan, Span, Task } from '../../lib/types';
   import {
@@ -109,6 +109,9 @@
   /** The selected arrow (`taskId:dependsOn`): the focused one. */
   let selectedArrow = $state<string | null>(null);
 
+  const RULES = ['dependency_self', 'dependency_cycle'];
+  const isRuleRefusal = (e: unknown) => !!e && typeof e === 'object' && RULES.includes(String((e as { code?: unknown }).code));
+
   /** `targetId` now depends on `source` (a connector drop or "Depends on…"), with Undo. */
   async function link(source: Task, targetId: number) {
     const target = byId.get(targetId);
@@ -116,7 +119,9 @@
     try {
       await api.addDependency(targetId, source.id);
     } catch (e) {
-      return onerror(errorMessage(e)); // self / loop refusals, translated
+      // The rule refusals (itself, a loop) are a toast; anything else is a real error.
+      if (isRuleRefusal(e)) return notify(errorMessage(e));
+      return onerror(errorMessage(e));
     }
     deps = [...deps, { taskId: targetId, dependsOn: source.id }];
     loadDeps();
@@ -197,9 +202,9 @@
     else preview.delete(id);
   }
   /** Saves new dates for `task` (as it was before the change), keeping them on screen meanwhile. */
-  function onsave(task: Task, next: TaskDates) {
+  function onsave(task: Task, next: TaskDates, message?: Key) {
     preview.set(task.id, next);
-    saveDates(task, next).catch((e) => {
+    saveDates(task, next, message).catch((e) => {
       preview.delete(task.id);
       onerror(errorMessage(e));
     });
@@ -338,7 +343,7 @@
       <button role="menuitem" disabled>{t('dep.remove')}</button>
     {/if}
     <div class="sep" role="separator"></div>
-    <button role="menuitem" disabled={!task.start && !task.due} onclick={() => barMenu.act((x) => onsave(x, NO_DATES))}>{t('planner.removeDates')}</button>
+    <button role="menuitem" disabled={!task.start && !task.due} onclick={() => barMenu.act((x) => onsave(x, NO_DATES, 'planner.datesRemoved'))}>{t('planner.removeDates')}</button>
   </Menu>
 {/if}
 

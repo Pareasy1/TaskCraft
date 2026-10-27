@@ -7,7 +7,7 @@ import { requestBlocked, requestComplete, requestCompleteParent } from './comple
 import { completedBySave, completeUndo, completionAsk, offerParentAfter } from './subtasks';
 import type { Bucket, Plan, Priority, Task, TaskInput, TaskStatus } from './types';
 import { lastTopLevelIn, quickAddNeedsMove } from './plans';
-import { t } from './i18n';
+import { t, type Key } from './i18n';
 import { blockedPrompt } from './dependencies';
 
 /** A task's subtasks, its siblings (itself included) and its parent; see `statusCtx`. */
@@ -102,12 +102,13 @@ export interface TaskDates { start: string | null; startHasTime: boolean; due: s
 
 /**
  * Saves a task's new dates, keeping every other field, and offers Undo (which puts the task back
- * as it was). A failed save throws; the caller reverts its preview and reports the error.
+ * as it was). `message` is the toast's text key (with {title}). A failed save throws; the caller
+ * reverts its preview and reports the error.
  */
-export async function saveDates(task: Task, next: TaskDates): Promise<void> {
+export async function saveDates(task: Task, next: TaskDates, message: Key = 'planner.moved'): Promise<void> {
   const before = taskInput(task);
   await api.updateTask(task.id, { ...before, ...next });
-  notify(t('planner.moved', { title: task.title }), () => api.updateTask(task.id, before));
+  notify(t(message, { title: task.title }), () => api.updateTask(task.id, before));
 }
 
 /**
