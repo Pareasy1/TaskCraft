@@ -1,11 +1,12 @@
 <script lang="ts">
   // One headline number in the charts panel.
+  import { fmtCount } from '../../lib/charts';
   let { label, value, alert = false }: { label: string; value: number; alert?: boolean } = $props();
 </script>
 
 <div class="tile">
   <span class="label">{label}</span>
-  <span class="value" class:alert={alert && value > 0}>{value.toLocaleString()}</span>
+  <span class="value" class:alert={alert && value > 0}>{fmtCount(value)}</span>
 </div>
 
 <style>

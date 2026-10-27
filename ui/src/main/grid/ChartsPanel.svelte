@@ -2,7 +2,7 @@
   // Above the grid: four stat tiles and four charts for the tasks shown (before the chart filter).
   import { ChevronDown } from 'lucide-svelte';
   import { dateLocale, t } from '../../lib/i18n';
-  import { barLengths, loadChartsOpen, saveChartsOpen } from '../../lib/charts';
+  import { barLengths, fmtCount, loadChartsOpen, saveChartsOpen, shownTicks } from '../../lib/charts';
   import type { ChartFilter } from '../../lib/grid';
   import type { GridStats } from '../../lib/gridStats';
   import { STATUS_LABEL } from '../../lib/tasks';
@@ -49,6 +49,7 @@
   let weekW = $state(0);
   let band = $derived(weekW / Math.max(1, stats.perWeek.length));
   let colW = $derived(Math.max(4, Math.min(COL_MAX, band * 0.6)));
+  let ticks = $derived(new Set(shownTicks(stats.perWeek.length, weekW)));
   let heights = $derived(barLengths(stats.perWeek.map((w) => w.n), PLOT_H));
   const tick = (d: Date) => d.toLocaleDateString(dateLocale, { day: 'numeric', month: 'numeric' });
   const longWeek = (d: Date) => d.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -61,7 +62,7 @@
 </script>
 
 <section class="panel" aria-label={t('charts.label')}>
-  <button class="toggle" aria-expanded={open} aria-controls="grid-charts" onclick={toggle}>
+  <button class="toggle" aria-expanded={open} aria-controls={open ? 'grid-charts' : undefined} onclick={toggle}>
     <ChevronDown size={13} aria-hidden="true" class={open ? '' : 'closed'} />{t('charts.toggle')}
   </button>
   {#if open}
@@ -90,8 +91,8 @@
                 {#each stats.perWeek as w, i (w.weekStart.getTime())}
                   {@const x = i * band + (band - colW) / 2}
                   {#if heights[i] > 0}<path d={colPath(x, heights[i])} />{/if}
-                  <text class="val" x={x + colW / 2} y={TOP + PLOT_H - heights[i] - 4} text-anchor="middle">{w.n}</text>
-                  <text class="tick" x={x + colW / 2} y={TOP + PLOT_H + 14} text-anchor="middle">{tick(w.weekStart)}</text>
+                  <text class="val" x={x + colW / 2} y={TOP + PLOT_H - heights[i] - 4} text-anchor="middle">{fmtCount(w.n)}</text>
+                  {#if ticks.has(i)}<text class="tick" x={x + colW / 2} y={TOP + PLOT_H + 14} text-anchor="middle">{tick(w.weekStart)}</text>{/if}
                 {/each}
               </svg>
             </div>
@@ -99,7 +100,7 @@
               <caption>{t('charts.perWeek')}</caption>
               <thead><tr><th scope="col">{t('charts.week')}</th><th scope="col">{t('charts.completed')}</th></tr></thead>
               <tbody>
-                {#each stats.perWeek as w (w.weekStart.getTime())}<tr><th scope="row">{longWeek(w.weekStart)}</th><td>{w.n}</td></tr>{/each}
+                {#each stats.perWeek as w (w.weekStart.getTime())}<tr><th scope="row">{longWeek(w.weekStart)}</th><td>{fmtCount(w.n)}</td></tr>{/each}
               </tbody>
             </table>
           </figure>
@@ -115,12 +116,13 @@
   .toggle:hover { background: var(--hover); color: var(--text); }
   .toggle:focus-visible { outline: 2px solid var(--accent); }
   .toggle :global(.closed) { transform: rotate(-90deg); }
-  .body { padding-top: 8px; max-height: 45vh; overflow: auto; }
+  /* The side padding keeps focus rings, row highlights and edge tick labels inside the scroller. */
+  .body { padding: 8px 4px 0; margin: 0 -4px; max-height: 45vh; overflow: auto; }
   .empty { margin: 0; padding: 8px 0; color: var(--muted); font-size: 13px; }
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 24px; }
   .week { margin: 0; min-width: 0; }
-  .week figcaption { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .week figcaption { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; padding-left: 4px; }
   .week svg { display: block; overflow: visible; }
   .week path { fill: var(--status-done); }
   .base { stroke: var(--border); stroke-width: 1; }
