@@ -7,7 +7,7 @@ const mk = (id: number, extra: Partial<Task> = {}): Task => ({
   recurring: false, rrule: null, notes: 'n', color: '#000', alerts: [{ type: 'before', value: 15 }], status: 'todo',
   labels: [{ id: 1, name: 'home', color: '#0f0' }], planId: 3, bucketId: 7, sortOrder: id, parentId: null, priority: 'medium',
   start: null, startHasTime: false, subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0,
-  attachmentCount: 2, ...extra,
+  attachmentCount: 2, blockedBy: 0, ...extra,
 });
 
 describe('editInput', () => {

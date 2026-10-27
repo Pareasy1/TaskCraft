@@ -397,6 +397,8 @@ const en = {
   'inspector.more': 'More actions',
   'error.attachment_too_large': 'Files can be up to 100 MB.',
   'error.attachment_url': 'Links must start with http:// or https://.',
+  'error.dependency_self': "A task can't depend on itself.",
+  'error.dependency_cycle': 'That would make a loop of dependencies.',
   'error.template_name': 'Template names need 1 to 60 characters.',
 };
 
@@ -787,6 +789,8 @@ const it: Record<Key, string> = {
   'inspector.more': 'Altre azioni',
   'error.attachment_too_large': 'I file possono essere al massimo di 100 MB.',
   'error.attachment_url': 'I link devono iniziare con http:// o https://.',
+  'error.dependency_self': "Un'attività non può dipendere da sé stessa.",
+  'error.dependency_cycle': 'Così si creerebbe un giro di dipendenze.',
   'error.template_name': 'Il nome del modello deve avere da 1 a 60 caratteri.',
 };
 

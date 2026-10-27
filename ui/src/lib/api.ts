@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { t } from './i18n';
 import type {
-  AddFilesResult, Attachment, Bucket, Calendar, ChecklistItem, CalendarInput, DeleteMode, DuplicateResult, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
+  AddFilesResult, Attachment, Bucket, Calendar, ChecklistItem, CalendarInput, DeleteMode, Dependency, DuplicateResult, EventFull, EventInput, Hit, ItemRef, Occurrence, ParsedItem, Plan,
   Scope, Settings, Task, TaskFilter, TaskInput, TaskLabel, TaskStatus, TemplateInfo,
 } from './types';
 
@@ -65,6 +65,9 @@ export const api = {
     invoke<Attachment>('add_link_attachment', { taskId, url, name }),
   renameAttachment: (id: number, name: string) => invoke<void>('rename_attachment', { id, name }),
   reorderAttachments: (taskId: number, ids: number[]) => invoke<void>('reorder_attachments', { taskId, ids }),
+  addDependency: (taskId: number, dependsOn: number) => invoke<void>('add_dependency', { taskId, dependsOn }),
+  removeDependency: (taskId: number, dependsOn: number) => invoke<void>('remove_dependency', { taskId, dependsOn }),
+  listDependencies: (taskIds?: number[]) => invoke<Dependency[]>('list_dependencies', { taskIds: taskIds ?? null }),
   removeAttachment: (id: number) => invoke<Attachment>('remove_attachment', { id }),
   restoreFileAttachment: (taskId: number, name: string, stored: string, size: number) =>
     invoke<Attachment>('restore_file_attachment', { taskId, name, stored, size }),
@@ -91,7 +94,8 @@ export function onItemsChanged(cb: () => void): Promise<UnlistenFn> {
 
 const TRANSLATED_ERRORS = ['empty', 'no_calendar', 'not_found', 'hotkey_unavailable', 'duplicate', 'last_plan', 'last_bucket',
   'parent_is_subtask', 'has_subtasks', 'repeating_subtask', 'start_after_due', 'checklist_text',
-  'attachment_too_large', 'attachment_url', 'template_name'] as const;
+  'attachment_too_large', 'attachment_url', 'template_name',
+  'dependency_self', 'dependency_cycle'] as const;
 
 /** The app-language message for an error code, or null when the code has none. */
 export function knownErrorMessage(code: string): string | null {
