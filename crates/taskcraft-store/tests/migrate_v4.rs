@@ -90,7 +90,7 @@ fn v3_tasks_keep_everything() {
     let path = dir.path().join("taskcraft.db");
     v3_db(&path);
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 5);
+    assert_eq!(s.schema_version().unwrap(), 6);
     for (id, sort) in [(1, 1.0), (2, 2.5)] {
         let t = s.get_task(id).unwrap();
         assert_eq!(t.priority, Priority::Medium);
@@ -121,7 +121,7 @@ fn real_db_copy_v4() {
     };
     let before = snapshot(path);
     let store = Store::open(path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 5);
+    assert_eq!(store.schema_version().unwrap(), 6);
     drop(store);
     assert_eq!(snapshot(path), before, "task count/plan/bucket changed");
     let c = Connection::open(path).unwrap();

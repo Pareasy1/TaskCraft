@@ -107,6 +107,13 @@ export interface Task {
   checklistDone: number;
   checklistTotal: number;
   attachmentCount: number;
+  /** Open tasks this one waits on. */
+  blockedBy: number;
+}
+
+export interface Dependency {
+  taskId: number;
+  dependsOn: number;
 }
 
 export interface Occurrence {

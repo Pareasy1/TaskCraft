@@ -99,7 +99,7 @@ fn v4_keeps_everything() {
     let path = dir.path().join("taskcraft.db");
     v4_db(&path);
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 5);
+    assert_eq!(s.schema_version().unwrap(), 6);
     let t = s.get_task(1).unwrap();
     assert_eq!((t.title.as_str(), t.priority), ("a", Priority::Urgent));
     assert_eq!((t.checklist_total, t.attachment_count), (1, 0));
@@ -124,12 +124,15 @@ fn real_db_copy_v5() {
     };
     println!("before: tasks={tasks} subtasks={subs}");
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 5);
+    assert_eq!(s.schema_version().unwrap(), 6);
     drop(s);
     let c = Connection::open(&path).unwrap();
     let n = |sql: &str| c.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
     assert_eq!(n("SELECT COUNT(*) FROM tasks"), tasks);
-    assert_eq!(n("SELECT COUNT(*) FROM tasks WHERE parent_id IS NOT NULL"), subs);
+    assert_eq!(
+        n("SELECT COUNT(*) FROM tasks WHERE parent_id IS NOT NULL"),
+        subs
+    );
     assert_eq!(n("SELECT COUNT(*) FROM attachments"), 0);
     assert_eq!(n("SELECT COUNT(*) FROM templates"), 0);
     println!("after: tasks={tasks} subtasks={subs}");

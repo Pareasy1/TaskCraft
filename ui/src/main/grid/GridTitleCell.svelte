@@ -4,6 +4,7 @@
   import { t } from '../../lib/i18n';
   import type { GridRow } from '../../lib/grid';
   import type { Task } from '../../lib/types';
+  import BlockedBadge from '../tasks/BlockedBadge.svelte';
 
   // The Grid's Title cell: indent, collapse caret, and the inline title editor.
   let {
@@ -94,6 +95,7 @@
   {:else}
     <span class="text">{row.task.title}{#if row.dimmed}<span class="sr"> {t('table.parentRowSr')}</span>{/if}</span>
   {/if}
+  {#if row.task.blockedBy > 0 && !editing}<BlockedBadge count={row.task.blockedBy} />{/if}
 </span>
 
 <style>

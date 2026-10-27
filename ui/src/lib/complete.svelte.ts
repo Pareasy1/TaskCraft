@@ -8,7 +8,8 @@ export type CompleteChoice = 'all' | 'only' | 'yes' | 'cancel';
 
 export type CompleteAsk =
   | { kind: 'children'; task: Task; openChildren: number }
-  | { kind: 'parent'; task: Task };
+  | { kind: 'parent'; task: Task }
+  | { kind: 'blocked'; message: string };
 
 let resolveFn: ((c: CompleteChoice) => void) | null = null;
 
@@ -29,6 +30,11 @@ export function requestComplete(task: Task, openChildren: number): Promise<Compl
 /** All of `parent`'s subtasks are done: asks whether to mark it done too (true = Yes). */
 export async function requestCompleteParent(parent: Task): Promise<boolean> {
   return (await ask({ kind: 'parent', task: parent })) === 'yes';
+}
+
+/** The task waits on open ones: asks whether to go on anyway (true = Yes). */
+export async function requestBlocked(message: string): Promise<boolean> {
+  return (await ask({ kind: 'blocked', message })) === 'yes';
 }
 
 export function answerComplete(choice: CompleteChoice) {

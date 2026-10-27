@@ -9,7 +9,11 @@ describe('shortcutFor', () => {
     expect(shortcutFor(k('2', true), 'calendar')).toEqual({ area: 'tasks' });
     expect(shortcutFor(k('3', true), 'calendar')).toEqual({ area: 'grid' });
   });
-  it('reserves Mod+4', () => expect(shortcutFor(k('4', true), 'calendar')).toBeNull());
+  it('maps Mod+4 to the planner', () => {
+    expect(shortcutFor(k('4', true), 'calendar')).toEqual({ area: 'planner' });
+    expect(shortcutFor(k('4', true), 'grid')).toEqual({ area: 'planner' });
+  });
+  it('ignores Mod+5', () => expect(shortcutFor(k('5', true), 'calendar')).toBeNull());
   it('D/W/M set the mode in calendar outside text fields', () => {
     expect(shortcutFor(k('d'), 'calendar')).toEqual({ mode: 'day' });
     expect(shortcutFor(k('w'), 'calendar')).toEqual({ mode: 'week' });
@@ -19,6 +23,9 @@ describe('shortcutFor', () => {
   it('ignores letters outside calendar', () => {
     expect(shortcutFor(k('w'), 'tasks')).toBeNull();
     expect(shortcutFor(k('w'), 'grid')).toBeNull();
+  });
+  it('D/W/M do nothing in the planner', () => {
+    for (const key of ['d', 'w', 'm']) expect(shortcutFor(k(key), 'planner')).toBeNull();
   });
   it('ignores letters with mod and other keys', () => {
     expect(shortcutFor(k('d', true), 'calendar')).toBeNull();

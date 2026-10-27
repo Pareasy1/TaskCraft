@@ -15,6 +15,8 @@ vi.mock('./api', () => ({
     addLinkAttachment: vi.fn(async () => ({ id: nextId++ })),
     reorderAttachments: vi.fn(async () => {}),
     setTaskStatus: vi.fn(async () => {}),
+    listDependencies: vi.fn(async () => []),
+    addDependency: vi.fn(async () => {}),
   },
   errorMessage: (e: unknown) => String(e),
 }));
@@ -28,7 +30,7 @@ const mk = (id: number, parentId: number | null, title = `T${id}`): Task => ({
   id, calendarId: 1, title, due: null, dueHasTime: false, tz: 'UTC', completedAt: null,
   recurring: false, rrule: null, notes: null, color: '#000', alerts: [], status: 'todo', labels: [],
   planId: 1, bucketId: 1, sortOrder: id, parentId, priority: 'medium', start: null, startHasTime: false,
-  subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
+  subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0, blockedBy: 0,
 });
 const item = (id: number, taskId: number, text: string, done: boolean): ChecklistItem => ({ id, taskId, text, done, sort: id });
 const file = (id: number, taskId: number, name: string, stored: string, size: number): Attachment =>
@@ -61,6 +63,7 @@ beforeEach(() => {
   vi.mocked(api.listSubtasks).mockImplementation(async (id: number) => (id === 1 ? [mk(2, 1), mk(3, 1)] : []));
   vi.mocked(api.listChecklist).mockImplementation(async (id: number) => lists[id] ?? []);
   vi.mocked(api.listAttachments).mockImplementation(async (id: number) => atts[id] ?? []);
+  vi.mocked(api.listDependencies).mockImplementation(async () => []);
 });
 
 describe('restoredOrder', () => {
@@ -116,6 +119,35 @@ describe('subtask delete undo', () => {
     vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(2, 1), mk(100, 1)]);
     await restoreSubtask(snap);
     expect(vi.mocked(api.reorderSubtasks)).not.toHaveBeenCalled();
+  });
+});
+
+describe('dependency undo', () => {
+  const deps = [{ taskId: 3, dependsOn: 5 }, { taskId: 7, dependsOn: 3 }];
+  it('restore re-adds dependencies', async () => {
+    vi.mocked(api.listDependencies).mockImplementation(async () => deps);
+    const snap = await snapshotSubtask(3, [2, 3]);
+    vi.clearAllMocks();
+    vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(100, 1)]);
+    const id = await restoreSubtask(snap);
+    expect(vi.mocked(api.addDependency).mock.calls).toEqual([[id, 5], [7, id]]);
+  });
+  it('restore re-adds dependencies, skipping missing', async () => {
+    vi.mocked(api.listDependencies).mockImplementation(async () => deps);
+    const snap = await snapshotSubtask(3, [2, 3]);
+    vi.clearAllMocks();
+    vi.mocked(api.listSubtasks).mockImplementation(async () => [mk(100, 1)]);
+    vi.mocked(api.addDependency).mockRejectedValueOnce({ code: 'not_found' });
+    const id = await restoreSubtask(snap);
+    expect(vi.mocked(api.addDependency).mock.calls).toEqual([[id, 5], [7, id]]);
+    expect(toast.current).toBeNull();
+  });
+  it('remaps ids inside a restored tree', async () => {
+    vi.mocked(api.listDependencies).mockImplementation(async (ids) => (ids?.[0] === 2 ? [{ taskId: 2, dependsOn: 1 }, { taskId: 2, dependsOn: 9 }] : []));
+    const snap = await snapshotWithSubtasks(1);
+    vi.clearAllMocks();
+    await restoreWithSubtasks(snap);
+    expect(vi.mocked(api.addDependency).mock.calls).toEqual([[104, 100], [104, 9]]);
   });
 });
 

@@ -12,11 +12,22 @@ export interface TaskSnapshot {
   checklist: { text: string; done: boolean }[];
   /** In their order. A deleted task's stored files wait 15 s before going, so Undo can re-link them. */
   attachments: AttachmentSnapshot[];
+  /** The task's own id before the delete (to remap dependencies inside a restored tree). */
+  id: number;
+  /** Ids of tasks this one depends on. */
+  dependsOn: number[];
+  /** Ids of tasks that depend on this one. */
+  blocks: number[];
 }
 
 async function snapshot(id: number): Promise<TaskSnapshot> {
-  const [task, list, atts] = await Promise.all([api.getTask(id), api.listChecklist(id), api.listAttachments(id)]);
+  const [task, list, atts, deps] = await Promise.all([
+    api.getTask(id), api.listChecklist(id), api.listAttachments(id), api.listDependencies([id]),
+  ]);
   return {
+    id,
+    dependsOn: deps.filter((d) => d.taskId === id).map((d) => d.dependsOn),
+    blocks: deps.filter((d) => d.dependsOn === id).map((d) => d.taskId),
     input: taskInput(task),
     checklist: list.map(({ text, done }) => ({ text, done })),
     attachments: atts.map(({ kind, name, stored, url, size }) => ({ kind, name, stored, url, size })),
@@ -35,7 +46,7 @@ export async function restoreAttachment(taskId: number, a: AttachmentSnapshot): 
  * Best effort for attachments: one that cannot come back (e.g. its file was already purged) is
  * skipped and its name pushed on `missed`. Returns the new id.
  */
-async function recreate(s: TaskSnapshot, missed: string[], parentId?: number): Promise<number> {
+async function recreate(s: TaskSnapshot, missed: string[], parentId?: number, withDeps = true): Promise<number> {
   const id = await api.createTask(parentId === undefined ? s.input : { ...s.input, parentId });
   for (const item of s.checklist) {
     const itemId = await api.addChecklistItem(id, item.text);
@@ -48,7 +59,25 @@ async function recreate(s: TaskSnapshot, missed: string[], parentId?: number): P
       missed.push(a.name);
     }
   }
+  if (withDeps) await restoreDependencies(id, s);
   return id;
+}
+
+/**
+ * Re-adds a restored task's dependencies in both directions. `remap`: old id -> new id for tasks
+ * restored together (a parent and its subtasks). A pair whose other task is gone (or that would
+ * now make a cycle) is skipped silently.
+ */
+async function restoreDependencies(newId: number, s: TaskSnapshot, remap: Map<number, number> = new Map()): Promise<void> {
+  const to = (x: number) => remap.get(x) ?? x;
+  for (const x of s.dependsOn) {
+    try { await api.addDependency(newId, to(x)); } catch { /* other task is gone */ }
+  }
+  for (const y of s.blocks) {
+    // Inside a tree the other side adds this pair from its own dependsOn.
+    if (remap.has(y)) continue;
+    try { await api.addDependency(y, newId); } catch { /* other task is gone */ }
+  }
 }
 
 /** One toast naming every attachment that could not come back. */
@@ -71,8 +100,16 @@ export async function snapshotWithSubtasks(id: number): Promise<TreeSnapshot> {
  */
 export async function restoreWithSubtasks(s: TreeSnapshot): Promise<number> {
   const missed: string[] = [];
-  const id = await recreate(s.task, missed);
-  for (const sub of s.subtasks) await recreate(sub, missed, id);
+  const id = await recreate(s.task, missed, undefined, false);
+  const remap = new Map([[s.task.id, id]]);
+  const created = [{ snap: s.task, id }];
+  for (const sub of s.subtasks) {
+    const subId = await recreate(sub, missed, id, false);
+    remap.set(sub.id, subId);
+    created.push({ snap: sub, id: subId });
+  }
+  // Dependencies last, once every task of the tree has its new id.
+  for (const c of created) await restoreDependencies(c.id, c.snap, remap);
   if (s.task.input.status === 'todo' && s.subtasks.some((x) => x.input.status === 'inProgress')) {
     await api.setTaskStatus(id, 'todo');
   }

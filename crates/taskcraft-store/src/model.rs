@@ -32,6 +32,8 @@ pub enum Rule {
     AttachmentTooLarge,
     AttachmentUrl,
     TemplateName,
+    DependencySelf,
+    DependencyCycle,
 }
 
 impl Rule {
@@ -45,6 +47,8 @@ impl Rule {
             Rule::AttachmentTooLarge => "attachment_too_large",
             Rule::AttachmentUrl => "attachment_url",
             Rule::TemplateName => "template_name",
+            Rule::DependencySelf => "dependency_self",
+            Rule::DependencyCycle => "dependency_cycle",
         }
     }
 }
@@ -60,6 +64,8 @@ impl std::fmt::Display for Rule {
             Rule::AttachmentTooLarge => "the file is larger than 100 MiB",
             Rule::AttachmentUrl => "only http and https links can be attached",
             Rule::TemplateName => "template name is empty or too long",
+            Rule::DependencySelf => "a task cannot depend on itself",
+            Rule::DependencyCycle => "this dependency would create a cycle",
         })
     }
 }
@@ -259,6 +265,15 @@ pub struct Task {
     pub checklist_done: i64,
     pub checklist_total: i64,
     pub attachment_count: i64,
+    pub blocked_by: i64,
+}
+
+/// `task_id` cannot finish before `depends_on` is done.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Dependency {
+    pub task_id: i64,
+    pub depends_on: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

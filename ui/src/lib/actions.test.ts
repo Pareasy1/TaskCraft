@@ -11,12 +11,13 @@ vi.mock('./api', () => ({
     getDefaultPlan: vi.fn(async () => 1),
     moveTask: vi.fn(async () => {}),
     listSubtasks: vi.fn(),
+    listDependencies: vi.fn(async () => []),
   },
   errorMessage: (e: unknown) => String(e),
 }));
 
 import { api } from './api';
-import { askParentAfterSave, changeStatus, quickAddTask } from './actions';
+import { askParentAfterSave, changeStatus, quickAddTask, saveDates } from './actions';
 import { answerComplete, pending } from './complete.svelte';
 import { dismiss, runAction, toast, undo } from './toast.svelte';
 import type { Task } from './types';
@@ -25,7 +26,7 @@ const mk = (id: number, parentId: number | null, done = false, title = `T${id}`,
   id, calendarId: 1, title, due: null, dueHasTime: false, tz: 'UTC', completedAt: done ? '2026-10-23T10:00:00Z' : null,
   recurring: false, rrule: null, notes: null, color: '#000', alerts: [], status: done ? 'done' : 'todo', labels: [],
   planId: 1, bucketId: 1, sortOrder: id, parentId, priority: 'medium', start: null, startHasTime: false,
-  subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0, ...extra,
+  subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0, blockedBy: 0, ...extra,
 });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -212,5 +213,90 @@ describe('quickAddTask', () => {
     const bucket = { id: 20, planId: 2, name: 'b', sort: 0 };
     await expect(quickAddTask('x', plan, bucket, [], () => order.push('created'))).rejects.toThrow('move failed');
     expect(order).toEqual(['created', 'move']);
+  });
+});
+
+describe('changeStatus on blocked tasks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.listDependencies).mockResolvedValue([{ taskId: 1, dependsOn: 9 }]);
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => mk(id, null, false, `Blocker ${id}`));
+  });
+  afterEach(() => dismiss());
+  const blocked = mk(1, null, false, 'Blocked', { blockedBy: 1 });
+
+  it('blocked task asks before starting; No changes nothing', async () => {
+    const p = changeStatus(blocked, 'inProgress');
+    await tick();
+    expect(pending.current).toMatchObject({ kind: 'blocked', message: 'Depends on “Blocker 9”, still open. Continue?' });
+    answerComplete('cancel');
+    await p;
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+
+  it('Yes proceeds', async () => {
+    const p = changeStatus(blocked, 'done');
+    await tick();
+    answerComplete('yes');
+    await p;
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'done');
+  });
+
+  it('unblocked task does not ask', async () => {
+    await changeStatus(mk(1, null), 'inProgress');
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'inProgress');
+  });
+
+  it('moving a blocked task to todo does not ask', async () => {
+    await changeStatus({ ...blocked, status: 'inProgress' }, 'todo');
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'todo');
+  });
+
+  it('subtask start auto-starting a blocked parent does not ask for the parent', async () => {
+    const parent = mk(1, null, false, 'P', { blockedBy: 1 });
+    await changeStatus(mk(2, 1), 'inProgress', { children: [], siblings: [], parent });
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(2, 'inProgress');
+  });
+});
+
+describe('saveDates', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => dismiss());
+
+  it('saveDates keeps other fields and offers Undo', async () => {
+    const task = mk(7, 3, false, 'Draft brief', {
+      notes: 'n', priority: 'urgent', labels: [{ id: 1, name: 'work', color: '#f00' }] as Task['labels'],
+      start: '2026-10-20T09:30:00.000Z', startHasTime: true, due: '2026-10-22T00:00:00.000Z', dueHasTime: false,
+    });
+    const next = { start: '2026-10-21T09:30:00.000Z', startHasTime: true, due: '2026-10-23T00:00:00.000Z', dueHasTime: false };
+    await saveDates(task, next);
+    expect(api.updateTask).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.updateTask).mock.calls[0]).toEqual([7, {
+      calendarId: 1, title: 'Draft brief', tz: 'UTC', rrule: null, notes: 'n', alerts: [], status: 'todo', labels: ['work'],
+      planId: 1, bucketId: 1, parentId: 3, priority: 'urgent', ...next,
+    }]);
+    expect(toast.current?.message).toBe('Moved “Draft brief”');
+    expect(toast.current?.canUndo).toBe(true);
+    await undo();
+    expect(vi.mocked(api.updateTask).mock.calls[1]).toEqual([7, expect.objectContaining({
+      start: '2026-10-20T09:30:00.000Z', startHasTime: true, due: '2026-10-22T00:00:00.000Z', dueHasTime: false, notes: 'n',
+    })]);
+  });
+
+  it('removing the dates says so, with Undo', async () => {
+    const task = mk(9, null, false, 'Plan trip', { start: '2026-10-20T00:00:00.000Z', due: '2026-10-22T00:00:00.000Z' });
+    await saveDates(task, { start: null, startHasTime: false, due: null, dueHasTime: false }, 'planner.datesRemoved');
+    expect(vi.mocked(api.updateTask).mock.calls[0][1]).toEqual(expect.objectContaining({ start: null, due: null }));
+    expect(toast.current?.message).toBe('Removed the dates of “Plan trip”');
+    expect(toast.current?.canUndo).toBe(true);
+  });
+
+  it('a failed save throws and shows no toast', async () => {
+    vi.mocked(api.updateTask).mockRejectedValueOnce(new Error('nope'));
+    await expect(saveDates(mk(8, null), { start: null, startHasTime: false, due: '2026-10-23T00:00:00.000Z', dueHasTime: false })).rejects.toThrow('nope');
+    expect(toast.current).toBeNull();
   });
 });

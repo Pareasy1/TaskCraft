@@ -3,11 +3,12 @@ import { api } from './api';
 import { taskInput } from './edit';
 import { STATUS_LABEL } from './tasks';
 import { notify } from './toast.svelte';
-import { requestComplete, requestCompleteParent } from './complete.svelte';
+import { requestBlocked, requestComplete, requestCompleteParent } from './complete.svelte';
 import { completedBySave, completeUndo, completionAsk, offerParentAfter } from './subtasks';
 import type { Bucket, Plan, Priority, Task, TaskInput, TaskStatus } from './types';
 import { lastTopLevelIn, quickAddNeedsMove } from './plans';
-import { t } from './i18n';
+import { t, type Key } from './i18n';
+import { blockedPrompt } from './dependencies';
 
 /** A task's subtasks, its siblings (itself included) and its parent; see `statusCtx`. */
 export interface StatusCtx { children: Task[]; siblings: Task[]; parent: Task | null }
@@ -16,12 +17,26 @@ export interface StatusCtx { children: Task[]; siblings: Task[]; parent: Task | 
 export interface StatusHooks { completeParent?: (parent: Task) => Promise<void> }
 
 /**
+ * Starting or finishing a task that still waits on open tasks asks first (false = No).
+ * Anything else (other statuses, no change, nothing open) is allowed without a question.
+ */
+export async function confirmBlocked(task: Task, next: TaskStatus): Promise<boolean> {
+  if ((next !== 'inProgress' && next !== 'done') || next === task.status || task.blockedBy <= 0) return true;
+  const deps = await api.listDependencies([task.id]);
+  const ids = deps.filter((d) => d.taskId === task.id).map((d) => d.dependsOn);
+  const open = (await Promise.all(ids.map((id) => api.getTask(id).catch(() => null)))).filter((x): x is Task => !!x && !x.completedAt && x.status !== 'done');
+  if (!open.length) return true;
+  return requestBlocked(blockedPrompt(open));
+}
+
+/**
  * Changes a task's status and offers Undo (which restores the task as it was, due date included).
  * With `ctx`, completing a parent with open subtasks asks first, and completing the last open
  * subtask asks whether to complete its parent too. A subtask put in progress starts a To do
  * parent (the store does it); the toast then says so and its Undo puts both back.
  */
 export async function changeStatus(task: Task, s: TaskStatus, ctx?: StatusCtx, hooks: StatusHooks = {}): Promise<void> {
+  if (!(await confirmBlocked(task, s))) return;
   const before = taskInput(task);
   if (s === 'done' && ctx && completionAsk(task, ctx.children) === 'askChildren') {
     const open = ctx.children.filter((c) => !c.completedAt);
@@ -80,6 +95,20 @@ export async function changePriority(task: Task, p: Priority): Promise<void> {
   const before = taskInput(task);
   await api.updateTask(task.id, { ...before, priority: p });
   notify(t('msg.movedTo', { title: task.title, where: t(`priority.${p}`) }), () => api.updateTask(task.id, before));
+}
+
+/** New start / due for a task (a Planner drag or keyboard move). */
+export interface TaskDates { start: string | null; startHasTime: boolean; due: string | null; dueHasTime: boolean }
+
+/**
+ * Saves a task's new dates, keeping every other field, and offers Undo (which puts the task back
+ * as it was). `message` is the toast's text key (with {title}). A failed save throws; the caller
+ * reverts its preview and reports the error.
+ */
+export async function saveDates(task: Task, next: TaskDates, message: Key = 'planner.moved'): Promise<void> {
+  const before = taskInput(task);
+  await api.updateTask(task.id, { ...before, ...next });
+  notify(t(message, { title: task.title }), () => api.updateTask(task.id, before));
 }
 
 /**

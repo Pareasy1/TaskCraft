@@ -982,6 +982,48 @@ pub fn reorder_attachments(
 }
 
 #[tauri::command]
+pub fn add_dependency(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    depends_on: i64,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .add_dependency(task_id, depends_on)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_dependency(
+    app: AppHandle,
+    st: State<AppState>,
+    task_id: i64,
+    depends_on: i64,
+) -> CmdResult<()> {
+    st.store
+        .lock()
+        .map_err(poisoned)?
+        .remove_dependency(task_id, depends_on)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_dependencies(
+    st: State<AppState>,
+    task_ids: Option<Vec<i64>>,
+) -> CmdResult<Vec<Dependency>> {
+    Ok(st
+        .store
+        .lock()
+        .map_err(poisoned)?
+        .list_dependencies(task_ids.as_deref())?)
+}
+
+#[tauri::command]
 pub fn remove_attachment(app: AppHandle, st: State<AppState>, id: i64) -> CmdResult<Attachment> {
     let a = st
         .store
@@ -1245,6 +1287,8 @@ mod tests {
             (Rule::AttachmentTooLarge, "attachment_too_large"),
             (Rule::AttachmentUrl, "attachment_url"),
             (Rule::TemplateName, "template_name"),
+            (Rule::DependencySelf, "dependency_self"),
+            (Rule::DependencyCycle, "dependency_cycle"),
         ] {
             assert_eq!(CmdError::from(StoreError::Rule(r)).code, c);
         }

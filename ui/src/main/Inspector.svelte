@@ -9,6 +9,7 @@
   import SubtaskList from './tasks/SubtaskList.svelte';
   import Checklist from './tasks/Checklist.svelte';
   import Attachments from './tasks/Attachments.svelte';
+  import Dependencies from './tasks/Dependencies.svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { parentCandidates } from '../lib/subtasks';
@@ -17,7 +18,7 @@
   import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
   import { PopupMenu } from '../lib/menu.svelte';
   import { askSaveTemplate, duplicate } from '../lib/taskCommands.svelte';
-  import { askParentAfterSave, changeStatus } from '../lib/actions';
+  import { askParentAfterSave, changeStatus, confirmBlocked } from '../lib/actions';
   import Menu from './Menu.svelte';
 
   export type Target =
@@ -257,6 +258,8 @@
         if (startAfterDue(input)) { error = t('error.start_after_due'); return false; }
         if (target.id == null) await api.createTask(input);
         else {
+          // Starting or finishing a task that waits on open ones asks first; No keeps the form open.
+          if (!(await confirmBlocked(await api.getTask(target.id), input.status))) return false;
           // The parent goes first: its rules (no nesting, no repeat) may refuse it.
           if (parentPick !== (target.input.parentId ?? null)) await api.setTaskParent(target.id, parentPick);
           const latest = taskInput(await api.getTask(target.id));
@@ -485,6 +488,7 @@
       {/if}
       <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
       <Attachments bind:this={attachments} task={stored} onerror={(m) => (error = m)} />
+      <Dependencies task={stored} onopentask={openOther} />
     {/if}
   {/if}
 

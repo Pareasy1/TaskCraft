@@ -28,6 +28,12 @@ describe('house style', () => {
     expect(offenders.map((f) => f.slice(root.length))).toEqual([]);
   });
 
+  // The Planner's drags use pointer events: HTML5 drag-and-drop has misbehaved in WebKit before.
+  it('the Planner timeline uses no HTML5 drag-and-drop', () => {
+    const offenders = files(join(root, 'main/planner')).filter((f) => /\bdraggable\b|ondragstart/.test(readFileSync(f, 'utf8')));
+    expect(offenders.map((f) => f.slice(root.length))).toEqual([]);
+  });
+
   it('dates and times are formatted in the app language (lib/format.ts), not the raw system locale', () => {
     const offenders = files(root).filter((f) => /toLocale\w*String\(undefined/.test(readFileSync(f, 'utf8')));
     expect(offenders.map((f) => f.slice(root.length))).toEqual([]);

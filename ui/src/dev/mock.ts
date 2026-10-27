@@ -37,7 +37,7 @@ export function installMock() {
     alerts: []; status: 'todo' | 'inProgress' | 'done'; labels: { id: number; name: string; color: string }[];
     planId: number; bucketId: number; sortOrder: number;
     parentId: number | null; priority: 'urgent' | 'important' | 'medium' | 'low'; start: string | null; startHasTime: boolean;
-    subtaskOpen: number; subtaskTotal: number; subtaskInProgress: number; checklistDone: number; checklistTotal: number; attachmentCount: number;
+    subtaskOpen: number; subtaskTotal: number; subtaskInProgress: number; checklistDone: number; checklistTotal: number; attachmentCount: number; blockedBy: number;
   };
   type MockItem = { id: number; taskId: number; text: string; done: boolean; sort: number };
   const task = (id: number, title: string, due: string | null, dueHasTime: boolean, status: MockTask['status'] = 'todo', lbl: number[] = []): MockTask => ({
@@ -45,7 +45,7 @@ export function installMock() {
     recurring: false, rrule: null, notes: null, color: '#3b82f6', alerts: [], status, labels: L(...lbl),
     planId: 1, bucketId: 1, sortOrder: id * 10,
     parentId: null, priority: 'medium', start: null, startHasTime: false,
-    subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0,
+    subtaskOpen: 0, subtaskTotal: 0, subtaskInProgress: 0, checklistDone: 0, checklistTotal: 0, attachmentCount: 0, blockedBy: 0,
   });
   let all: MockTask[] = [
     task(10, 'Pay electricity bill', midnight(-2), false, 'todo', [1]),
@@ -192,6 +192,17 @@ export function installMock() {
     upcoming: () => open().filter((t) => !t.due || new Date(t.due).getTime() >= startTomorrow),
   };
   // Keeps the counts on every returned task consistent with the data.
+  // "Prepare slides" waits on "Quarterly report draft"; "Buy milk" (starts yesterday) on "Renew passport" (due tomorrow): a conflict.
+  let deps: { taskId: number; dependsOn: number }[] = [{ taskId: 17, dependsOn: 16 }, { taskId: 12, dependsOn: 15 }];
+  const reaches = (from: number, to: number): boolean => {
+    const seen = new Set<number>(), stack = [from];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (cur === to) return true;
+      if (!seen.has(cur)) (seen.add(cur), deps.filter((d) => d.taskId === cur).forEach((d) => stack.push(d.dependsOn)));
+    }
+    return false;
+  };
   const withCounts = (t: MockTask): MockTask => {
     const kids = all.filter((x) => x.parentId === t.id);
     const list = items.filter((i) => i.taskId === t.id);
@@ -200,6 +211,7 @@ export function installMock() {
       subtaskInProgress: kids.filter((k) => k.status === 'inProgress').length,
       checklistTotal: list.length, checklistDone: list.filter((i) => i.done).length,
       attachmentCount: atts.filter((a) => a.taskId === t.id).length,
+      blockedBy: deps.filter((d) => d.taskId === t.id && !all.find((x) => x.id === d.dependsOn)?.completedAt).length,
     });
   };
   const changed = () => setTimeout(() => emit('items-changed'), 0);
@@ -398,6 +410,18 @@ export function installMock() {
         changed();
         return t.id;
       }
+      case 'add_dependency': {
+        if (args.taskId === args.dependsOn) throw { code: 'dependency_self', message: 'dependency_self' };
+        if (reaches(args.dependsOn, args.taskId)) throw { code: 'dependency_cycle', message: 'dependency_cycle' };
+        if (!deps.some((d) => d.taskId === args.taskId && d.dependsOn === args.dependsOn)) deps.push({ taskId: args.taskId, dependsOn: args.dependsOn });
+        changed();
+        return;
+      }
+      case 'remove_dependency':
+        deps = deps.filter((d) => !(d.taskId === args.taskId && d.dependsOn === args.dependsOn));
+        changed();
+        return;
+      case 'list_dependencies': return deps.filter((d) => !args.taskIds || args.taskIds.includes(d.taskId) || args.taskIds.includes(d.dependsOn));
       case 'list_attachments': return atts.filter((a) => a.taskId === args.taskId).sort((a, b) => a.sort - b.sort);
       case 'pick_and_add_files': {
         // Cycles through three picks; every third also reports a file that was too large, and its
