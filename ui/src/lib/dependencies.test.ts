@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockedPrompt, blockers, blocking, pickerMatches, wouldCycle } from './dependencies';
+import { blockedPrompt, blockers, blocking, pickerExclude, pickerMatches, wouldCycle } from './dependencies';
 import type { Dependency, Task } from './types';
 
 const mk = (id: number, done = false): Task => ({ id, title: `T${id}`, completedAt: done ? '2026-10-23T10:00:00Z' : null, status: done ? 'done' : 'todo' }) as Task;
@@ -25,5 +25,10 @@ describe('dependencies', () => {
     expect(pickerMatches('Plan café', 'cafe')).toBe(true);
     expect(pickerMatches('Plan', 'xyz')).toBe(false);
     expect(pickerMatches('Anything', '  ')).toBe(true);
+  });
+  it('pickerExclude hides self, direct blockers and transitive cycles', () => {
+    const g: Dependency[] = [{ taskId: 4, dependsOn: 1 }, { taskId: 1, dependsOn: 2 }];
+    expect([...pickerExclude(2, g)].sort()).toEqual([1, 2, 4]); // 4 -> 1 -> 2 would close a loop
+    expect([...pickerExclude(4, g)].sort()).toEqual([1, 4]); // 1 already; 2 is fine
   });
 });

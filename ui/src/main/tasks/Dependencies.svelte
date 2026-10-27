@@ -3,7 +3,7 @@
   import { Plus, X } from 'lucide-svelte';
   import { t } from '../../lib/i18n';
   import { api, errorMessage, onItemsChanged } from '../../lib/api';
-  import { blocking, wouldCycle } from '../../lib/dependencies';
+  import { blocking, pickerExclude } from '../../lib/dependencies';
   import { notify } from '../../lib/toast.svelte';
   import type { Dependency, Task } from '../../lib/types';
   import StatusGlyph from './StatusGlyph.svelte';
@@ -21,7 +21,7 @@
   async function load() {
     const id = task.id;
     try {
-      const [d, a] = await Promise.all([api.listDependencies([id]), api.listTasks('all')]);
+      const [d, a] = await Promise.all([api.listDependencies(), api.listTasks('all')]);
       if (task.id !== id) return;
       deps = d;
       all = a;
@@ -43,9 +43,8 @@
     deps.filter((d) => d.taskId === task.id).map((d) => byId.get(d.dependsOn)).filter((x): x is Task => !!x),
   );
   const blocks = $derived(blocking(task.id, deps, all));
-  const excluded = $derived(
-    new Set([task.id, ...dependsOn.map((x) => x.id), ...all.filter((x) => wouldCycle(task.id, x.id, deps)).map((x) => x.id)]),
-  );
+  // `deps` is the whole graph, so loops through other tasks are caught too.
+  const excluded = $derived(pickerExclude(task.id, deps));
 
   async function link(other: Task, add: boolean): Promise<void> {
     if (add) await api.addDependency(task.id, other.id);

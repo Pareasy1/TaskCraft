@@ -43,3 +43,13 @@ export function pickerMatches(title: string, query: string): boolean {
   const q = fold(query).trim();
   return !q || fold(title).includes(q);
 }
+
+/** Ids the picker must not offer for `taskId`: itself, its current blockers, and any task that would close a loop. */
+export function pickerExclude(taskId: number, deps: Dependency[]): Set<number> {
+  const out = new Set<number>([taskId]);
+  for (const d of deps) {
+    if (d.taskId === taskId) out.add(d.dependsOn);
+    for (const id of [d.taskId, d.dependsOn]) if (wouldCycle(taskId, id, deps)) out.add(id);
+  }
+  return out;
+}
