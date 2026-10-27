@@ -38,6 +38,7 @@ pub(crate) fn task_from_row(r: &Row) -> rusqlite::Result<Task> {
         checklist_done: 0,
         checklist_total: 0,
         attachment_count: 0,
+        blocked_by: 0,
     })
 }
 
@@ -172,7 +173,18 @@ impl Store {
             let (k, v) = r?;
             att.insert(k, v);
         }
+        let mut blocked: HashMap<i64, i64> = HashMap::new();
+        let mut st = self.conn.prepare(
+            "SELECT d.task_id, count(*) FROM dependencies d
+             JOIN tasks t ON t.id = d.depends_on
+             WHERE t.completed_at IS NULL GROUP BY d.task_id",
+        )?;
+        for r in st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))? {
+            let (k, v) = r?;
+            blocked.insert(k, v);
+        }
         for t in tasks {
+            t.blocked_by = blocked.get(&t.id).copied().unwrap_or(0);
             t.attachment_count = att.get(&t.id).copied().unwrap_or(0);
             (t.subtask_open, t.subtask_total, t.subtask_in_progress) =
                 subs.get(&t.id).copied().unwrap_or((0, 0, 0));
@@ -403,6 +415,10 @@ pub(crate) fn delete_task_row(conn: &rusqlite::Connection, id: i64) -> Result<()
         crate::attachments::delete_rows_for_task(conn, t, now)?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", [t])?;
         conn.execute("DELETE FROM checklist_items WHERE task_id = ?1", [t])?;
+        conn.execute(
+            "DELETE FROM dependencies WHERE task_id = ?1 OR depends_on = ?1",
+            [t],
+        )?;
         conn.execute(
             "DELETE FROM alerts WHERE owner_kind = 'task' AND owner_id = ?1",
             [t],

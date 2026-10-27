@@ -3,7 +3,7 @@
 use crate::model::Result;
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 5;
+pub const CURRENT_VERSION: i64 = 6;
 
 const V1: &str = "
 CREATE TABLE calendars(
@@ -111,6 +111,18 @@ CREATE INDEX attachments_task ON attachments(task_id, sort);
 CREATE TABLE pending_file_deletes(stored TEXT PRIMARY KEY, delete_after_utc TEXT NOT NULL);
 ";
 
+/// Task dependencies (finish-to-start); integrity is enforced by the store.
+const V6: &str = "
+CREATE TABLE dependencies(
+  task_id INTEGER NOT NULL,
+  depends_on INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (task_id, depends_on),
+  CHECK (task_id <> depends_on)
+);
+CREATE INDEX dependencies_depends_on ON dependencies(depends_on);
+";
+
 pub fn version(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
 }
@@ -149,6 +161,9 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if v < 5 {
         tx.execute_batch(V5)?;
+    }
+    if v < 6 {
+        tx.execute_batch(V6)?;
     }
     tx.pragma_update(None, "user_version", CURRENT_VERSION)?;
     tx.commit()?;

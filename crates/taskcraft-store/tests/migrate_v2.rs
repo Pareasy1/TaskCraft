@@ -70,7 +70,7 @@ fn v1_completed_task_becomes_done() {
     let path = dir.path().join("taskcraft.db");
     let _keep = v1_db(&path);
     let s = Store::open(&path).unwrap();
-    assert_eq!(s.schema_version().unwrap(), 5);
+    assert_eq!(s.schema_version().unwrap(), 6);
     let open = s.get_task(1).unwrap();
     let done = s.get_task(2).unwrap();
     assert_eq!(open.status, TaskStatus::Todo);
@@ -92,9 +92,9 @@ fn backup_includes_wal_rows() {
 }
 
 #[test]
-fn fresh_db_is_v5() {
+fn fresh_db_is_v6() {
     assert_eq!(
         Store::open_in_memory().unwrap().schema_version().unwrap(),
-        5
+        6
     );
 }
