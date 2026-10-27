@@ -15,6 +15,8 @@
   import MonthGrid from './MonthGrid.svelte';
   import Inspector, { type Target } from './Inspector.svelte';
   import TasksView from './TasksView.svelte';
+  import GridView from './grid/GridView.svelte';
+  import { loadCalendarMode, saveCalendarMode, shortcutFor, type Area, type CalendarMode } from '../lib/navigation';
   import Toast from './Toast.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import CompleteDialog from './CompleteDialog.svelte';
@@ -28,8 +30,9 @@
   import { sidebarSections } from '../lib/tasks';
   import { taskInput as toTaskInput } from '../lib/edit';
 
-  type View = 'day' | 'week' | 'month' | 'tasks';
-  let view = $state<View>('week');
+  let area = $state<Area>('calendar');
+  let mode = $state<CalendarMode>(loadCalendarMode());
+  $effect(() => saveCalendarMode(mode));
   let anchor = $state(startOfDay(new Date()));
   let sideMonth = $state(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   let calendars = $state<Calendar[]>([]);
@@ -65,23 +68,23 @@
   let scopePrompt = $state<{ verb: string; allowThis: boolean; resolve: (s: 'this' | 'all' | null) => void } | null>(null);
 
   let weekStart = $derived<0 | 1>(settings?.weekStart === 'Sun' ? 0 : 1);
-  let days = $derived(view === 'day' ? [anchor] : weekDays(anchor, weekStart));
+  let days = $derived(mode === 'day' ? [anchor] : weekDays(anchor, weekStart));
   let range = $derived.by(() => {
-    if (view === 'month') {
+    if (mode === 'month') {
       const g = monthGrid(anchor.getFullYear(), anchor.getMonth(), weekStart);
       return [g[0], addDays(g[41], 1)] as const;
     }
     return [days[0], addDays(days[days.length - 1], 1)] as const;
   });
   let title = $derived.by(() => {
-    if (view === 'tasks') {
-      // The view switcher already says "Tasks"; the title says how many are open.
+    if (area !== 'calendar') {
+      // The area switcher already names the area; the title says how many are open.
       if (scopePlan) return scopePlan.name;
       const n = allTasks.filter((x) => !x.completedAt && x.parentId == null).length; // top-level, like plan counts
       return n === 0 ? t('tasks.openNone') : n === 1 ? t('tasks.openOne') : t('tasks.openMany', { n });
     }
-    if (view === 'month') return monthTitle(anchor);
-    if (view === 'day') return fmtLongDate(anchor);
+    if (mode === 'month') return monthTitle(anchor);
+    if (mode === 'day') return fmtLongDate(anchor);
     const a = days[0], b = days[6];
     return a.getMonth() === b.getMonth() ? monthTitle(a) : `${fmtShortDate(a)} – ${fmtShortDate(b)} ${b.getFullYear()}`;
   });
@@ -148,9 +151,9 @@
   });
 
   function shift(n: number) {
-    anchor = view === 'month'
+    anchor = mode === 'month'
       ? new Date(anchor.getFullYear(), anchor.getMonth() + n, 1)
-      : addDays(anchor, n * (view === 'day' ? 1 : 7));
+      : addDays(anchor, n * (mode === 'day' ? 1 : 7));
   }
   function goToday() {
     anchor = startOfDay(new Date());
@@ -273,19 +276,36 @@
     }
   }
 
+  function inTextField(el: EventTarget | null) {
+    const n = el as HTMLElement | null;
+    return !!n && (n.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(n.tagName) || !!n.closest?.('[contenteditable]'));
+  }
+  /** True while a dialog or menu is open, or the key came from inside one. */
+  function inOverlay(el: EventTarget | null) {
+    const n = el as HTMLElement | null;
+    return !!target || settingsOpen || !!scopePrompt || !!pending.current || !!templateSave.current ||
+      !!n?.closest?.('[role=dialog], [role=alertdialog], [role=menu]') || !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]');
+  }
   function keys(e: KeyboardEvent) {
     if (e.key === 'Escape' && !target && !settingsOpen && !scopePrompt) return clearSelection();
-    if (!isMod(e)) return;
     const tag = (e.target as HTMLElement)?.tagName;
-    const views: Record<string, View> = { '1': 'day', '2': 'week', '3': 'month', '4': 'tasks' };
-    if (views[e.key]) {
-      view = views[e.key];
-      // Land keyboard focus in the view so the next Tab reaches its content.
-      tick().then(() => bodyEl?.focus());
+    const go = shortcutFor({ key: e.key, mod: isMod(e), inTextField: inTextField(e.target), inOverlay: inOverlay(e.target), ctrl: e.ctrlKey, meta: e.metaKey, repeat: e.repeat }, area);
+    if (!isMod(e) && !e.altKey && !e.shiftKey && go) {
+      if (go.mode) mode = go.mode;
+      e.preventDefault();
+      return;
+    }
+    if (!isMod(e)) return;
+    if (/^[1-4]$/.test(e.key)) {
+      if (go?.area) {
+        area = go.area;
+        // Land keyboard focus in the area so the next Tab reaches its content.
+        tick().then(() => bodyEl?.focus());
+      }
     }
     else if (e.key === ',') settingsOpen = true;
     else if (e.key === 't' && tag !== 'INPUT') goToday();
-    else if (e.key === 'n' && view === 'tasks') taskInput?.focus();
+    else if (e.key === 'n' && area !== 'calendar') taskInput?.focus();
     else if (e.key === 'n') {
       const s = new Date();
       s.setMinutes(0, 0, 0);
@@ -321,7 +341,7 @@
     {marked}
     {weekStart}
     {taskSections}
-    tasksMode={view === 'tasks'}
+    tasksMode={area !== 'calendar'}
     {labels}
     tasks={allTasks}
     bind:activeLabels
@@ -329,15 +349,15 @@
     onopensettings={() => (settingsOpen = true)}
     {plans}
     {scope}
-    onselectscope={(s) => { scope = s; view = 'tasks'; }}
+    onselectscope={(s) => { scope = s; if (area !== 'grid') area = 'tasks'; }}
     onselectday={(d) => (anchor = startOfDay(d))}
     ontogglecalendar={toggleCalendar}
     onstatus={setStatus}
     onopentask={(t) => openTask(t.id)}
   />
   <main class="content">
-    <Toolbar bind:view {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
-      onnew={() => { if (view === 'tasks') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
+    <Toolbar bind:area bind:mode {title} bind:query onprev={() => shift(-1)} onnext={() => shift(1)} ontoday={goToday}
+      onnew={() => { if (area !== 'calendar') return taskInput?.focus(); const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newEvent(s); }} />
     {#if error}<div class="banner err" role="alert"><span>{error}</span><button class="icon-btn" aria-label={t('common.dismiss')} onclick={() => (error = '')}><X size={14} aria-hidden="true" /></button></div>{/if}
     <div class="body" tabindex="-1" aria-label={title} bind:this={bodyEl}>
       {#if hits.length || query.trim()}
@@ -353,13 +373,16 @@
             </button>
           {/each}
         </div>
-      {:else if view === 'tasks'}
+      {:else if area === 'grid'}
+        <GridView tasks={allTasks} {plans} {buckets} {scope} {weekStart} bind:input={taskInput} bind:active={activeLabels}
+          onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
+      {:else if area === 'tasks'}
         <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} children={kids} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
-      {:else if view === 'month'}
+      {:else if mode === 'month'}
         <MonthGrid month={anchor} {weekStart} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} {parentTitles}
           onselect={(o) => openEvent(o.eventId, o.start)}
-          onday={(d) => { anchor = startOfDay(d); view = 'day'; }} />
+          onday={(d) => { anchor = startOfDay(d); mode = 'day'; }} />
       {:else}
         <DayWeekGrid {days} {occurrences} tasks={allTasks}
           ontaskopen={(task) => openTask(task.id)} ontaskstatus={setStatus} ontaskmove={moveTask} {parentTitles}
@@ -406,7 +429,7 @@
   .app { display: flex; height: 100%; }
   .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .body { flex: 1; min-height: 0; }
-  /* Focus lands here from ⌘1–4 (Ctrl+1–4); the region itself needs no ring. */
+  /* Focus lands here from ⌘1–3 (Ctrl+1–3); the region itself needs no ring. */
   .body:focus { outline: none; }
   .err { margin: 8px 12px 0; }
   .results { padding: 10px 16px; overflow-y: auto; height: 100%; }

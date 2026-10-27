@@ -26,7 +26,7 @@ const ratio = (a: string, b: string) => {
 
 const TEXT = ['text', 'muted', 'faint', 'accent', 'danger', 'warning', 'label-date', 'label-time', 'label-duration', 'label-location',
   'label-attendees', 'label-recurrence', 'label-alert', 'label-calendar', 'label-url', 'label-prefix', 'label-tag', 'today'];
-const GRAPHIC = ['status-progress', 'status-done'];
+const GRAPHIC = ['status-progress', 'status-done', 'chart-neutral'];
 
 for (const [mode, t] of [['light', light], ['dark', dark]] as const) {
   describe(`${mode} mode contrast`, () => {

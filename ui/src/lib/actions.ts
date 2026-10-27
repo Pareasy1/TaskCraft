@@ -5,7 +5,8 @@ import { STATUS_LABEL } from './tasks';
 import { notify } from './toast.svelte';
 import { requestComplete, requestCompleteParent } from './complete.svelte';
 import { completedBySave, completeUndo, completionAsk, offerParentAfter } from './subtasks';
-import type { Priority, Task, TaskInput, TaskStatus } from './types';
+import type { Bucket, Plan, Priority, Task, TaskInput, TaskStatus } from './types';
+import { lastTopLevelIn, quickAddNeedsMove } from './plans';
 import { t } from './i18n';
 
 /** A task's subtasks, its siblings (itself included) and its parent; see `statusCtx`. */
@@ -84,6 +85,7 @@ export async function changePriority(task: Task, p: Priority): Promise<void> {
 /**
  * A new task's input with the app's defaults: the default calendar, the local time zone, no date.
  * Without a plan the store uses the default plan; without a bucket, the plan's first bucket.
+ * `oncreated` runs as soon as the task exists, before the (optional) move into the plan.
  */
 export async function newTaskInput(title: string, planId: number | null = null, bucketId: number | null = null): Promise<TaskInput> {
   const [s, tz] = await Promise.all([api.getSettings(), api.localTimeZone()]);
@@ -91,4 +93,22 @@ export async function newTaskInput(title: string, planId: number | null = null, 
     calendarId: s.defaultCalendarId, title, due: null, dueHasTime: false, tz, rrule: null, notes: null,
     alerts: [], status: 'todo', labels: [], planId, bucketId,
   };
+}
+
+/**
+ * Creates a task from quick-entry text (Tasks page, Grid). Inside a plan, a task without its own
+ * plan hint goes to the end of that plan's first bucket.
+ */
+export async function quickAddTask(typed: string, scopePlan: Plan | null, first: Bucket | undefined, tasks: Task[], oncreated?: () => void): Promise<void> {
+  // Parse now rather than trusting a debounced preview, which may lag behind a fast Enter.
+  const hint = scopePlan ? (await api.parsePreview(typed, true)).plan : null;
+  const ref = await api.createFromText(typed, true);
+  // The task exists now: the caller clears its input here, so a failed move can't cause a duplicate.
+  oncreated?.();
+  if (!scopePlan || !first || ref.kind !== 'task') return;
+  const [created, defaultPlanId] = await Promise.all([api.getTask(ref.id), api.getDefaultPlan()]);
+  if (quickAddNeedsMove({ hint, taskPlanId: created.planId, scopePlanId: scopePlan.id, defaultPlanId })) {
+    const last = lastTopLevelIn(tasks, first.id);
+    await api.moveTask(ref.id, first.id, last?.id ?? null, null);
+  }
 }

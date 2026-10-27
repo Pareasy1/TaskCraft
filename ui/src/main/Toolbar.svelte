@@ -3,9 +3,10 @@
   import { t } from '../lib/i18n';
   import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-svelte';
 
-  type View = 'day' | 'week' | 'month' | 'tasks';
+  import type { Area, CalendarMode } from '../lib/navigation';
   let {
-    view = $bindable<View>('week'),
+    area = $bindable<Area>('calendar'),
+    mode = $bindable<CalendarMode>('week'),
     title,
     query = $bindable(''),
     onprev,
@@ -13,7 +14,8 @@
     ontoday,
     onnew,
   }: {
-    view?: View;
+    area?: Area;
+    mode?: CalendarMode;
     title: string;
     query?: string;
     onprev: () => void;
@@ -28,17 +30,24 @@
     <h1 data-tauri-drag-region>{title}</h1>
   </div>
   <div class="right" data-tauri-drag-region>
-    <button class="icon-btn" title={view === 'tasks' ? t('toolbar.newTaskKey', { key: modLabel('N') }) : t('toolbar.newEventKey', { key: modLabel('N') })} aria-label={view === 'tasks' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
-    {#if view !== 'tasks'}
+    <button class="icon-btn" title={area !== 'calendar' ? t('toolbar.newTaskKey', { key: modLabel('N') }) : t('toolbar.newEventKey', { key: modLabel('N') })} aria-label={area !== 'calendar' ? t('common.newTask') : t('common.newEvent')} onclick={onnew}><Plus size={17} /></button>
+    {#if area === 'calendar'}
       <div class="nav">
         <button class="icon-btn" aria-label={t('common.previous')} onclick={onprev}><ChevronLeft size={17} /></button>
         <button class="btn today" onclick={ontoday}>{t('toolbar.today')}</button>
         <button class="icon-btn" aria-label={t('common.next')} onclick={onnext}><ChevronRight size={17} /></button>
       </div>
     {/if}
-    <div class="seg" role="group" aria-label={t('toolbar.views')}>
-      {#each [['day', t('toolbar.day'), modLabel('1')], ['week', t('toolbar.week'), modLabel('2')], ['month', t('toolbar.month'), modLabel('3')], ['tasks', t('toolbar.tasks'), modLabel('4')]] as [v, label, key]}
-        <button aria-pressed={view === v} class:on={view === v} title="{label} ({key})" onclick={() => (view = v as View)}>{label}</button>
+    {#if area === 'calendar'}
+      <div class="seg" role="group" aria-label={t('toolbar.views')}>
+        {#each [['day', t('toolbar.day')], ['week', t('toolbar.week')], ['month', t('toolbar.month')]] as [m, label]}
+          <button aria-pressed={mode === m} class:on={mode === m} title="{label} ({m[0].toUpperCase()})" onclick={() => (mode = m as CalendarMode)}>{label}</button>
+        {/each}
+      </div>
+    {/if}
+    <div class="seg" role="group" aria-label={t('toolbar.areas')}>
+      {#each [['calendar', t('area.calendar'), modLabel('1')], ['tasks', t('area.tasks'), modLabel('2')], ['grid', t('area.grid'), modLabel('3')]] as [a, label, key]}
+        <button aria-pressed={area === a} class:on={area === a} title="{label} ({key})" onclick={() => (area = a as Area)}>{label}</button>
       {/each}
     </div>
     <label class="search">

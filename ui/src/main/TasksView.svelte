@@ -14,11 +14,11 @@
     applyFilters, boardColumns, filterTasks, isOverdue, STATUSES, STATUS_LABEL, taskCounts, taskPageGroups,
     type StatusFilter, type TaskGroup, type TaskView,
   } from '../lib/tasks';
-  import { dueColumns, labelColumns, lastTopLevelIn, planOrder, quickAddNeedsMove, type DueKey, type GroupBy } from '../lib/plans';
+  import { dueColumns, labelColumns, planOrder, type DueKey, type GroupBy } from '../lib/plans';
   import { PopupMenu } from '../lib/menu.svelte';
   import Menu from './Menu.svelte';
   import HighlightInput from '../quick/HighlightInput.svelte';
-  import { changePriority, changeStatus, newTaskInput } from '../lib/actions';
+  import { changePriority, changeStatus, newTaskInput, quickAddTask } from '../lib/actions';
   import { flattenRows, nestGroups, priorityColumns, statusCtx, topLevel } from '../lib/subtasks';
   import TaskRow from './tasks/TaskRow.svelte';
   import TaskBoard, { type BoardColumn } from './tasks/TaskBoard.svelte';
@@ -245,28 +245,19 @@
     }, 80);
   });
 
+  let adding = false;
   async function add(e: KeyboardEvent) {
     if (e.key === 'Escape') return void ((text = ''), (fromTemplate = null));
     if (e.key !== 'Enter' || !text.trim()) return;
     if (fromTemplate) return addFromTemplate(fromTemplate);
+    if (adding) return;
+    adding = true;
     try {
-      const typed = text;
-      const scopePlan = plan;
-      const first = buckets[0];
-      // Parse now rather than trusting the debounced preview, which may lag behind a fast Enter.
-      const hint = scopePlan ? (await api.parsePreview(typed, true)).plan : null;
-      const ref = await api.createFromText(typed, true);
-      text = '';
-      parsed = null;
-      if (!scopePlan || !first || ref.kind !== 'task') return;
-      // Inside a plan, a task without its own plan hint goes to the end of this plan's first bucket.
-      const [created, defaultPlanId] = await Promise.all([api.getTask(ref.id), api.getDefaultPlan()]);
-      if (quickAddNeedsMove({ hint, taskPlanId: created.planId, scopePlanId: scopePlan.id, defaultPlanId })) {
-        const last = lastTopLevelIn(tasks, first.id);
-        await api.moveTask(ref.id, first.id, last?.id ?? null, null);
-      }
+      await quickAddTask(text, plan, buckets[0], tasks, () => ((text = ''), (parsed = null)));
     } catch (err) {
       onerror(errorMessage(err));
+    } finally {
+      adding = false;
     }
   }
 
