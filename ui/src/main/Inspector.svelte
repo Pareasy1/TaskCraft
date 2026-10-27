@@ -9,6 +9,7 @@
   import SubtaskList from './tasks/SubtaskList.svelte';
   import Checklist from './tasks/Checklist.svelte';
   import Attachments from './tasks/Attachments.svelte';
+  import Dependencies from './tasks/Dependencies.svelte';
   import { api, errorMessage, onItemsChanged } from '../lib/api';
   import { eventToForm, formToEvent, formToTask, mergeTaskSave, recurrenceToRrule, sameInstant, startAfterDue, taskFormDirty, taskInput, taskToForm, type EventForm, type TaskForm } from '../lib/edit';
   import { parentCandidates } from '../lib/subtasks';
@@ -487,6 +488,7 @@
       {/if}
       <Checklist bind:this={checklist} task={stored} canConvert={!isSubtask} onerror={(m) => (error = m)} />
       <Attachments bind:this={attachments} task={stored} onerror={(m) => (error = m)} />
+      <Dependencies task={stored} onopentask={openOther} />
     {/if}
   {/if}
 

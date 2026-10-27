@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockedPrompt, blockers, blocking, wouldCycle } from './dependencies';
+import { blockedPrompt, blockers, blocking, pickerMatches, wouldCycle } from './dependencies';
 import type { Dependency, Task } from './types';
 
 const mk = (id: number, done = false): Task => ({ id, title: `T${id}`, completedAt: done ? '2026-10-23T10:00:00Z' : null, status: done ? 'done' : 'todo' }) as Task;
@@ -19,5 +19,11 @@ describe('dependencies', () => {
   it('blockedPrompt one vs many', () => {
     expect(blockedPrompt([{ title: 'A' }])).toBe('Depends on “A”, still open. Continue?');
     expect(blockedPrompt([{ title: 'A' }, { title: 'B' }])).toBe('Depends on 2 open tasks. Continue?');
+  });
+  it('pickerMatches ignores case and accents; empty matches all', () => {
+    expect(pickerMatches('Città da visitare', 'CITTA')).toBe(true);
+    expect(pickerMatches('Plan café', 'cafe')).toBe(true);
+    expect(pickerMatches('Plan', 'xyz')).toBe(false);
+    expect(pickerMatches('Anything', '  ')).toBe(true);
   });
 });

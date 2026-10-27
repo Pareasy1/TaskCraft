@@ -35,3 +35,11 @@ export function wouldCycle(taskId: number, dependsOn: number, deps: Dependency[]
 export function blockedPrompt(list: { title: string }[]): string {
   return list.length === 1 ? t('dep.blockedOne', { title: list[0].title }) : t('dep.blockedMany', { n: list.length });
 }
+
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Picker filter: case and accents ignored; an empty query matches everything. */
+export function pickerMatches(title: string, query: string): boolean {
+  const q = fold(query).trim();
+  return !q || fold(title).includes(q);
+}
