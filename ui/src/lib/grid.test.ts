@@ -84,6 +84,12 @@ describe('gridRows', () => {
     expect(rows[0].dimmed).toBe(true);
     expect(rows[1].dimmed).toBe(false);
   });
+  it('a dimmed parent stays expanded even if it was collapsed', () => {
+    const p = mk({ status: 'todo' }), c = mk({ parentId: p.id, status: 'done' });
+    const rows = gridRows([p, c], { ...base, status: 'done', collapsed: new Set([p.id]) });
+    expect(ids(rows)).toEqual([p.id, c.id]);
+    expect(rows[0].collapsed).toBe(false);
+  });
   it('label filter', () => {
     const a = mk({ labels: [{ id: 5, name: 'q', color: '' }] }), b = mk();
     expect(ids(gridRows([a, b], { ...base, labels: [5] }))).toEqual([a.id]);

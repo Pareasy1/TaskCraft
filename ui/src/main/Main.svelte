@@ -374,7 +374,8 @@
           {/each}
         </div>
       {:else if area === 'grid'}
-        <GridView />
+        <GridView tasks={allTasks} {plans} {buckets} {labels} {scope} {weekStart} bind:input={taskInput} bind:active={activeLabels}
+          onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if area === 'tasks'}
         <TasksView tasks={scoped} {labels} {scope} {plans} {buckets} {weekStart} children={kids} onreload={refresh} bind:input={taskInput} bind:active={activeLabels} onopen={(t) => openTask(t.id)} onerror={(m) => (error = m)} />
       {:else if mode === 'month'}

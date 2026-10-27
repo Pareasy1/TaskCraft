@@ -12,10 +12,11 @@
   import type { Plan, Task, TaskStatus } from '../../lib/types';
   import { isOverdue } from '../../lib/tasks';
   import { fmtShortDate, fmtSpan, fmtTime } from '../../lib/format';
-  import { checklistLabel, barTrack, progressLabel, progressSegments } from '../../lib/subtasks';
+  import { checklistLabel, progressLabel, progressSegments } from '../../lib/subtasks';
   import StatusGlyph from './StatusGlyph.svelte';
   import PriorityMark from './PriorityMark.svelte';
   import LabelChip from './LabelChip.svelte';
+  import ProgressBar from './ProgressBar.svelte';
 
   // One card on a board. The board wraps it in the keyed, draggable element.
   let {
@@ -64,10 +65,8 @@
   });
   const progress = $derived(progressLabel(t));
   const seg = $derived(progressSegments(t));
-  const started = $derived(barTrack(t) === 'started');
   /** "2 of 4" (plus "1 in progress" when any) for the expand button's name. */
   const progressName = $derived(seg.inProgress ? `${progress}, ${tr('subtasks.inProgress', { n: seg.inProgress })}` : progress);
-  const pct = (n: number) => `${(n / t.subtaskTotal) * 100}%`;
   const checklist = $derived(checklistLabel(t));
   const open = $derived(expanded.has(t.id) && children.length > 0);
   const toggle = () => (expanded.has(t.id) ? expanded.delete(t.id) : expanded.add(t.id));
@@ -111,14 +110,7 @@
       <span class="cal" style="background:{t.color}"></span>
     </div>
   {/if}
-  {#if progress}
-    <!-- Done (green), then in progress (yellow), then the track for what is still to do;
-         the track is tinted yellow when the task itself is in progress but no subtask is. -->
-    <div class="bar" class:started aria-hidden="true">
-      {#if seg.done}<span class="done" style="width:{pct(seg.done)}"></span>{/if}
-      {#if seg.inProgress}<span class="doing" style="width:{pct(seg.inProgress)}"></span>{/if}
-    </div>
-  {/if}
+  {#if progress}<div class="bar-wrap"><ProgressBar task={t} /></div>{/if}
   {#if open}
     <ul class="subs" aria-label={tr('subtasks.title')}>
       {#each children as c (c.id)}
@@ -163,11 +155,7 @@
   .caret.down { transform: rotate(90deg); }
   @media (prefers-reduced-motion: no-preference) { .caret { transition: transform 0.15s; } }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .bar { display: flex; gap: 1px; height: 5px; border-radius: 3px; background: var(--border); margin: 6px 0 0 24px; overflow: hidden; }
-  .bar.started { background: color-mix(in srgb, var(--progress-active) 35%, var(--border)); }
-  .bar span { flex: none; height: 100%; border-radius: 3px; }
-  .bar .done { background: var(--status-done); }
-  .bar .doing { background: var(--progress-active); }
+  .bar-wrap { margin: 6px 0 0 24px; }
   .subs { list-style: none; margin: 6px 0 0 18px; padding: 4px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
   .subs li { display: flex; align-items: flex-start; gap: 6px; padding: 2px; border-radius: 6px; }
   .subs li:hover { background: var(--hover); }

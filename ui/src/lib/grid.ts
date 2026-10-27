@@ -92,7 +92,8 @@ export function gridRows<T extends GridTask>(tasks: T[], opts: GridOpts): GridRo
   const groups = groupWithParents<T>(shown, inScope);
   const top = groups.sort((a, b) => cmp(a.parent, b.parent));
   for (const g of top) {
-    const collapsed = opts.collapsed.has(g.parent.id);
+    // A dimmed parent is only there for its matching subtasks, so it never hides them.
+    const collapsed = !g.dimmed && opts.collapsed.has(g.parent.id);
     rows.push({ task: g.parent, depth: 0, dimmed: g.dimmed, hasChildren: g.children.length > 0, collapsed });
     if (collapsed) continue;
     for (const c of [...g.children].sort(cmp)) rows.push({ task: c, depth: 1, dimmed: false, hasChildren: false, collapsed: false });

@@ -87,6 +87,17 @@ export function installMock() {
     { ...task(34, 'Print the label', null, false, 'inProgress'), parentId: 23, planId: 2, bucketId: 6, sortOrder: 20 },
   );
   Object.assign(all.find((t) => t.id === 11)!, { priority: 'urgent' });
+  // `?bulk=500` adds that many generated tasks (every fifth with two subtasks) to try the Grid at size.
+  const bulk = Math.min(5000, Number(new URLSearchParams(location.search).get('bulk')) || 0);
+  for (let i = 0; i < bulk; i++) {
+    const id = 100_000 + i * 3, plan = i % 2 ? 2 : 1, bucket = plan === 1 ? 1 + (i % 3) : 4 + (i % 3);
+    const st = (['todo', 'inProgress', 'done'] as const)[i % 3];
+    const prio = (['urgent', 'important', 'medium', 'low'] as const)[i % 4];
+    all.push({ ...task(id, `Bulk task ${i + 1}`, i % 4 ? midnight((i % 40) - 10) : null, false, st, i % 5 ? [] : [1 + (i % 3)]), planId: plan, bucketId: bucket, sortOrder: 1000 + i, priority: prio });
+    if (i % 5 === 0) {
+      for (const k of [1, 2]) all.push({ ...task(id + k, `Step ${k} of bulk ${i + 1}`, null, false, k === 1 ? 'done' : 'todo'), parentId: id, planId: plan, bucketId: bucket, sortOrder: k * 10 });
+    }
+  }
   Object.assign(all.find((t) => t.id === 12)!, { start: midnight(-1), due: midnight(1), priority: 'low' });
   let items: MockItem[] = [
     { id: 1, taskId: 17, text: 'Outline', done: true, sort: 0 },
