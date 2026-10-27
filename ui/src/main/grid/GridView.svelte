@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { t } from '../../lib/i18n';
   import { ChevronDown, X } from 'lucide-svelte';
   import { api, errorMessage } from '../../lib/api';
@@ -59,22 +60,27 @@
   let chart = $state<ChartFilter | null>(null);
   let columns = $state<GridColumn[]>([]);
   // Per scope: its remembered columns (Plan only in All tasks); the chart filter starts clear.
+  // Keyed on scope only: sorting or filtering must never re-run it (it would drop the chart filter).
   $effect.pre(() => {
     const s = scope;
-    columns = loadColumns(s).filter((c) => s === 'all' || c !== 'plan');
-    chart = null;
-    if (sort?.column === 'plan' && s !== 'all') sort = null;
+    untrack(() => {
+      columns = loadColumns(s).filter((c) => s === 'all' || c !== 'plan');
+      chart = null;
+      if (sort?.column === 'plan' && s !== 'all') sort = null;
+    });
   });
 
   // In All tasks every plan's buckets are needed (names and order); inside a plan Main has them.
   let allBuckets = $state<Bucket[]>([]);
+  let bucketReq = 0;
   $effect(() => {
     if (scope !== 'all') return;
     void tasks; // a refresh may have renamed or added buckets
     const ids = plans.map((p) => p.id);
+    const req = ++bucketReq; // only the newest request may write
     Promise.all(ids.map((id) => api.listBuckets(id)))
-      .then((lists) => (allBuckets = lists.flat()))
-      .catch((e) => onerror(errorMessage(e)));
+      .then((lists) => req === bucketReq && (allBuckets = lists.flat()))
+      .catch((e) => req === bucketReq && onerror(errorMessage(e)));
   });
   let shownBuckets = $derived(scope === 'all' ? allBuckets : buckets);
   let bucketsOf = $derived.by(() => {

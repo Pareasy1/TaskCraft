@@ -61,10 +61,16 @@
     const i = rows.findIndex((r) => r.task.id === active.id);
     return i < 0 ? -1 : i + 1;
   });
-  // The tab stop: the active cell, or (if its row or column went away) the first cell.
+  /** The active row's last position (1-based), so a row that went away hands over to its neighbour. */
+  let lastRow = 1;
+  $effect.pre(() => {
+    if (rowIndex > 0) lastRow = rowIndex;
+  });
+  // The tab stop: the active cell, or (if its row or column went away) the cell nearest to it.
   let stop = $derived.by(() => {
     const col = columns.includes(active.col) ? active.col : columns[0];
-    return rowIndex < 0 ? { id: rows[0]?.task.id ?? null, col } : { id: active.id, col };
+    if (rowIndex >= 0) return { id: active.id, col };
+    return { id: rows[Math.min(lastRow, rows.length) - 1]?.task.id ?? null, col };
   });
   const key = (id: number | null, col: GridColumn) => `${id ?? 'h'}:${col}`;
   const isStop = (id: number | null, col: GridColumn) => stop.id === id && stop.col === col;
@@ -75,7 +81,25 @@
     tableEl?.querySelector<HTMLElement>(`[data-cell="${key(id, col)}"]`)?.focus();
   }
   /** Keeps the active cell in step with mouse clicks and Tab. */
+  /** True while keyboard focus is in the grid (a removed row's cell drops it to <body>). */
+  let focused = false;
+  function focusout(e: FocusEvent) {
+    // A null target is a removed element or the window losing focus: the grid keeps its claim.
+    // The grid's own popup menu counts as inside: its command may remove the row it was opened on.
+    const to = e.relatedTarget as Node | null;
+    if (to && !tableEl?.contains(to) && !menu.el?.contains(to)) focused = false;
+  }
+  // When an edit or a refresh removes the focused cell, focus moves to the new tab stop.
+  $effect(() => {
+    const s = stop;
+    if (!focused || editing) return;
+    tick().then(() => {
+      const a = document.activeElement;
+      if (focused && (!a || a === document.body)) tableEl?.querySelector<HTMLElement>(`[data-cell="${key(s.id, s.col)}"]`)?.focus();
+    });
+  });
   function focusin(e: FocusEvent) {
+    focused = true;
     const cell = (e.target as HTMLElement).closest<HTMLElement>('[data-cell]');
     if (!cell) return;
     const [id, col] = cell.dataset.cell!.split(':');
@@ -89,6 +113,11 @@
     const r = cell.getBoundingClientRect();
     menu.open({ task, kind }, r.left, r.bottom + 2, cell);
   }
+  /** Runs a menu command on the task as it is now (data may have refreshed since the menu opened). */
+  const fresh = (fn: (task: Task) => void) => ({ task }: { task: Task }) => {
+    const now = rows.find((r) => r.task.id === task.id)?.task;
+    if (now) fn(now);
+  };
   const cellEl = (id: number, col: GridColumn) => tableEl?.querySelector<HTMLElement>(`[data-cell="${key(id, col)}"]`);
 
   const editable = (r: GridRow<Task>, col: GridColumn) =>
@@ -132,7 +161,7 @@
     } else if (e.key === ' ') {
       if (!r) onsort(col);
       else if (col === 'status') onstatus(r.task, nextStatus(r.task.status));
-      else return;
+      // Elsewhere Space does nothing (and must not scroll the table).
     } else return;
     e.preventDefault();
   }
@@ -149,7 +178,7 @@
 <p id="grid-help" class="sr">{t('table.help', { mod: modLabel('↩') })}</p>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions (an ARIA grid takes its own arrow keys) -->
 <table bind:this={tableEl} role="grid" aria-label={t('table.label')} aria-describedby="grid-help" aria-rowcount={rows.length + 1} aria-colcount={columns.length}
-  onkeydown={keys} onfocusin={focusin}>
+  onkeydown={keys} onfocusin={focusin} onfocusout={focusout}>
   <thead>
     <tr aria-rowindex={1}>
       {#each columns as c, i (c)}
@@ -219,19 +248,19 @@
   <Menu {menu} label={m.kind === 'status' ? t('table.col.status') : m.kind === 'priority' ? t('table.col.priority') : t('table.col.bucket')}>
     {#if m.kind === 'status'}
       {#each STATUSES as s (s)}
-        <button role="menuitemradio" aria-checked={m.task.status === s} onclick={() => menu.act(({ task }) => task.status !== s && onstatus(task, s))}>
+        <button role="menuitemradio" aria-checked={m.task.status === s} onclick={() => menu.act(fresh((task) => task.status !== s && onstatus(task, s)))}>
           <span class="check" aria-hidden="true">{m.task.status === s ? '✓' : ''}</span>{STATUS_LABEL[s]}
         </button>
       {/each}
     {:else if m.kind === 'priority'}
       {#each PRIORITIES as p (p)}
-        <button role="menuitemradio" aria-checked={m.task.priority === p} onclick={() => menu.act(({ task }) => onpriority(task, p))}>
+        <button role="menuitemradio" aria-checked={m.task.priority === p} onclick={() => menu.act(fresh((task) => onpriority(task, p)))}>
           <span class="check" aria-hidden="true">{m.task.priority === p ? '✓' : ''}</span>{t(`priority.${p}`)}
         </button>
       {/each}
     {:else}
       {#each bucketsOf.get(m.task.planId) ?? [] as b (b.id)}
-        <button role="menuitemradio" aria-checked={m.task.bucketId === b.id} onclick={() => menu.act(({ task }) => onbucket(task, b.id))}>
+        <button role="menuitemradio" aria-checked={m.task.bucketId === b.id} onclick={() => menu.act(fresh((task) => onbucket(task, b.id)))}>
           <span class="check" aria-hidden="true">{m.task.bucketId === b.id ? '✓' : ''}</span>{b.name}
         </button>
       {/each}

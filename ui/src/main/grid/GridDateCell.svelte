@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { X } from 'lucide-svelte';
+  import { t } from '../../lib/i18n';
   import { ymd } from '../../lib/format';
+  import { dateCommitAction } from '../../lib/gridEdit';
 
   // The Grid's Start / Due editor: a date input. The time of day is kept by the save (gridEdit).
   let {
@@ -28,24 +31,44 @@
     closed = true;
     ondone();
   }
-  let inputEl: HTMLInputElement | undefined;
+  let inputEl = $state<HTMLInputElement | undefined>();
+  let clearEl = $state<HTMLButtonElement | undefined>();
   onMount(() => inputEl?.focus());
 
-  async function commit() {
-    if (busy || closed) return;
-    if (value === initial) return finish();
+  async function save(v: string) {
     busy = true;
-    const err = await onsave(value);
+    const err = await onsave(v);
     busy = false;
     if (err) error = err;
     else finish();
+  }
+  function commit(via: 'enter' | 'blur') {
+    if (busy || closed) return;
+    // A half-typed date reads as '' — never let that clear the stored date.
+    const act = dateCommitAction(value, !!inputEl?.validity.badInput, initial, via);
+    if (act === 'error') error = t('table.badDate');
+    else if (act === 'cancel') finish();
+    else save(act === 'clear' ? '' : value);
   }
   function keys(e: KeyboardEvent) {
     e.stopPropagation(); // the grid's own keys must not act inside the editor
     if (e.key === 'Enter') {
       e.preventDefault();
-      commit();
+      commit('enter');
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish();
+    }
+  }
+  function blur(e: FocusEvent) {
+    // Moving to the Clear button keeps the editor open; anywhere else leaves it.
+    if (e.relatedTarget && e.relatedTarget === clearEl) return;
+    if (error) finish();
+    else commit('blur');
+  }
+  function clearKeys(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
       e.preventDefault();
       finish();
     }
@@ -53,13 +76,22 @@
 </script>
 
 <span class="edit">
-  <input type="date" bind:this={inputEl} bind:value aria-label={label} aria-invalid={!!error} onkeydown={keys} onblur={() => (error ? finish() : commit())}
-    ondblclick={(e) => e.stopPropagation()} />
+  <span class="row">
+    <input type="date" bind:this={inputEl} bind:value aria-label={label} aria-invalid={!!error} onkeydown={keys} onblur={blur}
+      ondblclick={(e) => e.stopPropagation()} />
+    {#if initial}
+      <button class="icon-btn" bind:this={clearEl} aria-label={t('table.clearDate', { col: label })} title={t('table.clearDate', { col: label })}
+        onpointerdown={(e) => e.preventDefault()} onclick={() => !busy && !closed && save('')} onkeydown={clearKeys}
+        onblur={(e) => e.relatedTarget !== inputEl && !busy && !closed && finish()} ondblclick={(e) => e.stopPropagation()}><X size={12} aria-hidden="true" /></button>
+    {/if}
+  </span>
   {#if error}<span class="err" role="alert">{error}</span>{/if}
 </span>
 
 <style>
   .edit { display: inline-flex; flex-direction: column; gap: 2px; }
+  .row { display: inline-flex; align-items: center; gap: 2px; }
+  .row .icon-btn { padding: 2px; }
   input { font: inherit; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 5px; background: var(--bg); color: var(--text); }
   input[aria-invalid='true'] { border-color: var(--danger); }
   input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }

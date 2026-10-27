@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketMove, bucketUndo, editInput } from './gridEdit';
+import { bucketMove, bucketUndo, dateCommitAction, editInput } from './gridEdit';
 import type { Task } from './types';
 
 const mk = (id: number, extra: Partial<Task> = {}): Task => ({
@@ -70,5 +70,25 @@ describe('bucketMove', () => {
     const old = [mk(1, { sortOrder: 1 }), mk(2, { sortOrder: 2 }), mk(3, { sortOrder: 3 }), mk(5, { sortOrder: 2.5, parentId: 1 })];
     expect(bucketUndo(old[1], old)).toEqual({ bucketId: 7, before: 1, after: 3 });
     expect(bucketUndo(old[0], old)).toEqual({ bucketId: 7, before: null, after: 2 });
+  });
+});
+
+describe('dateCommitAction', () => {
+  it('a half-typed date is an error on Enter and a cancel on blur, never a clear', () => {
+    expect(dateCommitAction('', true, '2026-10-20', 'enter')).toBe('error');
+    expect(dateCommitAction('', true, '2026-10-20', 'blur')).toBe('cancel');
+    expect(dateCommitAction('', true, '', 'enter')).toBe('error');
+  });
+  it('an unchanged value cancels', () => {
+    expect(dateCommitAction('2026-10-20', false, '2026-10-20', 'enter')).toBe('cancel');
+    expect(dateCommitAction('', false, '', 'blur')).toBe('cancel');
+  });
+  it('a new complete date saves', () => {
+    expect(dateCommitAction('2026-11-02', false, '2026-10-20', 'enter')).toBe('save');
+    expect(dateCommitAction('2026-11-02', false, '', 'blur')).toBe('save');
+  });
+  it('an emptied field clears only on Enter; blur keeps the stored date', () => {
+    expect(dateCommitAction('', false, '2026-10-20', 'enter')).toBe('clear');
+    expect(dateCommitAction('', false, '2026-10-20', 'blur')).toBe('cancel');
   });
 });

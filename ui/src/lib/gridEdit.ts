@@ -53,3 +53,15 @@ export function bucketUndo(task: Task, tasks: Task[]): BucketPlace {
   const i = col.findIndex((x) => x.id === task.id);
   return { bucketId: task.bucketId, before: col[i - 1]?.id ?? null, after: col[i + 1]?.id ?? null };
 }
+
+/**
+ * What a date editor does with its field. A half-typed date (`badInput`: the browser reports
+ * value '') is never taken as "clear": Enter says it's invalid, leaving the field cancels.
+ * An emptied field clears only on Enter (the Clear button is the other way); leaving keeps the date.
+ */
+export function dateCommitAction(raw: string, badInput: boolean, initial: string, via: 'enter' | 'blur'): 'save' | 'clear' | 'error' | 'cancel' {
+  if (badInput) return via === 'enter' ? 'error' : 'cancel';
+  if (raw === initial) return 'cancel';
+  if (!raw) return via === 'enter' ? 'clear' : 'cancel';
+  return 'save';
+}
