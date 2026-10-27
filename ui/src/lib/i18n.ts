@@ -374,6 +374,7 @@ const en = {
   'dep.blockedMany': 'Depends on {n} open tasks. Continue?',
   'dep.waitingFor': 'Waiting for: {names}',
   'dep.openCount': '{n} open dependencies',
+  'dep.openCountOne': '1 open dependency',
   'dep.section': 'Dependencies',
   'dep.dependsOn': 'Depends on',
   'dep.blocks': 'Blocks',
@@ -809,6 +810,7 @@ const it: Record<Key, string> = {
   'dep.blockedMany': 'Dipende da {n} attività ancora aperte. Continuare?',
   'dep.waitingFor': 'In attesa di: {names}',
   'dep.openCount': '{n} dipendenze aperte',
+  'dep.openCountOne': '1 dipendenza aperta',
   'dep.section': 'Dipendenze',
   'dep.dependsOn': 'Dipende da',
   'dep.blocks': 'Blocca',
@@ -908,4 +910,9 @@ export const dateLocale: string = preferred.find((p) => p.toLowerCase().startsWi
 
 export function t(key: Key, vars?: Record<string, string | number>): string {
   return format(dictionaries[lang][key], vars);
+}
+
+/** "1 open dependency" / "N open dependencies". */
+export function openDepsLabel(n: number): string {
+  return n === 1 ? t('dep.openCountOne') : t('dep.openCount', { n });
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { ChevronRight } from 'lucide-svelte';
-  import { t } from '../../lib/i18n';
+  import { t, openDepsLabel } from '../../lib/i18n';
   import { hotkeyLabel, isMod, modLabel } from '../../lib/platform';
   import { isMenuKey } from '../../lib/menu.svelte';
   import { barSpan, dayDate, dayNumber, dayToX, DAY_WIDTH, dragResult, ROW_H, type TimelineRow, type Zoom } from '../../lib/timeline';
@@ -74,7 +74,7 @@
     const span = barSpan(x);
     const parts = [x.title, STATUS_LABEL[x.status], span ? fmtSpan(dayDate(span.from), dayDate(span.to)) : t('planner.noDates')];
     if (isOverdue(x, now)) parts.push(t('planner.overdue'));
-    if (x.blockedBy > 0) parts.push(t('dep.openCount', { n: x.blockedBy }));
+    if (x.blockedBy > 0) parts.push(openDepsLabel(x.blockedBy));
     return parts.join(', ');
   }
 

@@ -343,7 +343,7 @@
       <button role="menuitem" disabled>{t('dep.remove')}</button>
     {/if}
     <div class="sep" role="separator"></div>
-    <button role="menuitem" disabled={!task.start && !task.due} onclick={() => barMenu.act((x) => onsave(x, NO_DATES, 'planner.datesRemoved'))}>{t('planner.removeDates')}</button>
+    <button role="menuitem" disabled={(!task.start && !task.due) || !!task.rrule} onclick={() => barMenu.act((x) => onsave(x, NO_DATES, 'planner.datesRemoved'))}>{t('planner.removeDates')}</button>
   </Menu>
 {/if}
 

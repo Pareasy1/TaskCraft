@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dictionaries, format, pickLang } from './i18n';
+import { dictionaries, format, openDepsLabel, pickLang } from './i18n';
 
 describe('pickLang', () => {
   it('follows the first supported Mac language', () => {
@@ -35,4 +35,9 @@ describe('dictionaries', () => {
     // Words that are the same in both languages.
     expect(same.filter((k) => !['inspector.peoplePlaceholder', 'settings.ics', 'groupBy.bucket', 'details.bucket', 'checklist.title', 'attachments.linkPlaceholder', 'table.col.bucket', 'table.chartFilter', 'area.planner', 'planner.zoom'].includes(k))).toEqual([]);
   });
+});
+
+describe('openDepsLabel', () => {
+  it('uses the singular for one', () => expect(openDepsLabel(1)).toMatch(/^1 (open dependency|dipendenza aperta)$/));
+  it('uses the plural otherwise', () => expect(openDepsLabel(3)).toMatch(/^3 (open dependencies|dipendenze aperte)$/));
 });
