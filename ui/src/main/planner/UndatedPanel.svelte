@@ -46,19 +46,25 @@
 
   // ── Pointer drag onto the grid (pointer events; capture keeps it going outside the panel) ──
   const SLOP = 4;
-  let drag = $state<{ task: Task; id: number; x0: number; y0: number; x: number; y: number; moved: boolean; day: number | null } | null>(null);
+  let drag = $state<{ task: Task; id: number; el: HTMLElement; x0: number; y0: number; x: number; y: number; moved: boolean; day: number | null } | null>(null);
 
   function down(e: PointerEvent, task: Task) {
-    if (e.button !== 0 || e.ctrlKey || drag) return;
-    drag = { task, id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, moved: false, day: null };
+    if (e.button !== 0 || e.ctrlKey) return;
+    end(); // a drag whose release never arrived (focus lost, pointer gone) ends here, without placing
+    const el = e.currentTarget as HTMLElement;
+    drag = { task, id: e.pointerId, el, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, moved: false, day: null };
     window.addEventListener('keydown', esc, true);
+    window.addEventListener('blur', end);
     try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch { /* the pointer is already gone: up / cancel end the drag */ }
+      el.setPointerCapture(e.pointerId);
+    } catch { /* the pointer is already gone: the button check in move() ends the drag */ }
   }
 
   function move(e: PointerEvent) {
-    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag) return;
+    // No primary button held: the release was missed (e.g. it happened in another window).
+    if ((e.buttons & 1) === 0) return end();
+    if (e.pointerId !== drag.id) return;
     drag.x = e.clientX;
     drag.y = e.clientY;
     if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < SLOP) return;
@@ -81,12 +87,22 @@
     end();
   }
 
+  /** Ends a drag without placing anything (Esc, lost pointer or window focus) or after a drop. */
   function end() {
-    window.removeEventListener('keydown', esc, true);
-    if (drag?.day != null) onhover(null);
-    drag = null;
+    unlisten();
+    const d = drag;
+    if (!d) return;
+    drag = null; // before releasing: the release fires lostpointercapture → end(), now a no-op
+    if (d.day != null) onhover(null);
+    try {
+      if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
+    } catch { /* already released */ }
   }
-  onDestroy(() => window.removeEventListener('keydown', esc, true));
+  function unlisten() {
+    window.removeEventListener('keydown', esc, true);
+    window.removeEventListener('blur', end);
+  }
+  onDestroy(unlisten);
 
   function toggle() {
     open = !open;
@@ -107,7 +123,7 @@
           <li data-undated role="option" aria-selected={stop === task.id} tabindex={stop === task.id ? 0 : -1}
             onfocus={() => (focusId = task.id)} class:lifted={drag?.moved && drag.task.id === task.id}
             onkeydown={(e) => keys(e, i, task)} ondblclick={() => onopen(task)}
-            onpointerdown={(e) => down(e, task)} onpointermove={move} onpointerup={up} onpointercancel={end} onlostpointercapture={() => drag && end()}>
+            onpointerdown={(e) => down(e, task)} onpointermove={move} onpointerup={up} onpointercancel={end} onlostpointercapture={end}>
             <span class="dot {task.status}" aria-hidden="true"></span>
             <span class="title" class:done={task.status === 'done'}>{task.title}</span>
           </li>
