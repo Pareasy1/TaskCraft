@@ -6,8 +6,8 @@ export type DragMode = 'move' | 'start' | 'due';
 
 export const DAY_WIDTH: Record<Zoom, number> = { days: 32, weeks: 14, months: 4 };
 
-const ZOOM_KEY = 'taskcraft.plannerZoom';
-const UNDATED_KEY = 'taskcraft.plannerUndatedOpen';
+const ZOOM_KEY = 'taskcraft.planner.zoom';
+const UNDATED_KEY = 'taskcraft.planner.undated';
 const ZOOMS: Zoom[] = ['days', 'weeks', 'months'];
 const MS_DAY = 86_400_000;
 
@@ -97,23 +97,23 @@ export function dragResult(t: Dates, mode: DragMode, deltaDays: number): Dates {
   const dDay = t.due ? dayNumber(new Date(t.due)) : null;
 
   if (mode === 'move') {
-    if (t.start && sDay !== null) out.start = onDay(t.start, sDay + deltaDays);
-    if (t.due && dDay !== null) out.due = onDay(t.due, dDay + deltaDays);
+    if (sDay !== null) out.start = onDay(t.start!, sDay + deltaDays);
+    if (dDay !== null) out.due = onDay(t.due!, dDay + deltaDays);
   } else if (mode === 'start') {
-    if (t.start && sDay !== null) {
-      const day = dDay === null ? sDay + deltaDays : Math.min(sDay + deltaDays, dDay);
-      out.start = onDay(t.start, day);
-    } else if (dDay !== null) {
-      out.start = allDay(Math.min(dDay + deltaDays, dDay));
-      out.startHasTime = false;
+    // Candidate start; if it lands after due as an instant, it takes due's exact instant and flag.
+    const cand = sDay !== null ? onDay(t.start!, sDay + deltaDays) : dDay !== null ? allDay(dDay + deltaDays) : null;
+    if (cand !== null) {
+      const over = t.due !== null && new Date(cand).getTime() > new Date(t.due).getTime();
+      out.start = over ? t.due : cand;
+      out.startHasTime = over ? t.dueHasTime : sDay !== null ? t.startHasTime : false;
     }
   } else {
-    if (t.due && dDay !== null) {
-      const day = sDay === null ? dDay + deltaDays : Math.max(dDay + deltaDays, sDay);
-      out.due = onDay(t.due, day);
-    } else if (sDay !== null) {
-      out.due = allDay(Math.max(sDay + deltaDays, sDay));
-      out.dueHasTime = false;
+    // Candidate due; if it lands before start as an instant, it takes start's exact instant and flag.
+    const cand = dDay !== null ? onDay(t.due!, dDay + deltaDays) : sDay !== null ? allDay(sDay + deltaDays) : null;
+    if (cand !== null) {
+      const under = t.start !== null && new Date(cand).getTime() < new Date(t.start).getTime();
+      out.due = under ? t.start : cand;
+      out.dueHasTime = under ? t.startHasTime : dDay !== null ? t.dueHasTime : false;
     }
   }
   return out;

@@ -102,15 +102,31 @@ describe('dragResult', () => {
     expect(r.due).toBe(iso(2026, 10, 24, 18));
     expect(r.dueHasTime).toBe(true);
   });
-  it('start beyond due clamps to the due day', () => {
-    const r = dragResult(both, 'start', 10);
-    const s = new Date(r.start!);
-    expect([s.getDate(), s.getHours()]).toEqual([24, 9]);
+  const ms = (s: string | null) => new Date(s!).getTime();
+  it('start beyond due takes the due instant', () => {
+    const r = dragResult({ ...both, start: iso(2026, 10, 20, 18), due: iso(2026, 10, 24, 9) }, 'start', 10);
+    expect(r.start).toBe(iso(2026, 10, 24, 9));
+    expect(r.startHasTime).toBe(true);
+    expect(ms(r.start)).toBeLessThanOrEqual(ms(r.due));
   });
-  it('due before start clamps to the start day', () => {
-    const r = dragResult(both, 'due', -10);
-    const d = new Date(r.due!);
-    expect([d.getDate(), d.getHours()]).toEqual([20, 18]);
+  it('due before start takes the start instant', () => {
+    const r = dragResult({ ...both, start: iso(2026, 10, 20, 18), due: iso(2026, 10, 24, 9) }, 'due', -10);
+    expect(r.due).toBe(iso(2026, 10, 20, 18));
+    expect(ms(r.start)).toBeLessThanOrEqual(ms(r.due));
+  });
+  it('due on timed start-only with delta <= 0 takes the start instant and flag', () => {
+    const t0 = { start: iso(2026, 10, 20, 18), startHasTime: true, due: null, dueHasTime: false };
+    for (const d of [0, -3]) {
+      const r = dragResult(t0, 'due', d);
+      expect(r.due).toBe(t0.start);
+      expect(r.dueHasTime).toBe(true);
+    }
+  });
+  it('timed start dragged onto an all-day due day takes the due instant', () => {
+    const r = dragResult({ start: iso(2026, 10, 22, 9), startHasTime: true, due: iso(2026, 10, 24), dueHasTime: false }, 'start', 2);
+    expect(r.start).toBe(iso(2026, 10, 24));
+    expect(r.startHasTime).toBe(false);
+    expect(ms(r.start)).toBeLessThanOrEqual(ms(r.due));
   });
   it('due on start-only creates an all-day due', () => {
     const r = dragResult({ start: iso(2026, 10, 20), startHasTime: false, due: null, dueHasTime: false }, 'due', 4);
@@ -171,6 +187,8 @@ describe('persistence', () => {
       setItem: (k: string, v: string) => { store[k] = v; },
     });
     saveZoom('months'); saveUndatedOpen(false);
+    expect(store['taskcraft.planner.zoom']).toBe('months');
+    expect(store['taskcraft.planner.undated']).toBe('false');
     expect(loadZoom()).toBe('months');
     expect(loadUndatedOpen()).toBe(false);
   });
