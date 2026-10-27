@@ -10,12 +10,10 @@
   import BarChart, { type Bar } from './BarChart.svelte';
   import StatTile from './StatTile.svelte';
 
-  let { stats, inPlan, empty, chart, onchart }: {
+  let { stats, inPlan, chart, onchart }: {
     stats: GridStats;
     /** Inside a plan the groups are buckets; in All tasks they are plans. */
     inPlan: boolean;
-    /** The scope has no tasks at all. */
-    empty: boolean;
     chart: ChartFilter | null;
     onchart: (f: ChartFilter) => void;
   } = $props();
@@ -67,9 +65,6 @@
   </button>
   {#if open}
     <div id="grid-charts" class="body">
-      {#if empty}
-        <p class="empty">{t('charts.empty')}</p>
-      {:else}
         <div class="tiles">
           <StatTile label={t('charts.open')} value={stats.open} />
           <StatTile label={t('charts.inProgress')} value={stats.inProgress} />
@@ -105,7 +100,6 @@
             </table>
           </figure>
         </div>
-      {/if}
     </div>
   {/if}
 </section>
@@ -118,7 +112,6 @@
   .toggle :global(.closed) { transform: rotate(-90deg); }
   /* The side padding keeps focus rings, row highlights and edge tick labels inside the scroller. */
   .body { padding: 8px 4px 0; margin: 0 -4px; max-height: 45vh; overflow: auto; }
-  .empty { margin: 0; padding: 8px 0; color: var(--muted); font-size: 13px; }
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 24px; }
   .week { margin: 0; min-width: 0; }

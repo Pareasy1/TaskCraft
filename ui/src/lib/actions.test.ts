@@ -6,13 +6,17 @@ vi.mock('./api', () => ({
     completeWithSubtasks: vi.fn(async () => {}),
     updateTask: vi.fn(async () => {}),
     getTask: vi.fn(),
+    parsePreview: vi.fn(async () => ({ plan: null })),
+    createFromText: vi.fn(async () => ({ kind: 'task', id: 5 })),
+    getDefaultPlan: vi.fn(async () => 1),
+    moveTask: vi.fn(async () => {}),
     listSubtasks: vi.fn(),
   },
   errorMessage: (e: unknown) => String(e),
 }));
 
 import { api } from './api';
-import { askParentAfterSave, changeStatus } from './actions';
+import { askParentAfterSave, changeStatus, quickAddTask } from './actions';
 import { answerComplete, pending } from './complete.svelte';
 import { dismiss, runAction, toast, undo } from './toast.svelte';
 import type { Task } from './types';
@@ -193,5 +197,20 @@ describe('askParentAfterSave (a subtask saved as Done from its own form)', () =>
     await askParentAfterSave(9, 'todo');
     expect(pending.current).toBeNull();
     expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('quickAddTask', () => {
+  it('reports the task as created before the move into the plan finishes', async () => {
+    const order: string[] = [];
+    vi.mocked(api.parsePreview).mockResolvedValue({ plan: null } as never);
+    vi.mocked(api.createFromText).mockResolvedValue({ kind: 'task', id: 5 } as never);
+    vi.mocked(api.getTask).mockResolvedValue(mk(5, null, false, 'T5', { planId: 1 }));
+    vi.mocked(api.getDefaultPlan).mockResolvedValue(1 as never);
+    vi.mocked(api.moveTask).mockImplementation(async () => { order.push('move'); throw new Error('move failed'); });
+    const plan = { id: 2, name: 'P', color: '#000', sort: 0, openCount: 0 };
+    const bucket = { id: 20, planId: 2, name: 'b', sort: 0 };
+    await expect(quickAddTask('x', plan, bucket, [], () => order.push('created'))).rejects.toThrow('move failed');
+    expect(order).toEqual(['created', 'move']);
   });
 });

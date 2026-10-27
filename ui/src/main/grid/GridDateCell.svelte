@@ -32,7 +32,7 @@
     ondone();
   }
   let inputEl = $state<HTMLInputElement | undefined>();
-  let clearEl = $state<HTMLButtonElement | undefined>();
+  let editEl = $state<HTMLElement | undefined>();
   onMount(() => inputEl?.focus());
 
   async function save(v: string) {
@@ -60,11 +60,12 @@
       finish();
     }
   }
-  function blur(e: FocusEvent) {
-    // Moving to the Clear button keeps the editor open; anywhere else leaves it.
-    if (e.relatedTarget && e.relatedTarget === clearEl) return;
-    if (error) finish();
-    else commit('blur');
+  function focusout(e: FocusEvent) {
+    // Moving between the input and the Clear button keeps the editor open; leaving it for anywhere
+    // else decides like any blur: a valid date saves, a half-typed one cancels.
+    const to = e.relatedTarget as Node | null;
+    if (to && editEl?.contains(to)) return;
+    commit('blur');
   }
   function clearKeys(e: KeyboardEvent) {
     e.stopPropagation();
@@ -75,14 +76,14 @@
   }
 </script>
 
-<span class="edit">
+<span class="edit" bind:this={editEl} onfocusout={focusout}>
   <span class="row">
-    <input type="date" bind:this={inputEl} bind:value aria-label={label} aria-invalid={!!error} onkeydown={keys} onblur={blur}
+    <input type="date" bind:this={inputEl} bind:value aria-label={label} aria-invalid={!!error} onkeydown={keys} oninput={() => (error = '')}
       ondblclick={(e) => e.stopPropagation()} />
     {#if initial}
-      <button class="icon-btn" bind:this={clearEl} aria-label={t('table.clearDate', { col: label })} title={t('table.clearDate', { col: label })}
+      <button class="icon-btn" aria-label={t('table.clearDate', { col: label })} title={t('table.clearDate', { col: label })}
         onpointerdown={(e) => e.preventDefault()} onclick={() => !busy && !closed && save('')} onkeydown={clearKeys}
-        onblur={(e) => e.relatedTarget !== inputEl && !busy && !closed && finish()} ondblclick={(e) => e.stopPropagation()}><X size={12} aria-hidden="true" /></button>
+        ondblclick={(e) => e.stopPropagation()}><X size={12} aria-hidden="true" /></button>
     {/if}
   </span>
   {#if error}<span class="err" role="alert">{error}</span>{/if}

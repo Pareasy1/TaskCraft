@@ -77,9 +77,11 @@
 
 <span class="cell" class:sub={row.depth === 1} title={row.dimmed ? t('table.parentRow') : undefined}>
   {#if canToggle}
-    <button class="caret" class:down={!row.collapsed} tabindex="-1" aria-hidden="true"
+    <!-- Not a button: keyboard users fold with Left/Right on the cell, which announces aria-expanded. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+    <span class="caret" class:down={!row.collapsed} aria-hidden="true"
       title={row.collapsed ? t('subtasks.expand') : t('subtasks.collapse')}
-      onclick={(e) => { e.stopPropagation(); ontoggle(); }} ondblclick={(e) => e.stopPropagation()}><ChevronRight size={14} /></button>
+      onclick={(e) => { e.stopPropagation(); ontoggle(); }} ondblclick={(e) => e.stopPropagation()}><ChevronRight size={14} /></span>
   {:else}
     <span class="caret-space" aria-hidden="true"></span>
   {/if}
@@ -90,19 +92,20 @@
       {#if error}<span class="err" id="title-err-{row.task.id}" role="alert">{error}</span>{/if}
     </span>
   {:else}
-    <span class="text">{row.task.title}</span>
+    <span class="text">{row.task.title}{#if row.dimmed}<span class="sr"> {t('table.parentRowSr')}</span>{/if}</span>
   {/if}
 </span>
 
 <style>
   .cell { display: flex; align-items: center; gap: 4px; min-width: 0; }
   .cell.sub { padding-left: 20px; }
-  .caret { border: none; background: none; padding: 0; width: 16px; height: 16px; flex: none; color: var(--muted); border-radius: 4px; display: inline-grid; place-items: center; }
+  .caret { cursor: pointer; padding: 0; width: 16px; height: 16px; flex: none; color: var(--muted); border-radius: 4px; display: inline-grid; place-items: center; }
   .caret:hover { background: var(--hover); color: var(--text); }
   .caret.down { transform: rotate(90deg); }
   @media (prefers-reduced-motion: no-preference) { .caret { transition: transform 0.15s; } }
   .caret-space { width: 16px; flex: none; }
   .text { overflow-wrap: anywhere; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .edit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   input { font: inherit; width: 100%; padding: 2px 6px; border: 1px solid var(--accent); border-radius: 5px; background: var(--bg); color: var(--text); }
   input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }

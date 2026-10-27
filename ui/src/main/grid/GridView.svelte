@@ -5,11 +5,11 @@
 </script>
 
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { t } from '../../lib/i18n';
   import { ChevronDown, X } from 'lucide-svelte';
   import { api, errorMessage } from '../../lib/api';
-  import type { Bucket, Plan, Priority, Task, TaskLabel, TaskStatus } from '../../lib/types';
+  import type { Bucket, Plan, Priority, Task, TaskStatus } from '../../lib/types';
   import { ALL_COLUMNS, gridRows, loadColumns, nextSort, saveColumns, type ChartFilter, type GridColumn, type GridSort } from '../../lib/grid';
   import { bucketMove, bucketUndo, editInput } from '../../lib/gridEdit';
   import { startAfterDue, taskInput } from '../../lib/edit';
@@ -42,8 +42,7 @@
     plans: Plan[];
     /** The scoped plan's buckets (empty in All tasks). */
     buckets: Bucket[];
-    /** Every label (unused here), and the first day of the week for the weekly chart. */
-    labels: TaskLabel[];
+    /** The first day of the week for the weekly chart. */
     weekStart: 0 | 1;
     scope: number | 'all';
     onopen: (t: Task) => void;
@@ -111,6 +110,9 @@
     return t('table.chartFilter', { chart: scope === 'all' ? t('table.col.plan') : t('table.col.bucket'), value: name ?? '' });
   });
 
+  /** Without tasks only the table's own empty message shows (the charts panel has nothing to say). */
+  let hasTasks = $derived(inScope.some((x) => x.parentId === null));
+
   // ── Columns menu ──
   const colMenu = new PopupMenu<null>();
   let choosable = $derived(ALL_COLUMNS.filter((c) => scope === 'all' || c !== 'plan'));
@@ -118,6 +120,7 @@
     if (c === 'title') return;
     const on = new Set(columns.includes(c) ? columns.filter((x) => x !== c) : [...columns, c]);
     columns = ALL_COLUMNS.filter((x) => on.has(x));
+    if (sort && !columns.includes(sort.column)) sort = null;
     saveColumns(scope, columns);
   }
 
@@ -125,20 +128,25 @@
   let text = $state('');
   let spans = $state<Span[]>([]);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => clearTimeout(timer));
   $effect(() => {
     const v = text;
     clearTimeout(timer);
     if (!v.trim()) return void (spans = []);
     timer = setTimeout(() => api.parsePreview(v, true).then((p) => (spans = p.spans), () => (spans = [])), 80);
   });
+  let adding = false;
   async function add(e: KeyboardEvent) {
     if (e.key === 'Escape') return void (text = '');
     if (e.key !== 'Enter' || !text.trim()) return;
+    if (adding) return;
+    adding = true;
     try {
-      await quickAddTask(text, plan, buckets[0], tasks);
-      text = '';
+      await quickAddTask(text, plan, buckets[0], tasks, () => (text = ''));
     } catch (err) {
       onerror(errorMessage(err));
+    } finally {
+      adding = false;
     }
   }
 
@@ -201,8 +209,9 @@
       {t('table.columns')}<ChevronDown size={13} aria-hidden="true" />
     </button>
   </div>
-  <ChartsPanel {stats} inPlan={scope !== 'all'} empty={!inScope.some((x) => x.parentId === null)} {chart}
-    onchart={(f) => (chart = toggleChartFilter(chart, f))} />
+  {#if hasTasks}
+    <ChartsPanel {stats} inPlan={scope !== 'all'} {chart} onchart={(f) => (chart = toggleChartFilter(chart, f))} />
+  {/if}
   {#if chip}
     <div class="chips">
       <span class="chip">{chip}<button class="icon-btn" aria-label={t('table.clearFilter', { filter: chip })} title={t('table.clearFilter', { filter: chip })}

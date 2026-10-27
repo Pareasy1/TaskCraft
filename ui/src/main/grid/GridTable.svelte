@@ -89,6 +89,12 @@
     const to = e.relatedTarget as Node | null;
     if (to && !tableEl?.contains(to) && !menu.el?.contains(to)) focused = false;
   }
+  // An edited row that vanishes (deleted, filtered out) unmounts its input without a blur:
+  // end the edit so the keyboard model comes back and focus moves to the new tab stop.
+  $effect(() => {
+    const e = editing;
+    if (e && !rows.some((r) => r.task.id === e.id)) editing = null;
+  });
   // When an edit or a refresh removes the focused cell, focus moves to the new tab stop.
   $effect(() => {
     const s = stop;

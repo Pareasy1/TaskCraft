@@ -109,7 +109,7 @@ export function loadColumns(scope: GridScope): GridColumn[] {
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const cols = parsed.filter((c): c is GridColumn => ALL_COLUMNS.includes(c as GridColumn));
+        const cols = [...new Set(parsed.filter((c): c is GridColumn => ALL_COLUMNS.includes(c as GridColumn)))];
         return cols.includes('title') ? cols : ['title', ...cols];
       }
     }

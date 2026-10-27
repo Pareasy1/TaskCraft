@@ -114,6 +114,10 @@ describe('column storage', () => {
     localStorage.setItem('taskcraft.grid.columns.all', JSON.stringify(['title', 'bogus', 'due']));
     expect(loadColumns('all')).toEqual(['title', 'due']);
   });
+  it('drops duplicates from a corrupted value', () => {
+    localStorage.setItem('taskcraft.grid.columns.all', JSON.stringify(['title', 'due', 'due', 'title', 'status']));
+    expect(loadColumns('all')).toEqual(['title', 'due', 'status']);
+  });
   it('survives throwing storage', () => {
     vi.stubGlobal('localStorage', { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } });
     expect(loadColumns(1)).toEqual(defaultColumns(1));

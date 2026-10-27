@@ -245,16 +245,19 @@
     }, 80);
   });
 
+  let adding = false;
   async function add(e: KeyboardEvent) {
     if (e.key === 'Escape') return void ((text = ''), (fromTemplate = null));
     if (e.key !== 'Enter' || !text.trim()) return;
     if (fromTemplate) return addFromTemplate(fromTemplate);
+    if (adding) return;
+    adding = true;
     try {
-      await quickAddTask(text, plan, buckets[0], tasks);
-      text = '';
-      parsed = null;
+      await quickAddTask(text, plan, buckets[0], tasks, () => ((text = ''), (parsed = null)));
     } catch (err) {
       onerror(errorMessage(err));
+    } finally {
+      adding = false;
     }
   }
 
