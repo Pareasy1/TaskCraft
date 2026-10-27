@@ -7,7 +7,7 @@ const t = { id: 1, title: 'Ship Rafael' } as Task;
 describe('requestComplete', () => {
   it('shows the request until answered, then resolves with the answer', async () => {
     const p = requestComplete(t, 2);
-    expect(pending.current?.task.id).toBe(1);
+    expect(pending.current).toMatchObject({ task: { id: 1 } });
     expect(pending.current).toMatchObject({ kind: 'children', openChildren: 2 });
     answerComplete('all');
     expect(pending.current).toBeNull();

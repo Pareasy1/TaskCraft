@@ -11,6 +11,7 @@ vi.mock('./api', () => ({
     getDefaultPlan: vi.fn(async () => 1),
     moveTask: vi.fn(async () => {}),
     listSubtasks: vi.fn(),
+    listDependencies: vi.fn(async () => []),
   },
   errorMessage: (e: unknown) => String(e),
 }));
@@ -212,5 +213,51 @@ describe('quickAddTask', () => {
     const bucket = { id: 20, planId: 2, name: 'b', sort: 0 };
     await expect(quickAddTask('x', plan, bucket, [], () => order.push('created'))).rejects.toThrow('move failed');
     expect(order).toEqual(['created', 'move']);
+  });
+});
+
+describe('changeStatus on blocked tasks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.listDependencies).mockResolvedValue([{ taskId: 1, dependsOn: 9 }]);
+    vi.mocked(api.getTask).mockImplementation(async (id: number) => mk(id, null, false, `Blocker ${id}`));
+  });
+  afterEach(() => dismiss());
+  const blocked = mk(1, null, false, 'Blocked', { blockedBy: 1 });
+
+  it('blocked task asks before starting; No changes nothing', async () => {
+    const p = changeStatus(blocked, 'inProgress');
+    await tick();
+    expect(pending.current).toMatchObject({ kind: 'blocked', message: 'Depends on “Blocker 9”, still open. Continue?' });
+    answerComplete('cancel');
+    await p;
+    expect(api.setTaskStatus).not.toHaveBeenCalled();
+  });
+
+  it('Yes proceeds', async () => {
+    const p = changeStatus(blocked, 'done');
+    await tick();
+    answerComplete('yes');
+    await p;
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'done');
+  });
+
+  it('unblocked task does not ask', async () => {
+    await changeStatus(mk(1, null), 'inProgress');
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'inProgress');
+  });
+
+  it('moving a blocked task to todo does not ask', async () => {
+    await changeStatus({ ...blocked, status: 'inProgress' }, 'todo');
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(1, 'todo');
+  });
+
+  it('subtask start auto-starting a blocked parent does not ask for the parent', async () => {
+    const parent = mk(1, null, false, 'P', { blockedBy: 1 });
+    await changeStatus(mk(2, 1), 'inProgress', { children: [], siblings: [], parent });
+    expect(pending.current).toBeNull();
+    expect(api.setTaskStatus).toHaveBeenCalledWith(2, 'inProgress');
   });
 });

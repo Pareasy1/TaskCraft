@@ -17,6 +17,7 @@
   import PriorityMark from './PriorityMark.svelte';
   import LabelChip from './LabelChip.svelte';
   import ProgressBar from './ProgressBar.svelte';
+  import BlockedBadge from './BlockedBadge.svelte';
 
   // One card on a board. The board wraps it in the keyed, draggable element.
   let {
@@ -89,7 +90,7 @@
       onclick={(e) => { e.stopPropagation(); activate(e, onopen, () => select({ kind: 'task', id: t.id })); }} onkeydown={ontitlekey}>{t.title}</button>
     {@render actions?.()}
   </div>
-  {#if t.labels.length || t.due || t.recurring || progress || checklist || t.attachmentCount}
+  {#if t.labels.length || t.blockedBy > 0 || t.due || t.recurring || progress || checklist || t.attachmentCount}
     <div class="meta">
       {#if progress}
         <button class="count prog" aria-expanded={open} disabled={!children.length}
@@ -99,6 +100,7 @@
           <span class="caret" class:down={open} aria-hidden="true">▸</span>{progress}
         </button>
       {/if}
+      {#if t.blockedBy > 0}<BlockedBadge count={t.blockedBy} />{/if}
       {#if checklist}<span class="count" title={tr('checklist.title')}><span aria-hidden="true">☑</span> <span class="sr">{tr('checklist.title')}</span>{checklist}</span>{/if}
       {#if t.attachmentCount}<span class="count" title={tr('attachments.title')}><Paperclip size={11} aria-hidden="true" /><span class="sr">{tr('attachments.title')}</span>{t.attachmentCount}</span>{/if}
       {#each t.labels as l (l.id)}

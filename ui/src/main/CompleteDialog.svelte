@@ -43,6 +43,12 @@
         <button class="btn" onclick={() => answer('only')}>{t('complete.onlyThis')}</button>
         <button class="btn primary" onclick={() => answer('all')}>{t('complete.all')}</button>
       </div>
+    {:else if ask.kind === 'blocked'}
+      <p id="cmp-desc" class="only">{ask.message}</p>
+      <div class="actions">
+        <button class="btn" onclick={() => answer('cancel')}>{t('complete.no')}</button>
+        <button class="btn primary" onclick={() => answer('yes')}>{t('complete.yes')}</button>
+      </div>
     {:else}
       <!-- The question names the task, so it needs no title line of its own. -->
       <p id="cmp-desc" class="only">{t('complete.askParent', { title: ask.task.title })}</p>

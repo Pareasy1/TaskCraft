@@ -17,7 +17,7 @@
   import { restoreWithSubtasks, snapshotWithSubtasks } from '../lib/restore';
   import { PopupMenu } from '../lib/menu.svelte';
   import { askSaveTemplate, duplicate } from '../lib/taskCommands.svelte';
-  import { askParentAfterSave, changeStatus } from '../lib/actions';
+  import { askParentAfterSave, changeStatus, confirmBlocked } from '../lib/actions';
   import Menu from './Menu.svelte';
 
   export type Target =
@@ -257,6 +257,8 @@
         if (startAfterDue(input)) { error = t('error.start_after_due'); return false; }
         if (target.id == null) await api.createTask(input);
         else {
+          // Starting or finishing a task that waits on open ones asks first; No keeps the form open.
+          if (!(await confirmBlocked(await api.getTask(target.id), input.status))) return false;
           // The parent goes first: its rules (no nesting, no repeat) may refuse it.
           if (parentPick !== (target.input.parentId ?? null)) await api.setTaskParent(target.id, parentPick);
           const latest = taskInput(await api.getTask(target.id));
