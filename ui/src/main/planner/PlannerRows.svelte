@@ -2,15 +2,16 @@
   import { tick } from 'svelte';
   import { ChevronRight } from 'lucide-svelte';
   import { t } from '../../lib/i18n';
-  import { isMod, modLabel } from '../../lib/platform';
-  import { barSpan, dayDate, dayNumber, dayToX, DAY_WIDTH, ROW_H, type TimelineRow, type Zoom } from '../../lib/timeline';
+  import { hotkeyLabel, isMod, modLabel } from '../../lib/platform';
+  import { barSpan, dayDate, dayNumber, dayToX, DAY_WIDTH, dragResult, ROW_H, type TimelineRow, type Zoom } from '../../lib/timeline';
+  import type { TaskDates } from '../../lib/actions';
   import { isOverdue, STATUS_LABEL } from '../../lib/tasks';
   import { fmtSpan } from '../../lib/format';
   import type { Task } from '../../lib/types';
   import PlannerBar from './PlannerBar.svelte';
 
   // The name column (sticky) and the bar lanes, one ROW_H-tall row each: row i sits at y = i × ROW_H.
-  let { rows, range, zoom, now, nameW, blockers, onopen, ontoggle, onreveal }: {
+  let { rows, range, zoom, now, nameW, blockers, onopen, ontoggle, onreveal, onpreview, onsave }: {
     rows: TimelineRow<Task>[];
     range: { from: number; to: number };
     zoom: Zoom;
@@ -23,6 +24,10 @@
     ontoggle: (key: string | number) => void;
     /** Scrolls row `i` into view vertically. */
     onreveal: (i: number) => void;
+    /** Shows a bar at in-progress dates while it is dragged (null = back to its own). */
+    onpreview: (id: number, next: TaskDates | null) => void;
+    /** Saves a task's new dates (a finished drag or a keyboard move). */
+    onsave: (task: Task, next: TaskDates) => void;
   } = $props();
 
   let w = $derived(DAY_WIDTH[zoom]);
@@ -71,11 +76,20 @@
   const toggleable = (r: TimelineRow<Task>) => r.kind === 'group' || (r.hasChildren && !r.dimmed);
   const toggleKey = (r: TimelineRow<Task>) => (r.kind === 'group' ? r.key : r.task.id);
 
+  /** Alt+← / → moves the focused task's bar a day; with Shift it changes the due instead. */
+  function moveKeys(e: KeyboardEvent, r: TimelineRow<Task>) {
+    if (r.kind !== 'task' || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    const next = dragResult(r.task, e.shiftKey ? 'due' : 'move', e.key === 'ArrowLeft' ? -1 : 1);
+    const x = r.task;
+    if (next.start !== x.start || next.due !== x.due || next.startHasTime !== x.startHasTime || next.dueHasTime !== x.dueHasTime) onsave(x, next);
+  }
+
   function keys(e: KeyboardEvent) {
-    if (e.altKey) return; // Alt+arrows belong to bar moves.
     const i = rows.findIndex((r) => keyOf(r) === stop);
     const r = rows[i];
     if (!r) return;
+    if (e.altKey) return moveKeys(e, r);
     switch (e.key) {
       case 'ArrowUp': focusRow(i - 1); break;
       case 'ArrowDown': focusRow(i + 1); break;
@@ -106,7 +120,7 @@
   }
 </script>
 
-<p id="planner-help" class="sr">{t('planner.help', { mod: modLabel('↩') })}</p>
+<p id="planner-help" class="sr">{t('planner.help', { mod: modLabel('↩'), alt: hotkeyLabel('Alt') })}</p>
 <div class="rows" role="tree" aria-label={t('planner.label')} aria-describedby="planner-help" tabindex="-1"
   bind:this={listEl} onkeydown={keys} style="height:{rows.length * ROW_H}px; width:{nameW + laneW}px">
   <div class="bg" style="left:{nameW}px; width:{laneW}px" aria-hidden="true">
@@ -140,7 +154,7 @@
           <span class="text" class:done={r.task.status === 'done'}>{r.task.title}</span>
         </div>
         <div class="lane">
-          <PlannerBar task={r.task} {range} {zoom} {now} blockers={blockers.get(r.task.id)} />
+          <PlannerBar task={r.task} {range} {zoom} {now} blockers={blockers.get(r.task.id)} {onpreview} {onsave} />
         </div>
       </div>
     {/if}

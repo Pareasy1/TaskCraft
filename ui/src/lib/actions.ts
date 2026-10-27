@@ -97,6 +97,19 @@ export async function changePriority(task: Task, p: Priority): Promise<void> {
   notify(t('msg.movedTo', { title: task.title, where: t(`priority.${p}`) }), () => api.updateTask(task.id, before));
 }
 
+/** New start / due for a task (a Planner drag or keyboard move). */
+export interface TaskDates { start: string | null; startHasTime: boolean; due: string | null; dueHasTime: boolean }
+
+/**
+ * Saves a task's new dates, keeping every other field, and offers Undo (which puts the task back
+ * as it was). A failed save throws; the caller reverts its preview and reports the error.
+ */
+export async function saveDates(task: Task, next: TaskDates): Promise<void> {
+  const before = taskInput(task);
+  await api.updateTask(task.id, { ...before, ...next });
+  notify(t('planner.moved', { title: task.title }), () => api.updateTask(task.id, before));
+}
+
 /**
  * A new task's input with the app's defaults: the default calendar, the local time zone, no date.
  * Without a plan the store uses the default plan; without a bucket, the plan's first bucket.

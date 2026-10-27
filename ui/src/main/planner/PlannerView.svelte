@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   /** Collapsed groups (`b:<id>` / `p:<id>`) and parents (task ids), remembered for the session. */
   const collapsed = new SvelteSet<string | number>();
   /** The sticky name column's width. */
@@ -12,13 +12,16 @@
   import { t } from '../../lib/i18n';
   import { api, errorMessage, onItemsChanged } from '../../lib/api';
   import type { Bucket, Dependency, Plan, Span, Task } from '../../lib/types';
-  import { DAY_WIDTH, ROW_H, dayNumber, saveZoom, timelineRange, timelineRows, type Zoom } from '../../lib/timeline';
-  import { quickAddTask } from '../../lib/actions';
-  import type { StatusFilter } from '../../lib/tasks';
+  import {
+    DAY_WIDTH, ROW_H, dayNumber, dayToX, loadUndatedOpen, placeUndated, saveUndatedOpen, saveZoom, timelineRange, timelineRows, xToDay, type Zoom,
+  } from '../../lib/timeline';
+  import { quickAddTask, saveDates, type TaskDates } from '../../lib/actions';
+  import { applyFilters, type StatusFilter } from '../../lib/tasks';
   import HighlightInput from '../../quick/HighlightInput.svelte';
   import Doodle from '../tasks/Doodle.svelte';
   import PlannerHeader from './PlannerHeader.svelte';
   import PlannerRows from './PlannerRows.svelte';
+  import UndatedPanel from './UndatedPanel.svelte';
 
   let {
     tasks,
@@ -95,12 +98,34 @@
     return m;
   });
 
+  // ── Dates being dragged or saved: shown at once, dropped when fresh tasks arrive or a save fails ──
+  const preview = new SvelteMap<number, TaskDates>();
+  $effect.pre(() => {
+    void tasks;
+    untrack(() => preview.clear());
+  });
+  let shown = $derived(preview.size ? tasks.map((x) => (preview.has(x.id) ? { ...x, ...preview.get(x.id)! } : x)) : tasks);
+
+  function onpreview(id: number, next: TaskDates | null) {
+    if (next) preview.set(id, next);
+    else preview.delete(id);
+  }
+  /** Saves new dates for `task` (as it was before the change), keeping them on screen meanwhile. */
+  function onsave(task: Task, next: TaskDates) {
+    preview.set(task.id, next);
+    saveDates(task, next).catch((e) => {
+      preview.delete(task.id);
+      onerror(errorMessage(e));
+    });
+  }
+
   // ── Rows and range ──
   let now = $derived.by(() => (void tasks, new Date()));
   let today = $derived(dayNumber(now));
+  // The range follows the saved tasks, so a drag in progress doesn't shift the grid under the pointer.
   let inScope = $derived(scope === 'all' ? tasks : tasks.filter((x) => x.planId === scope));
   let range = $derived(timelineRange(inScope, now));
-  let rows = $derived(timelineRows(tasks, { scope, buckets: shownBuckets, plans, labels: active, status, collapsed }));
+  let rows = $derived(timelineRows(shown, { scope, buckets: shownBuckets, plans, labels: active, status, collapsed }));
   let filtered = $derived(status !== 'any' || active.length > 0);
   let laneW = $derived((range.to - range.from + 1) * DAY_WIDTH[zoom]);
 
@@ -123,6 +148,24 @@
   export function scrollToToday() {
     anchorDay = dayNumber(new Date()) + 0.5;
     applyAnchor();
+  }
+
+  // ── No dates panel ──
+  let undatedOpen = $state(loadUndatedOpen());
+  $effect(() => saveUndatedOpen(undatedOpen));
+  let undated = $derived(
+    applyFilters(scope === 'all' ? shown : shown.filter((x) => x.planId === scope), { status, labels: active }).filter((x) => !x.start && !x.due),
+  );
+  /** The day a panel drag points at, highlighted on the grid. */
+  let dropDay = $state<number | null>(null);
+  /** The timeline day under a viewport point (bar lanes only, not the names or the header). */
+  function dayAt(cx: number, cy: number): number | null {
+    if (!scroller) return null;
+    const r = scroller.getBoundingClientRect();
+    const x = cx - r.left - NAME_W, y = cy - r.top;
+    if (x < 0 || cx > r.left + scroller.clientWidth || y < HEADER_H || cy > r.bottom) return null;
+    const day = xToDay(scroller.scrollLeft + x, range, zoom);
+    return day >= range.from && day <= range.to ? day : null;
   }
 
   function reveal(i: number) {
@@ -173,12 +216,19 @@
   </div>
 
   {#if rows.length}
-    <div class="scroller" bind:this={scroller} {onscroll}>
-      <div class="canvas" style="width:{NAME_W + laneW}px">
-        <PlannerHeader {range} {zoom} {weekStart} {today} nameW={NAME_W} height={HEADER_H} />
-        <PlannerRows {rows} {range} {zoom} {now} nameW={NAME_W} {blockers} {onopen} onreveal={reveal}
-          ontoggle={(k) => (collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k))} />
+    <div class="body">
+      <div class="scroller" bind:this={scroller} {onscroll}>
+        <div class="canvas" style="width:{NAME_W + laneW}px">
+          <PlannerHeader {range} {zoom} {weekStart} {today} nameW={NAME_W} height={HEADER_H} />
+          <PlannerRows {rows} {range} {zoom} {now} nameW={NAME_W} {blockers} {onopen} onreveal={reveal} {onpreview} {onsave}
+            ontoggle={(k) => (collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k))} />
+          {#if dropDay !== null}
+            <div class="drop" style="left:{NAME_W + dayToX(dropDay, range, zoom)}px; width:{DAY_WIDTH[zoom]}px; top:{HEADER_H}px" aria-hidden="true"></div>
+          {/if}
+        </div>
       </div>
+      <UndatedPanel tasks={undated} bind:open={undatedOpen} {today} {dayAt} {onopen}
+        onhover={(d) => (dropDay = d)} onplace={(task, day) => onsave(task, placeUndated(day))} />
     </div>
   {:else}
     <div class="empty"><Doodle /><p>{filtered ? t('table.emptyFiltered') : t('planner.empty')}</p></div>
@@ -193,7 +243,9 @@
   .status button { border: none; background: none; padding: 3px 9px; border-radius: 6px; color: var(--muted); font-size: 12px; }
   .status button.on { background: var(--surface-strong); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
   .status button:focus-visible { outline: 2px solid var(--accent); }
-  .scroller { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); overscroll-behavior: contain; }
+  .body { flex: 1; min-height: 0; display: flex; }
+  .scroller { flex: 1; min-width: 0; overflow: auto; border-top: 1px solid var(--border); overscroll-behavior: contain; }
+  .drop { position: absolute; bottom: 0; z-index: 1; pointer-events: none; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
   .canvas { position: relative; min-height: 100%; }
   .empty { color: var(--muted); text-align: center; border-top: 1px solid var(--border); padding-top: 48px; }
   .empty p { margin: 0; }

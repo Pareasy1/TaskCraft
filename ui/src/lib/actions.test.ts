@@ -17,7 +17,7 @@ vi.mock('./api', () => ({
 }));
 
 import { api } from './api';
-import { askParentAfterSave, changeStatus, quickAddTask } from './actions';
+import { askParentAfterSave, changeStatus, quickAddTask, saveDates } from './actions';
 import { answerComplete, pending } from './complete.svelte';
 import { dismiss, runAction, toast, undo } from './toast.svelte';
 import type { Task } from './types';
@@ -259,5 +259,36 @@ describe('changeStatus on blocked tasks', () => {
     await changeStatus(mk(2, 1), 'inProgress', { children: [], siblings: [], parent });
     expect(pending.current).toBeNull();
     expect(api.setTaskStatus).toHaveBeenCalledWith(2, 'inProgress');
+  });
+});
+
+describe('saveDates', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => dismiss());
+
+  it('saveDates keeps other fields and offers Undo', async () => {
+    const task = mk(7, 3, false, 'Draft brief', {
+      notes: 'n', priority: 'urgent', labels: [{ id: 1, name: 'work', color: '#f00' }] as Task['labels'],
+      start: '2026-10-20T09:30:00.000Z', startHasTime: true, due: '2026-10-22T00:00:00.000Z', dueHasTime: false,
+    });
+    const next = { start: '2026-10-21T09:30:00.000Z', startHasTime: true, due: '2026-10-23T00:00:00.000Z', dueHasTime: false };
+    await saveDates(task, next);
+    expect(api.updateTask).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.updateTask).mock.calls[0]).toEqual([7, {
+      calendarId: 1, title: 'Draft brief', tz: 'UTC', rrule: null, notes: 'n', alerts: [], status: 'todo', labels: ['work'],
+      planId: 1, bucketId: 1, parentId: 3, priority: 'urgent', ...next,
+    }]);
+    expect(toast.current?.message).toBe('Moved “Draft brief”');
+    expect(toast.current?.canUndo).toBe(true);
+    await undo();
+    expect(vi.mocked(api.updateTask).mock.calls[1]).toEqual([7, expect.objectContaining({
+      start: '2026-10-20T09:30:00.000Z', startHasTime: true, due: '2026-10-22T00:00:00.000Z', dueHasTime: false, notes: 'n',
+    })]);
+  });
+
+  it('a failed save throws and shows no toast', async () => {
+    vi.mocked(api.updateTask).mockRejectedValueOnce(new Error('nope'));
+    await expect(saveDates(mk(8, null), { start: null, startHasTime: false, due: '2026-10-23T00:00:00.000Z', dueHasTime: false })).rejects.toThrow('nope');
+    expect(toast.current).toBeNull();
   });
 });
