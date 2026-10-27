@@ -15,19 +15,22 @@
   import { startAfterDue, taskInput } from '../../lib/edit';
   import { changePriority, changeStatus, quickAddTask } from '../../lib/actions';
   import { statusCtx } from '../../lib/subtasks';
-  import { STATUS_LABEL, type StatusFilter } from '../../lib/tasks';
+  import { STATUS_LABEL, applyFilters, type StatusFilter } from '../../lib/tasks';
+  import { gridStats, toggleChartFilter } from '../../lib/gridStats';
   import { notify } from '../../lib/toast.svelte';
   import { PopupMenu } from '../../lib/menu.svelte';
   import Menu from '../Menu.svelte';
   import HighlightInput from '../../quick/HighlightInput.svelte';
   import Doodle from '../tasks/Doodle.svelte';
   import GridTable from './GridTable.svelte';
+  import ChartsPanel from './ChartsPanel.svelte';
   import type { Span } from '../../lib/types';
 
   let {
     tasks,
     plans,
     buckets,
+    weekStart,
     scope,
     onopen,
     onerror,
@@ -39,7 +42,7 @@
     plans: Plan[];
     /** The scoped plan's buckets (empty in All tasks). */
     buckets: Bucket[];
-    /** Every label, and the first day of the week: for the charts panel (Task 5). */
+    /** Every label (unused here), and the first day of the week for the weekly chart. */
     labels: TaskLabel[];
     weekStart: 0 | 1;
     scope: number | 'all';
@@ -91,6 +94,12 @@
 
   let rows = $derived(gridRows(tasks, { scope, buckets: shownBuckets, plans, labels: active, status, chart, sort, collapsed }));
   let filtered = $derived(status !== 'any' || active.length > 0 || !!chart);
+
+  // Charts: the scope's tasks after the label and status filters, but not the chart filter itself.
+  let inScope = $derived(scope === 'all' ? tasks : tasks.filter((x) => x.planId === scope));
+  let stats = $derived(gridStats(applyFilters(inScope, { status, labels: active }), {
+    scope, buckets: shownBuckets, plans, now: new Date(), weekStart,
+  }));
 
   // Chip for the chart filter (the charts panel sets it).
   let chip = $derived.by(() => {
@@ -192,6 +201,8 @@
       {t('table.columns')}<ChevronDown size={13} aria-hidden="true" />
     </button>
   </div>
+  <ChartsPanel {stats} inPlan={scope !== 'all'} empty={!inScope.some((x) => x.parentId === null)} {chart}
+    onchart={(f) => (chart = toggleChartFilter(chart, f))} />
   {#if chip}
     <div class="chips">
       <span class="chip">{chip}<button class="icon-btn" aria-label={t('table.clearFilter', { filter: chip })} title={t('table.clearFilter', { filter: chip })}
